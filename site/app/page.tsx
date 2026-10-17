@@ -103,7 +103,8 @@ const depths: readonly {
     title: "Demo songs",
     body: (
       <>
-        <code>demo</code> opens three complete, editable hyperpop songs.
+        <code>demo</code> opens ten complete, editable songs, three of them
+        hyperpop with full original vocals.
       </>
     ),
     since: "0.12.0",
@@ -112,8 +113,8 @@ const depths: readonly {
     title: "Sample library",
     body: (
       <>
-        Eleven original sounds, including three sung hooks;{" "}
-        <code>sample chop</code> slices one.
+        Fourteen original sounds, including three vocal books and three sung
+        hooks; <code>sample chop</code> slices one.
       </>
     ),
     since: "0.12.0",

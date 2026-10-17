@@ -20,17 +20,17 @@ const longestKickRest = (score: ReturnType<typeof createDemo>) => {
   return best;
 };
 
+/** The three songs built on the shared hyperpop kit. */
+const HYPER = ["soft-reboot", "low-battery", "glass-garden"];
+
 describe("complete demo songs", () => {
-  test("three hyperpop entries expose truthful form and duration metadata", () => {
-    expect(DEMOS.map((demo) => demo.id)).toEqual([
-      "soft-reboot",
-      "low-battery",
-      "glass-garden",
-    ]);
-    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(3);
-    expect(new Set(DEMOS.map((demo) => demo.tempoBpm)).size).toBe(3);
+  test("ten distinct entries expose truthful form and duration metadata", () => {
+    expect(DEMOS).toHaveLength(10);
+    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(10);
+    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(10);
+    expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(3);
     for (const demo of DEMOS) {
-      expect(demo.style).toBe("Hyperpop");
+      if (HYPER.includes(demo.id)) expect(demo.style).toBe("Hyperpop");
       expect(demo.title.length).toBeLessThanOrEqual(16);
       const score = createDemo(demo.id);
       expect(score.tempoBpm).toBe(demo.tempoBpm);
@@ -45,7 +45,7 @@ describe("complete demo songs", () => {
         demo.durationSeconds,
         6,
       );
-      expect(demo.durationSeconds).toBeGreaterThan(120);
+      expect(demo.durationSeconds).toBeGreaterThan(60);
       expect(demo.durationSeconds).toBeLessThan(210);
       expect(demo.arrangement).toHaveLength(score.sections.length);
       expect(demo.features.length).toBeGreaterThanOrEqual(4);
@@ -114,8 +114,8 @@ describe("complete demo songs", () => {
     expect(() => createDemo("missing")).toThrow("Unknown demo");
   });
 
-  test("each song keeps the hyperpop production moves", () => {
-    for (const demo of DEMOS) {
+  test("each hyperpop kit song keeps the production moves", () => {
+    for (const demo of DEMOS.filter((entry) => HYPER.includes(entry.id))) {
       const score = createDemo(demo.id);
       const track = (id: string) =>
         score.tracks.find((candidate) => candidate.id === id);
@@ -138,27 +138,177 @@ describe("complete demo songs", () => {
         ),
         demo.id,
       ).toBe(true);
-      // Sung lines with delay throws, chops cut from the same hook.
+      // Distinct sung lines with delay throws on their last words.
+      const notesOf = (id: string) =>
+        score.notes.filter((note) => note.trackId === id);
       const vox = track("vox");
-      expect(vox?.sampler?.voices.lineA?.src).toStartWith("pack:studio/");
+      for (const part of ["v1", "v8", "pre1", "ch1", "ch3"])
+        expect(
+          vox?.sampler?.voices[part]?.src,
+          `${demo.id}: ${part}`,
+        ).toStartWith("pack:studio/");
       expect(
-        vox?.delayMixAutomation?.some((point) => point.value >= 0.2),
+        new Set(notesOf("vox").map((note) => note.pitch)).size,
+        demo.id,
+      ).toBeGreaterThanOrEqual(13);
+      expect(
+        vox?.delayMixAutomation?.some((point) => point.value >= 0.3),
         demo.id,
       ).toBe(true);
-      expect(track("chops")?.sampler?.voices).toBeDefined();
+      // The syllables as an instrument: a round-robin keyed riff, glitch
+      // stutters pitched through the chords, reversals, and a grain cloud.
+      const chops = track("chops")?.sampler;
+      expect(chops?.mode).toBe("keyed");
+      expect(Object.values(chops?.voices ?? {}).every((v) => v.rr)).toBe(true);
+      expect(notesOf("chops").length, demo.id).toBeGreaterThan(250);
+      const stut = notesOf("stut");
+      expect(stut.length, demo.id).toBeGreaterThan(120);
       expect(
-        score.notes.filter((note) => note.trackId === "chops").length,
+        new Set(stut.map((note) => note.cents ?? 0)).size,
         demo.id,
-      ).toBeGreaterThan(40);
-      // The chops play alone over the drums for a bar before the bed.
-      const melodic = new Set(["pad", "stabs", "pluck", "bells", "lead"]);
-      const firstKickBar = Math.floor(Math.min(...kicks));
-      const bare = score.notes.filter(
-        (note) =>
-          melodic.has(note.trackId) &&
-          Math.floor(note.startTick / 1920) === firstKickBar,
-      );
-      expect(bare, demo.id).toEqual([]);
+      ).toBeGreaterThanOrEqual(8);
+      expect(
+        Object.values(track("stut")?.sampler?.voices ?? {}).some(
+          (v) => v.speed === -1,
+        ),
+      ).toBe(true);
+      expect(track("vgrain")?.granular?.quant).toBe("chord");
+      expect(notesOf("vlead").length, demo.id).toBeGreaterThan(20);
+      expect(
+        track("chops")?.fxAutomation?.["formant-shift"]?.length,
+        demo.id,
+      ).toBeGreaterThan(4);
+      // Hyperactive stabs, and the kick pattern keeps changing.
+      expect(notesOf("stabs").length, demo.id).toBeGreaterThan(300);
+      const kickBars = new Map<number, string[]>();
+      for (const note of notesOf("kick")) {
+        const bar = Math.floor(note.startTick / 1920);
+        kickBars.set(bar, [
+          ...(kickBars.get(bar) ?? []),
+          String(note.startTick % 1920),
+        ]);
+      }
+      expect(
+        new Set([...kickBars.values()].map((ticks) => ticks.join())).size,
+        demo.id,
+      ).toBeGreaterThanOrEqual(6);
     }
+  });
+
+  test("each hyperpop kit song stays clean inside its limits", () => {
+    for (const demo of DEMOS.filter((entry) => HYPER.includes(entry.id))) {
+      const score = createDemo(demo.id);
+      // Headroom under the 4096-note limit for later edits.
+      expect(score.notes.length, demo.id).toBeLessThan(4000);
+      // No note double-triggers on one track, and every note starts inside the song.
+      const seen = new Set<string>();
+      for (const note of score.notes) {
+        const key = `${note.trackId} ${note.startTick} ${note.pitch} ${note.cents ?? 0}`;
+        expect(seen.has(key), `${demo.id}: ${key}`).toBe(false);
+        seen.add(key);
+        expect(note.startTick, demo.id).toBeGreaterThanOrEqual(0);
+        expect(note.startTick, demo.id).toBeLessThan(score.bars * 1920);
+      }
+      // Every automation lane moves forward in time.
+      for (const track of score.tracks) {
+        const lanes = [
+          ...Object.entries(track)
+            .filter(
+              ([key, value]) =>
+                key.endsWith("Automation") && Array.isArray(value),
+            )
+            .map(([key, value]) => [key, value] as const),
+          ...Object.entries(track.fxAutomation ?? {}),
+        ] as (readonly [string, readonly { tick: number }[]])[];
+        for (const [lane, points] of lanes)
+          points.forEach((point, i) => {
+            if (i > 0)
+              expect(
+                point.tick,
+                `${demo.id}: ${track.id} ${lane}`,
+              ).toBeGreaterThanOrEqual(points[i - 1]!.tick);
+          });
+      }
+    }
+  });
+
+  test("hyperpop keeps its production moves and breathes with a kick-less break", () => {
+    expect(
+      DEMOS.filter((demo) => !HYPER.includes(demo.id))
+        .map((demo) => demo.style)
+        .sort(),
+    ).toEqual([
+      "Acid techno",
+      "Hyperpop",
+      "Jungle",
+      "Neo soul",
+      "Synth pop",
+      "Trip hop",
+      "UK garage",
+    ]);
+    const hyper = createDemo("candy-fault");
+    expect(
+      hyper.tracks.find((track) => track.id === "hook")?.fx?.distort,
+    ).toBeDefined();
+    expect(
+      hyper.notes.some(
+        (note) =>
+          note.trackId === "chops" &&
+          note.pitch >= 80 &&
+          note.durationTicks <= 120,
+      ),
+    ).toBe(true);
+    expect(
+      hyper.notes.some(
+        (note) => note.trackId === "sub" && note.glide !== undefined,
+      ),
+    ).toBe(true);
+    expect(hyper.notes.filter((note) => note.lyric).length).toBeGreaterThan(20);
+    expect(longestKickRest(hyper)).toBeGreaterThanOrEqual(4);
+  });
+
+  test("featured arrangement and synthesis moves survive score normalization", () => {
+    const acid = createDemo("coil-driver");
+    expect(
+      acid.tracks.find((track) => track.id === "acid")?.fxAutomation?.[
+        "synth-lpf"
+      ]?.length,
+    ).toBeGreaterThan(8);
+    expect(acid.notes.some((note) => note.glide !== undefined)).toBe(true);
+    expect(longestKickRest(acid)).toBeGreaterThanOrEqual(4);
+    const pop = createDemo("signal-bloom");
+    expect(pop.tracks.length).toBeGreaterThanOrEqual(10);
+    expect(pop.sections.length).toBeGreaterThanOrEqual(8);
+    expect(
+      pop.tracks.filter((track) => track.instrument === "kit").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(pop.tracks.some((track) => track.sampler)).toBe(true);
+    expect(pop.tracks.some((track) => track.wavetable)).toBe(true);
+    expect(pop.notes.filter((note) => note.lyric).length).toBeGreaterThan(20);
+    // The vocal double is a late-song lift, never there from the first verse.
+    const firstLyric = Math.min(
+      ...pop.notes.filter((note) => note.lyric).map((note) => note.startTick),
+    );
+    expect(
+      pop.notes
+        .filter((note) => note.trackId === "double")
+        .every((note) => note.startTick >= firstLyric + 16 * 1920),
+    ).toBe(true);
+    const garage = createDemo("velvet-circuit");
+    expect(
+      garage.tracks.find((track) => track.id === "hold")?.sampler?.voices.hold
+        ?.begin,
+    ).toBe(0);
+    expect(
+      garage.tracks.find((track) => track.id === "on")?.sampler?.voices.on
+        ?.begin,
+    ).toBe(0.25);
+    expect(garage.notes.some((note) => note.startTick % 120 !== 0)).toBe(true);
+    const dub = createDemo("low-tide").tracks.find(
+      (track) => track.id === "vocal",
+    );
+    expect(dub?.delayMixAutomation?.some((point) => point.value > 0.3)).toBe(
+      true,
+    );
   });
 });

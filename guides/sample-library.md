@@ -5,8 +5,10 @@ parent: sound
 order: 0
 ---
 
-The studio library includes three sung pop hooks, each with two lines
-and three held syllables to chop, plus machine-voice phrases, sustained
+The studio library includes three vocal books, each a whole song's
+verses, pre-chorus, chorus, six syllables and a held vowel as named
+slices, and three sung pop hooks with two lines and three syllables,
+plus machine-voice phrases, sustained
 vowels, glass and metal hits, a tape thump and a rising transition.
 These sounds ship with dawg. They work offline and can be reused in
 your own music under the included CC0 dedication.
@@ -22,7 +24,7 @@ your own music under the included CC0 dedication.
 - `sample library` · `sample library vocal`
 - `sample preview hold-on` listens without changing the song
 - `sample use hold-on` · `sample use metal-hit`
-- `sample chop hold-on 4` · `sample chop stay-tonight 4`
+- `sample chop hold-on 4` · `sample chop glass-garden-vox 8`
 - `sample ./your-recording.wav as voice`
 - `sample list` lists the focused sampler's voices
 - `chop` opens the full slicing, trimming, reversing and fitting toolkit

@@ -5,19 +5,22 @@ parent: arrange
 order: 7
 ---
 
-The three demo songs share one kit and one approach. The chords
-barely move: a four-chord loop, often I–V–vi–IV, with one chord
-borrowed minor in the breakdown. The interest comes from which
-layers play, how they sit around the kick, and texture.
+The three hyperpop demos share one kit. The chords barely move; the
+interest comes from rhythm, texture and the voice as an instrument.
 
-- Sub with little attack, glide and soft harmonics; a saw doubles it
-- Pads, stabs and upper layers duck hard under the kick
-- Chord stabs ride the off-beats at chord pitch; soft plucks up high
-- Loud bright hats carry the air; a muted, distorted snare
-- Clicks, drops and a gamelan-like upper-mid pattern
-- A one-bar chop cell looped through the drums, a turnaround every eight
-- Long drum runs, one long breakdown, short dropouts every few bars
-- Glide and distortion on solo leads; long echo and reverb endings
+- Six sung syllables on one keyed sampler in round robin: every chord
+  tone of a riff sings the next syllable, answering each sung line
+- Stutters: a syllable or line head repeated in 16ths or 32nds, rising
+  in pitch into a chorus; reversed syllables swell into each section
+- A held vowel looped into a playable voice that doubles the lead,
+  and the same vowel as a grain cloud locked to the chord
+- Delay throws open on the last word of each line; formant and
+  bitcrush automation on the chops through drops and breakdowns
+- Syncopated chord stabs with a pitch blip, pulse arps, FM bells
+- Drum families change by section: four-floor, half-time, trap,
+  tresillo, broken, two-step; a snare pickup into each section
+- Sub with glide; a growling filtered saw in the drops
+- One-beat dropouts, a tape-stop dive, a kickless breakdown
 
 ## Ask
 
@@ -26,12 +29,12 @@ layers play, how they sit around the kick, and texture.
 ## Type it yourself
 
 - `demo info soft-reboot` explains where each move happens
-- `sample chop stay-tonight 4` slices a sung hook into playable chops
+- `sample chop low-battery-vox 8` slices a vocal book into chops
 - `glide 100 legato` slides the sub · `fx duck preset pump`
 - `fx duck hold on` keeps the dip down until each kick note ends
 - `fx eq high 4 highfreq 8000` adds air · `fx eq mid -2 midfreq 500`
 - `automate distort-drive at 0 1` · `automate distort-drive at 8 4`
-- `fx delay mix 0.3` on a chop track for echoes on the beat
+- `fx delay mix 0.3` on a vocal track for an echo throw
 
 ## Menu
 
@@ -50,5 +53,5 @@ layers play, how they sit around the kick, and texture.
 Explain these techniques with the demo scores as evidence: inspect the
 tracks and notes before describing a move. Keep harmony simple; vary
 layers, ducking, effects and dropouts. The demos are original and not
-copies of any artist's songs, and the sung hooks are synthetic voices.
+copies of any artist's songs, and the vocals are synthetic voices.
 ```

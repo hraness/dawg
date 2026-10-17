@@ -2,6 +2,20 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.18.0
+
+### Changed
+
+- **The three hyperpop songs are rewritten around full original vocals used as an instrument.** Each song now has its own vocal book in the studio library: two verses of four distinct lines, a two-line pre-chorus, three chorus lines, six chop syllables and a held vowel. The verses, pre-choruses and choruses sing different words, so nothing repeats like a two-line hook.
+- **The voice is played, not just sung.** The six syllables share one keyed sampler in round robin, so every chord tone of a riff sings the next syllable; these riffs answer each sung line from just after its last word and run through the drops in syncopated 3-3-2 and 16th patterns. A glitch track stutters syllables and chorus heads in 16ths and 32nds, pitched through the chords and rising into each chorus, and reverses a syllable into every section but the verses. The held vowel loops into a voice that doubles the lead synth, and the same vowel becomes a grain cloud locked to the chord. Delay throws open on the last word of every line, and the chops' formant and bitcrush move through drops and breakdowns.
+- **New forms and sounds.** Soft Reboot (D major, 140) runs boot, two verse-pre-chorus-chorus-drop cycles, a glitch-vox breakdown and a last chorus. Low Battery (F# minor, 150) puts a growling filtered saw under half-time drops and dives into a power-down that turns major. Glass Garden (A major, 128) has tresillo and broken verses, a borrowed D minor every fourth bar, syllable arps blooming after each line and an F-major greenhouse bridge. The drums change family from section to section; the stabs are syncopated supersaw shells with a pitch blip; arps, FM bells and a vowel wavetable lead fill the top.
+- **The voice leads the mix.** The lead vocal now sits about 5 dB under the drums and the chops and glitch stutters about 8 dB under; before, they sat 10 and 18 dB down and disappeared. The chops' ping-pong delay is wetter, the pad is darker, the kick pumps the bed harder, and the sub is driven into harmonics so it reads on small speakers. Where the lead and the chop riff play together the arp sits out and the chops drop a fourth. Each last drop answers its hook with a new four bars, and the second verses get their own riffs.
+- **Ten demo songs.** The seven earlier demos (Amber Room, Candy Fault, Coil Driver, Copper Wire, Low Tide, Signal Bloom and Velvet Circuit) return to the shelf alongside the three hyperpop songs.
+
+### Added
+
+- **Three vocal books in the studio library:** `soft-reboot-vox`, `low-battery-vox` and `glass-garden-vox`, with named slices for every line, syllable and the held vowel. They are original lyrics and melodies sung by Kokoro-82M text to speech and retuned with the WORLD vocoder; no person was recorded. `scripts/vox/songs.py` regenerates them.
+
 ## 0.17.0
 
 ### Changed

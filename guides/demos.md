@@ -5,18 +5,19 @@ parent: arrange
 order: 0
 ---
 
-Three complete, editable hyperpop songs, with original patterns, sounds
-and sung hooks. Every part works offline. Open a song's notes to explore
-its production.
+Ten complete, editable songs with original patterns and sounds. Every
+part works offline. Open a song's notes to explore its production.
+Three are hyperpop songs with full original vocals:
 
-- Soft Reboot · four-floor pump, chops over the kick, hard-saw solo
-- Low Battery · half-time and trap, ramped saw bass, hat-only stretches
-- Glass Garden · 3-3-2 kick, open hats, gamelan, long string breakdown
+- Soft Reboot · D major, stutter pickups, a glitch-vox breakdown
+- Low Battery · F# minor, half-time growl drops, a power-down
+- Glass Garden · A major, tresillo verses, syllable arps, grain bridge
 
-All three share one kit and one way of working: stable four-chord loops,
-interest from which layers play, sidechained beds, chopped and looped
-vocals, short dropouts and long echo endings. `guide hyperpop` explains
-the techniques.
+Their vocals double as instruments: syllables played as riffs that
+answer each line, stutters pitched through the chords, reversed swells,
+a looped vowel doubling the lead and a grain cloud. `guide hyperpop`
+explains the techniques. The other seven span garage, jungle, acid
+techno, neo soul, synth pop, trip hop and an earlier hyperpop sketch.
 
 ## Ask
 
@@ -28,7 +29,7 @@ the techniques.
 - `demo info soft-reboot` explains its arrangement and mix
 - `demo glass-garden` loads the song and opens TAPE, paused
 - `sample library` browses the bundled sounds
-- `sample chop stay-tonight 4` makes a playable four-slice pattern
+- `sample chop soft-reboot-vox 8` slices a vocal book into a pattern
 
 Loading replaces the song in one undo step. Browse and read freely;
 save or fork before developing another version you want to keep.
