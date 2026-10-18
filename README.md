@@ -148,17 +148,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g https://github.com/hraness/dawg/releases/download/v0.20.0/hraness-dawg-0.20.0.tgz
+bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.21.0/hraness-dawg-0.21.0.tgz"
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.20.0 --repo hraness/dawg
+gh release download v0.21.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.20.0.tgz --repo hraness/dawg
-bun add -g "$PWD/hraness-dawg-0.20.0.tgz"
+gh attestation verify hraness-dawg-0.21.0.tgz --repo hraness/dawg
+bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.21.0.tgz"
 ```
 
 To run from source instead:
@@ -299,7 +299,7 @@ Run `dawg model key` (or just `dawg` the first time) to give the agent a model; 
 - `dawg auth status` (also `/auth`; `--check` verifies keys online) lists all four options with detected, active and validated state, plus the installed xcb version and the audio backend. Keys appear only masked (`vck_…abcd`).
 - Keys go to the macOS Keychain (service `dawg`, passed to `security -i` on stdin so a key never appears in a process list) or `~/.config/dawg/credentials.json` (0600, directory 0700). They are never written to `.dawg/`. Environment keys always win.
 - Provider order: `DAWG_PROVIDER`, then the saved choice, then auto (AI Gateway, then OpenRouter, then a ready subscription). `DAWG_AI=0` turns the agent off. The header shows `<model> · <provider>`.
-- Subscriptions need xcb 0.20.0 or newer. An account is usable when xcb reports it `available`; an account xcb is still checking works too, but its first turn can take up to a minute longer. Accounts whose catalog is missing are refreshed once (`xcb accounts refresh`) during discovery.
+- Subscriptions need xcb 0.21.0 or newer. An account is usable when xcb reports it `available`; an account xcb is still checking works too, but its first turn can take up to a minute longer. Accounts whose catalog is missing are refreshed once (`xcb accounts refresh`) during discovery.
 
 On the gateway and OpenRouter, unrecognized requests go to a streaming, tool-calling agent through the OpenAI-compatible chat API. The default is `opus-5.5` (`anthropic/claude-opus-5.5`); `DAWG_MODEL=<alias|vendor/model>` overrides it, and an unknown value is an error at startup that lists the choices. xcb has no tool calling, so dawg asks for one JSON object of ops per call and runs each op through the same checks; it retries with diagnostics up to 3 calls per turn.
 

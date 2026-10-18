@@ -270,7 +270,7 @@ const SECTIONS: readonly SongSection[] = [
     name: "Verse 2",
     bars: 8,
     chords: VERSE,
-    drums: ["taps", "skip"],
+    drums: ["none", "skip"],
     energy: 0.9,
     play: ["sub", "bells", "arp"],
     bursts: true,
