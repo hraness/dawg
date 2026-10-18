@@ -194,7 +194,7 @@ const BELLS = [
 ];
 // Bass lines (`bassLine` steps). Verses bounce an 808 with glides; the
 // pre-choruses drive octaves; choruses pump offbeat octaves; drops move.
-const LINE_VERSE = ["0.....0.2~0...5~", "0.....0...1.2~0."];
+const LINE_VERSE = ["0.....0.2~0...5~", "0.....0...1~2~0."];
 const LINE_VERSE2 = ["0..0....2~0...5~", "0.....0.1...2~1."];
 const LINE_PRE = ["0.2.0.2~0.2.0.2.", "0.2.0.2~0.2.1~2."];
 const LINE_CHORUS = ["0.2.0.2~0.2.0.2~", "0.2.0.2.0.2~1~2."];

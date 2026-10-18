@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.22.0
+
+### Changed
+
+- **Higher, wider chorus hooks in the hyperpop songs.** All three vocal books re-sing their chorus lines a fourth or so above the verses, leaping up to A5 and landing on long held words, so each chorus lifts clear of its verse instead of sitting in the same range. The verse bass lines and two drop lines glide more often.
+
 ## 0.21.0
 
 ### Changed
