@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.24.0
+
+### Changed
+
+- **More space and width in the hyperpop songs.** The first verses leave the gaps after their lines to the delay throws, with only the phrase-closing glitch bursts; the glitch-track answers now arrive in the second verses, so the vocal texture builds across the song instead of starting busy. Low Battery's first verse sits lower and its first chorus opens half-time before doubling up into the drop. The pad and the stabs gain an automatic double-track spread left and right, widening the synth side by about 1 dB with the mix's stereo correlation unchanged.
+
 ## 0.23.0
 
 ### Changed
