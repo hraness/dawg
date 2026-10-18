@@ -203,6 +203,7 @@ export const sounds = {
       fx: {
         ...orbit,
         chorus: { rate: 0.4, depth: 0.6, mix: 0.5 },
+        double: { time: 18, drift: 2, width: 0.8 },
         eq: { low: -4, lowfreq: 220, mid: -1.5, midfreq: 600 },
       },
       reverb: hall,
@@ -237,6 +238,7 @@ export const sounds = {
         ...orbit,
         distort: { type: "soft", drive: 2.2, tone: 7000, mix: 0.3 },
         chorus: { rate: 0.8, depth: 0.55, mix: 0.45 },
+        double: { time: 11, drift: 1, width: 0.7 },
         eq: { high: 1.5, highfreq: 7000 },
       },
       delay: { beats: 0.75, feedback: 0.22, mix: 0.08, pingpong: true },

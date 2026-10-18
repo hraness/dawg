@@ -215,7 +215,7 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: VERSE,
     drums: ["taps", "bounce"],
-    energy: 0.9,
+    energy: 0.8,
     play: ["sub", "bells"],
     bursts: true,
     bells: BELLS,
@@ -240,7 +240,7 @@ const SECTIONS: readonly SongSection[] = [
     name: "Chorus 1",
     bars: 8,
     chords: CHORUS,
-    drums: ["bounce", "half"],
+    drums: ["half", "bounce"],
     energy: 0.88,
     play: ["sub", "pad", "stabs"],
     bursts: true,
@@ -423,9 +423,10 @@ export const lowBattery: DemoDefinition = {
     // Chorus pickups.
     for (const name of ["Chorus 1", "Chorus 2", "Last chorus"])
       stutter(s, song, "h_ch1", at(name) + 3, 2.5, 6, 0.25, 0, 0.45, 0.75);
-    // Verse answers on the glitch track.
-    for (const verse of ["Verse 1", "Verse 2"]) {
-      const bar = at(verse);
+    // Verse answers on the glitch track, in the second verse only: the
+    // first leaves its gaps to the delay throws.
+    {
+      const bar = at("Verse 2");
       glitch(s, song, BOOK, bar + 1, "4..4..5.6..6..4.", ["low", "low", "up"]);
       glitch(s, song, BOOK, bar + 5, "6..5..4.3..3..2.", [
         "charge",

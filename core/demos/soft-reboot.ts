@@ -441,10 +441,11 @@ export const softReboot: DemoDefinition = {
       const bar = at(name) + 3;
       stutter(s, song, "h_ch1", bar, 3, 4, 0.25, 0, 0.45, 0.7);
     }
-    // Verse answers: after the first and third lines the glitch track
-    // answers on the syllables; bursts close the second and fourth.
-    for (const verse of ["Verse 1", "Verse 2"]) {
-      const bar = at(verse);
+    // Verse answers: the first verse leaves the gaps after its lines to the
+    // delay throws; in the second the glitch track answers the first and
+    // third lines on the syllables. Bursts close the second and fourth.
+    {
+      const bar = at("Verse 2");
       glitch(s, song, BOOK, bar + 1, "........4.4.5.3.", ["back", "stay"]);
       glitch(s, song, BOOK, bar + 5, "......6.5.4.3.5.", [
         "night",

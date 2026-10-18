@@ -443,9 +443,10 @@ export const glassGarden: DemoDefinition = {
       ["glass", "bloom", "gold", "grow"],
       0.55,
     );
-    // Verse answers.
-    for (const verse of ["Verse 1", "Verse 2"]) {
-      const bar = at(verse);
+    // Verse answers, in the second verse only: the first leaves its gaps
+    // to the delay throws.
+    {
+      const bar = at("Verse 2");
       glitch(s, song, BOOK, bar + 1, "........3.4.5.4.", [
         "bloom",
         "grow",
