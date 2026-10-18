@@ -1335,6 +1335,25 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       builds.push([p.start, p.start + p.bars]);
     }
   }
+  // A two-beat breath before each drop that follows a chorus: the beat, the
+  // bass and the bed cut out, leaving the last sung word and the reversed
+  // syllable swelling into the downbeat.
+  for (const p of placed) {
+    const prev = placed[p.index - 1];
+    if (p.kind === "post" && prev?.kind === "chorus")
+      dropout(s, p.start - 1, 2, 2, [
+        "kick",
+        "snare",
+        "hats",
+        "sub",
+        "saw",
+        "pad",
+        "stabs",
+        "arp",
+        "bells",
+        "chops",
+      ]);
+  }
   return { placed, chordAt, sectionAt, at, throwsAt, builds, stut };
 }
 

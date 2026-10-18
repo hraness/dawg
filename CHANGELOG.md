@@ -2,6 +2,16 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.21.0
+
+### Changed
+
+- **More contrast in the hyperpop songs.** Every drop that follows a chorus now opens with a two-beat breath: the drums, the bass and the synths cut out on the chorus's last two beats, leaving the last sung word and a reversed syllable swelling into the downbeat. Each second verse starts with four drumless bars, the bass line carrying it until the beat returns.
+
+### Fixed
+
+- The README's install command names the package (`bun add -g "@hraness/dawg@<tarball URL>"`). The bare tarball URL failed in Bun with an internal DependencyLoop error.
+
 ## 0.20.0
 
 ### Changed
