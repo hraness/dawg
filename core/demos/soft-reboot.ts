@@ -379,6 +379,7 @@ const SECTIONS: readonly SongSection[] = [
     lead: HOOK_LAST,
     voiceLead: true,
     line: LINE_DROP2,
+    transpose: 2,
   },
   {
     kind: "outro",
@@ -406,6 +407,7 @@ export const softReboot: DemoDefinition = {
     highlightBar: 28,
     trackId: "chops",
     features: [
+      "a whole-step key change into the last drop: harmony, bass, riffs and lead all lift",
       "an original vocal book: two verses, a pre-chorus and three chorus lines",
       "syllable riffs on a keyed round-robin sampler, a new syllable every hit",
       "glitch bursts: twelve 32nd-note syllables flying over four octaves",
@@ -499,8 +501,8 @@ export const softReboot: DemoDefinition = {
       "stabs",
     ]);
     const out = at("Shutdown");
-    dropout(s, out - 1, 2, 2, ["lead", "vlead"]);
-    s.note("lead", out - 1, 2, 86, 2, 0.7, flick.dive(-2400, 0.1));
+    // The last drop is in E; the lead dives from its top E back home.
+    s.note("lead", out - 1, 2, 88, 2, 0.7, flick.dive(-2400, 0.1));
 
     // ---------------------------------------------------------- lanes
     patch(s, "vox", {
