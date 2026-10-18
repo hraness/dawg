@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.26.0
+
+### Changed
+
+- **Soft Reboot's second drop lands.** Chorus 2 now opens on the half-time bounce like Chorus 1 and brings its riff in only for the back four bars, and Drop 2 hits four-on-the-floor from its first bar. Before, Chorus 2 played the drop's own riff and drums and measured as loud as Drop 2. Now each Soft Reboot drop sits 0.8–0.9 LU above its chorus.
+
 ## 0.25.0
 
 ### Changed
