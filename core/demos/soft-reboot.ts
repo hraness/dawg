@@ -172,6 +172,8 @@ const RIFF_DROP2 = [
   "8-7-6-5-7.6.5.4.",
 ];
 // Stabs: syncopated, never on every 16th; the last bar of four pushes.
+// Choruses hold the stabs back for their first four bars, so each one
+// climbs into its drop.
 const STABS = [
   "8..6..7...6.....",
   ".7.6..7...6..7..",
@@ -249,7 +251,7 @@ const SECTIONS: readonly SongSection[] = [
     energy: 0.88,
     play: ["sub", "pad", "stabs"],
     bursts: true,
-    stabs: STABS,
+    stabs: [null, null, null, null, ...STABS],
     line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
@@ -300,7 +302,7 @@ const SECTIONS: readonly SongSection[] = [
     drums: ["euro"],
     energy: 0.88,
     play: ["sub", "pad", "stabs", "riff"],
-    stabs: STABS,
+    stabs: [null, null, null, null, ...STABS],
     riff: RIFF_DROP,
     line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
@@ -359,8 +361,9 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro"],
+    energy: 0.92,
     play: ["sub", "pad", "stabs", "riff", "double", "bells"],
-    stabs: STABS_DROP,
+    stabs: [null, null, null, null, ...STABS_DROP],
     bells: BELLS,
     riff: RIFF_DROP2,
     line: LINE_CHORUS,
@@ -371,7 +374,7 @@ const SECTIONS: readonly SongSection[] = [
     name: "Last drop",
     bars: 8,
     chords: CHORUS,
-    drums: ["euro", "bounce"],
+    drums: ["euro"],
     play: ["sub", "growl", "stabs", "lead", "riff", "arp"],
     stabs: STABS_DROP,
     riff: RIFF_DROP2,

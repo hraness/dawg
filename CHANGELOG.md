@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.25.0
+
+### Changed
+
+- **Each hyperpop chorus climbs into its drop.** The choruses hold their stabs back for the first four bars, the last choruses' drums sit a little under the drops (energy 0.92), and Soft Reboot's last drop keeps a four-floor kick throughout. Measured per section, every last drop now matches or tops its last chorus in loudness, where Soft Reboot's had sat 0.5 LU under it.
+
 ## 0.24.0
 
 ### Changed
