@@ -41,23 +41,33 @@ def chops(root, words):
     return [(w, 1.0, [N(w, 0, 0.7, root, legato=False, gap=0.05)]) for w in words]
 
 
-# Straight 7-syllable bar: 8ths, a dotted lift into the last word.
-S7 = [0, 0.5, 1, 1.5, 2, 2.75, 3]
-S7L = [0.5, 0.5, 0.5, 0.5, 0.75, 0.25, 0.9]
+# First-verse rhythms, alternating line by line so no two neighbours match:
+# R1 lands 3-3-2 then runs three 16ths into the last word; R2 opens on 16ths
+# and stretches out over the bar.
+R1 = [0, 0.75, 1.5, 2, 2.25, 2.5, 3]
+R1L = [0.6, 0.6, 0.45, 0.25, 0.25, 0.45, 0.9]
+R2 = [0, 0.25, 0.5, 1, 1.75, 2.5, 3]
+R2L = [0.25, 0.25, 0.45, 0.6, 0.6, 0.45, 0.9]
+# Second verses sing four words a line on long notes that leap, the last one
+# held to the end of the bar.
+L4 = [0, 0.75, 1.5, 2]
+L4L = [0.6, 0.6, 0.45, 1.6]
+L5 = [0, 0.75, 1.5, 2, 2.5]
+L5L = [0.6, 0.6, 0.45, 0.45, 1.3]
 
 SONGS = {
     # Soft Reboot, D major at 140. Verse Bm-G-D-A, chorus G-A-Bm-D.
     "soft-reboot-vox": dict(
         title="Soft Reboot Vocal", voice="af_heart", bpm=140, formant=1.0, root=69,
         parts=[
-            ("v1", 4, line("sta- tic on the line a- gain".split(), S7, [69, 69, 71, 69, 74, 71, 69], S7L, fall=1.0)),
-            ("v2", 4, line("pix- els where your face had been".split(), S7, [71, 71, 74, 71, 76, 74, 71], S7L, fall=1.0)),
-            ("v3", 4, line("turn it off and on a- gain".split(), S7, [69, 69, 71, 69, 74, 76, 74], S7L)),
-            ("v4", 4, line("may- be we can just be- gin".split(), S7, [73, 73, 71, 69, 71, 69, 66], S7L, fall=2.0)),
-            ("v5", 4, line("saved the songs you used to play".split(), S7, [71, 71, 69, 66, 69, 71, 69], S7L)),
-            ("v6", 4, line("cached the words you did- n't say".split(), S7, [71, 71, 74, 71, 69, 71, 69], S7L, fall=1.0)),
-            ("v7", 4, line("ev- ery glitch and ev- ery crash".split(), S7, [74, 74, 71, 71, 69, 69, 66], S7L)),
-            ("v8", 4, line("still I'm load- ing com- ing back".split(), S7, [66, 69, 71, 69, 71, 73, 74], S7L, scoop=1.0)),
+            ("v1", 4, line("sta- tic on the line a- gain".split(), R1, [69, 69, 71, 69, 74, 71, 69], R1L, fall=1.0)),
+            ("v2", 4, line("pix- els where your face had been".split(), R2, [71, 71, 74, 71, 76, 74, 71], R2L, fall=1.0)),
+            ("v3", 4, line("turn it off and on a- gain".split(), R1, [69, 69, 71, 69, 74, 76, 74], R1L)),
+            ("v4", 4, line("may- be we can just be- gin".split(), R2, [73, 73, 71, 69, 71, 69, 66], R2L, fall=2.0)),
+            ("v5", 4, line("saved all your songs".split(), L4, [74, 71, 69, 66], L4L)),
+            ("v6", 4, line("cached what you said".split(), L4, [69, 74, 78, 76], L4L, fall=1.0)),
+            ("v7", 4, line("through ev- ery crash".split(), L4, [66, 71, 74, 78], L4L)),
+            ("v8", 4, line("I'm com- ing back".split(), L4, [69, 74, 76, 81], L4L, scoop=1.0)),
             ("pre1", 4, line("count me down from ten".split(), [0, 0.5, 1, 1.5, 2], [74, 74, 73, 71, 69], [0.5, 0.5, 0.5, 0.5, 1.8])),
             ("pre2", 4, line("bring me back to when".split(), [0, 0.5, 1, 1.5, 2], [76, 76, 74, 73, 76], [0.5, 0.5, 0.5, 0.5, 1.8], scoop=1.0)),
             ("ch1", 8, line("stay with me to- night".split(), [0, 1, 1.5, 2.5, 3], [74, 73, 71, 69, 71], [0.9, 0.5, 0.9, 0.5, 3.5], fall=2.0)),
@@ -71,14 +81,14 @@ SONGS = {
     "low-battery-vox": dict(
         title="Low Battery Vocal", voice="af_bella", bpm=150, formant=1.5, root=69,
         parts=[
-            ("v1", 4, line("two per- cent and fad- ing fast".split(), S7, [73, 73, 71, 69, 71, 69, 66], S7L, fall=1.0)),
-            ("v2", 4, line("hold- ing on to what we had".split(), S7, [74, 74, 73, 71, 73, 71, 69], S7L)),
-            ("v3", 4, line("red light blink- ing on my hand".split(), S7, [73, 73, 76, 73, 71, 69, 71], S7L)),
-            ("v4", 4, line("plug me in I'll un- der- stand".split(), S7, [71, 71, 73, 71, 69, 68, 69], S7L, fall=2.0)),
-            ("v5", 4, line("run- ning out of what I've got".split(), S7, [73, 73, 71, 69, 71, 69, 66], S7L)),
-            ("v6", 4, line("burn- ing hot and then I'm not".split(), S7, [74, 74, 76, 74, 73, 71, 69], S7L, fall=1.0)),
-            ("v7", 4, line("ev- ery mes- sage left on read".split(), S7, [73, 73, 76, 73, 71, 69, 71], S7L)),
-            ("v8", 4, line("ev- ery word you nev- er said".split(), S7, [71, 71, 73, 74, 76, 74, 76], S7L, scoop=1.0)),
+            ("v1", 4, line("two per- cent and fad- ing fast".split(), R1, [73, 73, 71, 69, 71, 69, 66], R1L, fall=1.0)),
+            ("v2", 4, line("hold- ing on to what we had".split(), R2, [74, 74, 73, 71, 73, 71, 69], R2L)),
+            ("v3", 4, line("red light blink- ing on my hand".split(), R1, [73, 73, 76, 73, 71, 69, 71], R1L)),
+            ("v4", 4, line("plug me in I'll un- der- stand".split(), R2, [71, 71, 73, 71, 69, 68, 69], R2L, fall=2.0)),
+            ("v5", 4, line("run- ning on fumes".split(), L4, [73, 69, 66, 66], L4L)),
+            ("v6", 4, line("burn- ing too hot".split(), L4, [68, 73, 76, 80], L4L, fall=1.0)),
+            ("v7", 4, line("left me on read".split(), L4, [66, 69, 73, 78], L4L)),
+            ("v8", 4, line("all you nev- er said".split(), L5, [76, 73, 76, 80, 81], L5L, scoop=1.0)),
             ("pre1", 4, line("don't let me go dark".split(), [0, 0.5, 1, 1.5, 2], [76, 76, 74, 73, 71], [0.5, 0.5, 0.5, 0.5, 1.8], fall=1.0)),
             ("pre2", 4, line("you're my on- ly spark".split(), [0, 0.5, 1, 1.5, 2], [76, 76, 78, 76, 80], [0.5, 0.5, 0.5, 0.5, 1.8], scoop=1.0)),
             ("ch1", 8, line("low bat- tery low bat- tery".split(), [0, 1, 1.5, 2.5, 3.5, 4, 5], [78, 76, 73, 73, 78, 76, 73], [0.9, 0.5, 0.9, 0.9, 0.5, 0.9, 2.5], fall=1.0)),
@@ -88,18 +98,18 @@ SONGS = {
             ("hold", 4, [N("ah", 0, 3.8, 69, vib=0.15)]),
         ],
     ),
-    # Glass Garden, A major at 128. Verse D-Dm-A-E, chorus Bm-E-C#m-F#m.
+    # Glass Garden, A major at 128. Verse A-E-F#m-Dm, chorus D-E-C#m-F#m.
     "glass-garden-vox": dict(
         title="Glass Garden Vocal", voice="af_sky", bpm=128, formant=1.0, clarity=1.4, root=69,
         parts=[
-            ("v1", 4, line("plant- ed some- thing in the light".split(), S7, [73, 73, 74, 73, 76, 74, 73], S7L, fall=1.0)),
-            ("v2", 4, line("watched it grow- ing through the night".split(), S7, [74, 74, 77, 76, 74, 72, 69], S7L)),
-            ("v3", 4, line("ev- ery flow- er made of glass".split(), S7, [73, 73, 76, 73, 71, 69, 73], S7L)),
-            ("v4", 4, line("hold it close but not too fast".split(), S7, [71, 71, 73, 71, 69, 68, 71], S7L, fall=1.0)),
-            ("v5", 4, line("rain is fall- ing on the roof".split(), S7, [73, 73, 74, 73, 76, 74, 73], S7L)),
-            ("v6", 4, line("ev- ery drop a lit- tle truth".split(), S7, [74, 74, 77, 76, 74, 72, 69], S7L, fall=1.0)),
-            ("v7", 4, line("if it breaks I'll make it new".split(), S7, [73, 73, 76, 73, 76, 78, 76], S7L)),
-            ("v8", 4, line("grow a gar- den out of you".split(), S7, [76, 76, 74, 73, 71, 73, 76], S7L, scoop=1.0)),
+            ("v1", 4, line("plant- ed some- thing in the light".split(), R1, [73, 73, 74, 73, 76, 74, 73], R1L, fall=1.0)),
+            ("v2", 4, line("watched it grow- ing through the night".split(), R2, [73, 73, 78, 76, 73, 69, 66], R2L)),
+            ("v3", 4, line("ev- ery flow- er made of glass".split(), R1, [73, 73, 76, 73, 71, 69, 73], R1L)),
+            ("v4", 4, line("hold it close but not too fast".split(), R2, [71, 71, 73, 71, 69, 68, 71], R2L, fall=1.0)),
+            ("v5", 4, line("rain on the roof".split(), L4, [76, 73, 69, 73], L4L)),
+            ("v6", 4, line("drops of the truth".split(), L4, [69, 73, 78, 76], L4L, fall=1.0)),
+            ("v7", 4, line("I'll make it new".split(), L4, [69, 73, 76, 81], L4L)),
+            ("v8", 4, line("grow out of you".split(), L4, [78, 76, 73, 78], L4L, scoop=1.0)),
             ("pre1", 4, line("care- ful care- ful now".split(), [0, 0.5, 1, 1.5, 2], [76, 73, 76, 73, 71], [0.5, 0.5, 0.5, 0.5, 1.8], fall=1.0)),
             ("pre2", 4, line("let it bloom and grow".split(), [0, 0.5, 1, 2, 2.5], [74, 76, 78, 76, 80], [0.5, 0.5, 0.9, 0.5, 1.4], scoop=1.0)),
             ("ch1", 8, line("in my glass gar- den".split(), [0, 0.5, 1, 2, 3], [74, 76, 78, 76, 74], [0.5, 0.5, 0.9, 0.9, 3.0], fall=1.0)),

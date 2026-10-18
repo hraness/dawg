@@ -2,6 +2,13 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.20.0
+
+### Changed
+
+- **The hyperpop verses are re-sung.** All eight verse lines in each song had shared one straight-8ths rhythm. The first verses now alternate two syncopated rhythms line by line. The second verses sing four or five words a line, on long notes that leap up to an octave and are held to the end of the bar, so each song's second verse sounds unlike its first and the vocal ranges wider. Glass Garden's second verse line was written for an older chord loop and has been re-pitched to sit on F sharp minor.
+- **The drops hit harder than the choruses.** The growl saw now doubles the bass in every drop, and the first two choruses play their drums a little softer.
+
 ## 0.19.0
 
 ### Changed
