@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.23.0
+
+### Changed
+
+- **A key change into each hyperpop song's last drop.** The last drop of Soft Reboot and Low Battery and the last bloom of Glass Garden move up a whole step: the chords, the bass line, the syllable riffs, the arp and the lead all lift together after the breath out of the last chorus. Coming home, the raised section's last two beats drop out so the outro resumes in the original key out of silence. Song sections take a new `transpose` field for this, refused on sections with sung lines since the vocal books are fixed in key.
+
 ## 0.22.0
 
 ### Changed

@@ -357,6 +357,7 @@ const SECTIONS: readonly SongSection[] = [
     lead: HOOK_LAST,
     voiceLead: true,
     line: LINE_DROP2,
+    transpose: 2,
   },
   {
     kind: "outro",
@@ -383,6 +384,7 @@ export const lowBattery: DemoDefinition = {
     highlightBar: 28,
     trackId: "chops",
     features: [
+      "a whole-step key change into the last drop: harmony, bass, riffs and lead all lift",
       "an original vocal book: two verses, a pre-chorus and a chanted chorus",
       "glitch bursts of syllables flying over four octaves at phrase ends",
       "half-time drops on a gliding 808, doubled an octave up by the growl",

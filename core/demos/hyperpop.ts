@@ -1061,6 +1061,11 @@ export type SongSection = Readonly<{
   lead?: readonly (readonly (readonly [number, number, number])[] | null)[];
   /** The voice lead doubles the lead an octave down. */
   voiceLead?: boolean;
+  /**
+   * Semitones the section's harmony, bass and lead move: a key change. Only
+   * for sections with no sung lines, since the vocal book is fixed in key.
+   */
+  transpose?: number;
 }>;
 
 export type Layer =
@@ -1129,9 +1134,13 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
     if (!p) throw new Error(`hyperpop: no section "${name}"`);
     return p.start;
   };
-  const chordAt = (bar: number) => {
+  const chordAt = (bar: number): Chord => {
     const p = sectionAt(bar);
-    return p.chords[(bar - p.start) % p.chords.length]!;
+    const chord = p.chords[(bar - p.start) % p.chords.length]!;
+    const t = p.transpose ?? 0;
+    return t === 0
+      ? chord
+      : { bass: chord.bass + t, tones: chord.tones.map((n) => n + t) };
   };
   const stutTrack = trackOf(s, "stut");
   const stut = (name: string) => slot(stutTrack, name);
@@ -1143,6 +1152,8 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
   let bursts = 0;
 
   for (const p of placed) {
+    if (p.transpose && p.lines?.some((q) => q !== null))
+      throw new Error(`hyperpop: "${p.name}" transposes over sung lines`);
     s.section(p.name, p.start, p.bars);
     const on = (layer: Layer) => p.play.includes(layer);
     const next = placed[p.index + 1];
@@ -1240,8 +1251,9 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
         cell(s, "bells", bar, bells, ladder(chord, 74, 98), { velocity: 0.6 });
       if (leads)
         for (const [beat, pitch, beats] of lead) {
-          s.note("lead", bar, beat, pitch, beats, 0.72);
-          if (p.voiceLead) s.note("vlead", bar, beat, pitch - 12, beats, 0.7);
+          const up = pitch + (p.transpose ?? 0);
+          s.note("lead", bar, beat, up, beats, 0.72);
+          if (p.voiceLead) s.note("vlead", bar, beat, up - 12, beats, 0.7);
         }
       // Sung lines; the double sings with them where the section asks.
       const part = p.lines?.[i] ?? null;
@@ -1352,6 +1364,22 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
         "arp",
         "bells",
         "chops",
+      ]);
+    // Coming home from a key change, the raised section's last two beats
+    // drop out too, so the old key resumes out of silence, not a clash.
+    if (prev?.transpose && !p.transpose)
+      dropout(s, p.start - 1, 2, 2, [
+        "kick",
+        "snare",
+        "hats",
+        "sub",
+        "saw",
+        "stabs",
+        "arp",
+        "bells",
+        "chops",
+        "lead",
+        "vlead",
       ]);
   }
   return { placed, chordAt, sectionAt, at, throwsAt, builds, stut };

@@ -374,6 +374,7 @@ const SECTIONS: readonly SongSection[] = [
     lead: [...ANSWER, ...HOOK],
     voiceLead: true,
     line: LINE_BLOOM2,
+    transpose: 2,
   },
   {
     kind: "outro",
@@ -401,6 +402,7 @@ export const glassGarden: DemoDefinition = {
     highlightBar: 52,
     trackId: "chops",
     features: [
+      "a whole-step key change into the last bloom: harmony, bass, riffs and lead all lift",
       "an original vocal book: two verses, a pre-chorus and a soaring chorus",
       "syllable arps that bloom up through the chord after every line",
       "an offbeat octave bass pumping under the blooms, held and gliding in the verses",
