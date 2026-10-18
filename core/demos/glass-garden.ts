@@ -193,7 +193,7 @@ const ARP_SKIP = ["0.24.6.0.24.6.4.", "6.42.0.6.42.0.2."];
 // offbeat octave pump under the choruses and blooms.
 const LINE_VERSE = ["0-------....2~0.", "0.......0...1~0."];
 const LINE_PRE = ["0.2.0.2~0.2.0.2.", "0.2.0.2.0.2.1~2."];
-const LINE_CHORUS = ["0.2...2~0...2..2", "0.2...2~0...1.2~"];
+const LINE_CHORUS = ["0.2~..2~0...2~.2", "0.2...2~0...1.2~"];
 const LINE_BLOOM = ["..2.0.2~0..2.0.2", "..2.0.2...2.1~2~"];
 const LINE_BLOOM2 = ["0.2..20.2~0.2.3~", "2.0..20.1.2.5~2~"];
 

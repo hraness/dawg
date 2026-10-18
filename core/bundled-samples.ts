@@ -183,7 +183,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 33.85695833333333,
       bpm: 140,
       sha256:
-        "1355f9fed9c3353e9989a527cfb00553d8520d170dd103f7e3394dc3f87808c8",
+        "0ff75944741f0e4c520f72432bfcc67afcbcd7fb34313d43a2486e8222902be9",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053797 },
         { name: "v2", begin: 0.053797, end: 0.107595 },
@@ -217,7 +217,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 31.6,
       bpm: 150,
       sha256:
-        "36fc673ee7161dd01d116f1d60df7e66f2a60192696a7516a6c6549f73550143",
+        "8b3424c25822b4b0fcaf9aa7933fb147a7ab5a4bb60cc49ce2d508f6d344cf32",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053797 },
         { name: "v2", begin: 0.053797, end: 0.107595 },
@@ -251,7 +251,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 37.030833333333334,
       bpm: 128,
       sha256:
-        "e5576c3ba7ce1033483ca713555c0fc36e8a0f9a54eb3bed6ee46fcf72965716",
+        "d29e0c7471805d6143c05c52a8a2912cdc27c366e9f3ebf0eac8a611ef4e659e",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053798 },
         { name: "v2", begin: 0.053798, end: 0.107595 },
