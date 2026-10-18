@@ -165,6 +165,8 @@ const RIFF_DROP2 = [
   "4.44.46.5.55.577",
   "7-6-5-4-7.6.5.43",
 ];
+// Choruses hold the stabs back for their first four bars, so each one
+// climbs into its drop.
 const STABS = [
   "8..7..8.....7...",
   "..7..7..8..7....",
@@ -244,7 +246,7 @@ const SECTIONS: readonly SongSection[] = [
     energy: 0.88,
     play: ["sub", "pad", "stabs"],
     bursts: true,
-    stabs: STABS,
+    stabs: [null, null, null, null, ...STABS],
     line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
@@ -293,7 +295,7 @@ const SECTIONS: readonly SongSection[] = [
     drums: ["euro", "bounce"],
     energy: 0.88,
     play: ["sub", "pad", "stabs", "riff", "bells"],
-    stabs: STABS,
+    stabs: [null, null, null, null, ...STABS],
     bells: BELLS,
     riff: RIFF_DROP,
     line: LINE_CHORUS,
@@ -338,8 +340,9 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro", "bounce"],
+    energy: 0.92,
     play: ["sub", "pad", "stabs", "riff", "double", "bells"],
-    stabs: STABS_DROP,
+    stabs: [null, null, null, null, ...STABS_DROP],
     bells: BELLS,
     riff: RIFF_DROP2,
     line: LINE_CHORUS,
