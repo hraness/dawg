@@ -103,7 +103,7 @@ hyperpop songs share one kit with full original vocals played as an
 instrument: syllable riffs, glitch stutters, reversals, a looped-vowel
 lead and a grain cloud, over syncopated stabs and changing beats. Each has production notes, named scenes, instruments,
 effects and automation; `guide hyperpop` explains the techniques.
-`demo soft-reboot` loads one and opens TAPE; Space plays, Tab changes
+`demo low-battery` loads one and opens TAPE; Space plays, Tab changes
 tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
 `sample library` opens fourteen original sounds that work offline,
@@ -148,17 +148,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.26.0/hraness-dawg-0.26.0.tgz"
+bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.27.0/hraness-dawg-0.27.0.tgz"
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.26.0 --repo hraness/dawg
+gh release download v0.27.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.26.0.tgz --repo hraness/dawg
-bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.26.0.tgz"
+gh attestation verify hraness-dawg-0.27.0.tgz --repo hraness/dawg
+bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.27.0.tgz"
 ```
 
 To run from source instead:

@@ -11,7 +11,6 @@ import { copperWire } from "./copper-wire.ts";
 import { lowTide } from "./low-tide.ts";
 import { amberRoom } from "./amber-room.ts";
 import { candyFault } from "./candy-fault.ts";
-import { softReboot } from "./soft-reboot.ts";
 import { lowBattery } from "./low-battery.ts";
 import { glassGarden } from "./glass-garden.ts";
 export type { DemoInfo } from "./types.ts";
@@ -24,7 +23,6 @@ const definitions = [
   lowTide,
   amberRoom,
   candyFault,
-  softReboot,
   lowBattery,
   glassGarden,
 ] as const;

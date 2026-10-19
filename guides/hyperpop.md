@@ -28,7 +28,7 @@ sections without drums, and the voice as an instrument.
 
 ## Type it yourself
 
-- `demo info soft-reboot` explains where each move happens
+- `demo info low-battery` explains where each move happens
 - `sample chop low-battery-vox 8` slices a vocal book into chops
 - `glide 100 legato` slides the sub · `fx duck preset pump`
 - `fx duck hold on` keeps the dip down until each kick note ends
@@ -38,7 +38,7 @@ sections without drums, and the voice as an instrument.
 
 ## Menu
 
-- Ctrl-K › Arrange › demo songs › Soft Reboot › load song
+- Ctrl-K › Arrange › demo songs › Low Battery › load song
 - Ctrl-K › Effects › Delay · Reverb
 
 ## Keys

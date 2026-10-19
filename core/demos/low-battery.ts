@@ -1,24 +1,25 @@
 /**
- * Low Battery: darker hyperpop in F# minor at 150. Trap and half-time
- * verses, half-time growl drops under a syllable riff, a four-floor second
- * verse, and a power-down breakdown where everything dives and the key
- * turns major for the last recharge.
+ * Low Battery: darker hyperpop in F# minor at 150. A synth singer carries
+ * every line, the recorded words blended under it and up in the choruses;
+ * half-time drops on a gliding 808 doubled by a growling saw under 3-3-2
+ * syllable riffs; and a drumless low-power break before the last recharge.
  */
 import { Composer } from "./build.ts";
 import {
+  RHYTHM,
   dropout,
   flick,
   glitch,
   kitTracks,
-  merge,
   patch,
   ramps,
   riserLane,
-  slot,
+  singPart,
+  singStutter,
   steps,
   stutter,
+  sungLine,
   throws,
-  trackOf,
   writeSong,
   type Book,
   type Chord,
@@ -27,7 +28,11 @@ import {
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
 const BPM = 150;
+const { r1, r1l, r2, r2l, l4, l4l, l5, l5l } = RHYTHM;
+const QUICK = [0, 0.5, 1, 1.5, 2];
+const QUICKL = [0.5, 0.5, 0.5, 0.5, 1.8];
 
+// The book's tunes (scripts/vox/songs.py), sung by the synth too.
 const BOOK: Book = {
   sample: "low-battery-vox",
   root: 69,
@@ -47,21 +52,75 @@ const BOOK: Book = {
     ch2: 3,
     ch3: 5,
   },
+  melody: {
+    v1: sungLine(
+      "two per- cent and fad- ing fast",
+      r1,
+      [73, 73, 71, 69, 71, 69, 66],
+      r1l,
+    ),
+    v2: sungLine(
+      "hold- ing on to what we had",
+      r2,
+      [74, 74, 73, 71, 73, 71, 69],
+      r2l,
+    ),
+    v3: sungLine(
+      "red light blink- ing on my hand",
+      r1,
+      [73, 73, 76, 73, 71, 69, 71],
+      r1l,
+    ),
+    v4: sungLine(
+      "plug me in I'll un- der- stand",
+      r2,
+      [71, 71, 73, 71, 69, 68, 69],
+      r2l,
+    ),
+    v5: sungLine("run- ning on fumes", l4, [73, 69, 66, 66], l4l),
+    v6: sungLine("burn- ing too hot", l4, [68, 73, 76, 80], l4l),
+    v7: sungLine("left me on read", l4, [66, 69, 73, 78], l4l),
+    v8: sungLine("all you nev- er said", l5, [76, 73, 76, 80, 81], l5l),
+    pre1: sungLine("don't let me go dark", QUICK, [76, 76, 74, 73, 71], QUICKL),
+    pre2: sungLine(
+      "you're my on- ly spark",
+      QUICK,
+      [76, 76, 78, 76, 80],
+      QUICKL,
+    ),
+    ch1: sungLine(
+      "low bat- tery low bat- tery",
+      [0, 1, 1.5, 2.5, 3.5, 4],
+      [78, 81, 76, 81, 80, 76],
+      [0.9, 0.5, 0.9, 0.9, 0.5, 2.4],
+    ),
+    ch2: sungLine(
+      "give me your en- er- gy",
+      [0, 0.5, 1, 1.5, 2.5, 3],
+      [76, 76, 78, 80, 81, 80],
+      [0.5, 0.5, 0.5, 0.9, 0.5, 4],
+    ),
+    ch3: sungLine(
+      "charge me up don't let me fade a- way",
+      [0, 0.5, 1, 2, 2.5, 3, 3.5, 4.5, 5],
+      [76, 76, 80, 81, 80, 78, 76, 78, 81],
+      [0.5, 0.5, 0.9, 0.5, 0.5, 0.5, 0.9, 0.5, 2.5],
+    ),
+  },
 };
+// F# minor shares A major's pitch classes.
+const SCALE = [1, 2, 4, 6, 8, 9, 11];
 
 const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
-// Four-note voicings with sevenths and ninths; the stabs take the top three.
+// Open voicings with sevenths and ninths, no semitone rubs; the stabs take
+// the top three.
 const Fsm = c(42, 57, 61, 64, 68);
-const D = c(38, 57, 61, 62, 66);
+const D = c(38, 57, 61, 66, 69);
 const A = c(45, 57, 59, 61, 64);
 const E = c(40, 56, 59, 64, 66);
 const Csm = c(37, 56, 59, 61, 64);
-const Bm = c(47, 57, 61, 62, 66);
-const Fs = c(42, 58, 61, 66, 68);
 const VERSE = [Fsm, D, A, E];
 const CHORUS = [D, E, Csm, Fsm];
-const PRE = [Bm, Csm, D, E];
-const DOWN = [D, E, Fs, Fs];
 
 const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
   [
@@ -192,19 +251,40 @@ const ARP_SKIP = ["0.12.3.2.10.1.2.", "0.21.3.24.3.5.4."];
 const LINE_INTRO = ["0---------------", "0-----------2~0."];
 const LINE_VERSE = ["0.....0..2~0..5~", "0......0..1~2..."];
 const LINE_VERSE2 = ["0...0...0...0.2~", "0...0...0..20.2~"];
-const LINE_PRE = ["0..0..2~0..0..2.", "0..0..2.0..2.3~2"];
 const LINE_CHORUS = ["0.....0.2~0...2~", "0..2~0.....5~2.."];
 const LINE_DROP = ["0..0.2~0...2..2~", "0.20..2~0..3~2~1"];
 const LINE_DROP2 = ["0.20.20.2.0.2~3.", "0.2~.20.1~2.0.5~"];
 
+const VOICED: SongSection["lines"] = [
+  "v1",
+  null,
+  "v2",
+  null,
+  "v3",
+  null,
+  "v4",
+  null,
+];
+const CHORUS_LINES: SongSection["lines"] = [
+  "ch1",
+  null,
+  "ch2",
+  null,
+  "ch1",
+  null,
+  "ch3",
+  null,
+];
+
 const SECTIONS: readonly SongSection[] = [
   {
-    // Drumless: the syllables boot up in bursts, then the 808 slides in.
+    // Drumless: the synth voice hums over the 808 sliding in, syllables
+    // booting up in bursts.
     kind: "intro",
     name: "Power on",
     bars: 8,
     chords: VERSE,
-    drums: ["none"],
+    drums: ["none", "taps"],
     energy: 0.8,
     play: ["sub", "pad", "cloud", "arp"],
     bursts: true,
@@ -216,26 +296,14 @@ const SECTIONS: readonly SongSection[] = [
     name: "Verse 1",
     bars: 8,
     chords: VERSE,
-    drums: ["taps", "bounce"],
+    drums: ["trap", "bounce"],
     energy: 0.8,
     play: ["sub", "bells"],
     bursts: true,
     bells: BELLS,
     line: LINE_VERSE,
-    lines: ["v1", null, "v2", null, "v3", null, "v4", null],
-  },
-  {
-    kind: "pre",
-    name: "Pre 1",
-    bars: 4,
-    chords: PRE,
-    drums: ["none"],
-    energy: 0.85,
-    play: ["sub", "pad", "stabs", "arp"],
-    stabs: ["8.......8.......", "8.......8..8...."],
-    arp: ARP_8,
-    line: LINE_PRE,
-    lines: ["pre1", "pre2", null, null],
+    lines: VOICED,
+    words: 0.28,
   },
   {
     kind: "chorus",
@@ -243,12 +311,14 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["half", "bounce"],
-    energy: 0.88,
+    energy: 0.8,
     play: ["sub", "pad", "stabs"],
     bursts: true,
     stabs: [null, null, null, null, ...STABS],
     line: LINE_CHORUS,
-    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+    lines: CHORUS_LINES,
+    words: 0.5,
+    thirds: true,
   },
   {
     kind: "post",
@@ -266,26 +336,14 @@ const SECTIONS: readonly SongSection[] = [
     name: "Verse 2",
     bars: 8,
     chords: VERSE,
-    drums: ["none", "euro"],
-    energy: 0.8,
+    drums: ["euro", "bounce"],
+    energy: 0.82,
     play: ["sub", "arp", "pad"],
     bursts: true,
     arp: ARP_SKIP,
     line: LINE_VERSE2,
     lines: ["v5", null, "v6", null, "v7", null, "v8", null],
-  },
-  {
-    kind: "pre",
-    name: "Pre 2",
-    bars: 4,
-    chords: PRE,
-    drums: ["broken"],
-    energy: 0.9,
-    play: ["sub", "pad", "stabs", "arp"],
-    stabs: ["8..7..8.....8...", "8..7..8..7..8..."],
-    arp: ARP_8,
-    line: LINE_PRE,
-    lines: ["pre1", "pre2", null, null],
+    words: 0.3,
   },
   {
     kind: "chorus",
@@ -293,13 +351,15 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro", "bounce"],
-    energy: 0.88,
+    energy: 0.84,
     play: ["sub", "pad", "stabs", "riff", "bells"],
     stabs: [null, null, null, null, ...STABS],
     bells: BELLS,
     riff: RIFF_DROP,
     line: LINE_CHORUS,
-    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+    lines: CHORUS_LINES,
+    words: 0.54,
+    thirds: true,
   },
   {
     kind: "post",
@@ -315,10 +375,12 @@ const SECTIONS: readonly SongSection[] = [
     line: LINE_DROP2,
   },
   {
+    // Drumless over the chorus chords: the synth voice stutters and
+    // crushes while the syllables glitch around it.
     kind: "break",
-    name: "Power down",
-    bars: 8,
-    chords: DOWN,
+    name: "Low power",
+    bars: 4,
+    chords: CHORUS,
     drums: ["none"],
     play: ["pad", "cloud"],
   },
@@ -326,13 +388,13 @@ const SECTIONS: readonly SongSection[] = [
     kind: "build",
     name: "Recharge",
     bars: 4,
-    chords: PRE,
+    chords: CHORUS,
     drums: ["taps"],
     energy: 0.9,
     play: ["sub", "pad", "arp", "riff"],
     arp: ARP_8,
     riff: RIFF_CHORUS,
-    line: LINE_PRE,
+    line: LINE_CHORUS,
   },
   {
     kind: "chorus",
@@ -340,13 +402,15 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro", "bounce"],
-    energy: 0.92,
+    energy: 0.88,
     play: ["sub", "pad", "stabs", "riff", "double", "bells"],
     stabs: [null, null, null, null, ...STABS_DROP],
     bells: BELLS,
     riff: RIFF_DROP2,
     line: LINE_CHORUS,
-    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+    lines: CHORUS_LINES,
+    words: 0.6,
+    thirds: true,
   },
   {
     kind: "post",
@@ -365,11 +429,10 @@ const SECTIONS: readonly SongSection[] = [
   {
     kind: "outro",
     name: "Shutdown",
-    bars: 6,
-    chords: [Fsm],
+    bars: 4,
+    chords: [Fsm, D],
     drums: ["none"],
     play: ["pad", "cloud"],
-    bursts: true,
   },
 ];
 const BARS = SECTIONS.reduce((n, s) => n + s.bars, 0);
@@ -380,28 +443,27 @@ export const lowBattery: DemoDefinition = {
     title: "Low Battery",
     style: "Hyperpop",
     description:
-      "Darker hyperpop in F# minor at 150: a drumless boot where a gliding 808 slides in under glitch bursts of syllables, half-time verses and drops on that 808 doubled by a growling saw under 3-3-2 syllable riffs, a four-floor second verse, and a power-down breakdown that dives in pitch and turns major for the recharge.",
+      "Darker hyperpop in F# minor at 150: a synth singer carries every line with the recorded words blended under it, low in the verses and up in the choruses; half-time drops on a gliding 808 doubled by a growling saw under 3-3-2 syllable riffs; and a drumless low-power break where the voice stutters and crushes before the recharge.",
     tempoBpm: BPM,
     key: "F#m",
     bars: BARS,
-    highlightBar: 28,
+    highlightBar: 24,
     trackId: "chops",
     features: [
-      "a whole-step key change into the last drop: harmony, bass, riffs and lead all lift",
-      "an original vocal book: two verses, a pre-chorus and a chanted chorus",
-      "glitch bursts of syllables flying over four octaves at phrase ends",
+      "a synth singer on every line, the book's recorded words blended under it",
+      "a backing singer a third under the held chorus notes",
       "half-time drops on a gliding 808, doubled an octave up by the growl",
-      "a power-down breakdown: tape dives, then a major-key turn",
-      "glitch-vox solo pitched to the chords, crushing as it climbs",
-      "stuttered chorus heads, reversed syllables into every section but the verses",
+      "3-3-2 syllable riffs leaping octaves on the turn",
+      "chopped chants that step down the chord, never slide",
+      "a drumless low-power break: the voice stutters and crushes",
+      "a whole-step key change into the last drop",
       "vowel wavetable lead doubled by the looped voice",
-      "an octave-up chipmunk double on the last chorus",
     ],
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
+      "the synth singer leads; the recorded words sit 5 to 10 dB under it",
       "the half-time drops leave room for the 808 and growl under the riff",
       "delay throws open on the last word of every sung line",
-      "the chops' formant drops in the drops and rises in the recharge",
       "kick pumps the whole bed on orbit 2",
     ],
   }),
@@ -410,22 +472,50 @@ export const lowBattery: DemoDefinition = {
     kitTracks(s, BOOK, {
       bpm: BPM,
       kick: "syn808",
-      levels: { kick: 0.46, saw: 0.23, stabs: 0.26 },
-      extra: { snare: { kit: "syn808" } },
+      levels: { kick: 0.46, saw: 0.23, stabs: 0.26, sing: 0.28, harm: 0.13 },
+      extra: {
+        snare: { kit: "syn808" },
+        // Darker than the book: a lower formant, less air.
+        sing: {
+          sing: {
+            preset: "aah",
+            voice: "soprano",
+            formant: 1.8,
+            bright: 0.58,
+            articulate: 1,
+            breath: 0.06,
+            jitter: 0.3,
+            vib: 5.4,
+            vibmod: 0.12,
+            vibdelay: 0.3,
+            ring: 0.42,
+          },
+        },
+      },
     });
-    const song = writeSong(s, { book: BOOK, sections: SECTIONS });
+    const song = writeSong(s, { book: BOOK, scale: SCALE, sections: SECTIONS });
     const { at } = song;
-    const vox = trackOf(s, "vox");
 
-    // Power on: a battery beep, then the syllables booting up in pitch.
+    // Power on: a battery beep, then the synth voice humming the chorus
+    // shape with no words, an octave leap on the turn.
     for (const bar of [0, 2])
       for (const beat of [0, 0.25, 0.5])
         s.note("arp", bar, beat, 93, 0.12, 0.5);
-    // The climb hands over to the phrase's glitch burst at beat 2.5.
-    stutter(s, song, "s_up", 3, 0, 10, 0.25, 1200, 0.3, 0.7);
+    s.note("sing", 2, 0, 73, 3.5, 0.45, { lyric: "ooh" });
+    s.note("sing", 3, 0, 76, 1.5, 0.5, { lyric: "ah" });
+    s.note("sing", 3, 1.5, 71, 2, 0.5, { lyric: "_" });
+    singPart(
+      s,
+      4,
+      BOOK.melody.ch1.map(([b, p, l]) => [b, p, l, "ah"] as const),
+      {
+        velocity: 0.5,
+      },
+    );
+    singStutter(s, 7, 2, 8, 0.25, [80, 76, 80, 88], "ah", 0.4, 0.7);
     // Chorus pickups.
     for (const name of ["Chorus 1", "Chorus 2", "Last chorus"])
-      stutter(s, song, "h_ch1", at(name) + 3, 2.5, 6, 0.25, 0, 0.45, 0.75);
+      stutter(s, song, "h_ch1", at(name) + 3, 2.5, 6, 0.25, [0], 0.45, 0.75);
     // Verse answers on the glitch track, in the second verse only: the
     // first leaves its gaps to the delay throws.
     {
@@ -437,36 +527,64 @@ export const lowBattery: DemoDefinition = {
         "hey",
       ]);
     }
-    // Drops: the "low" chant chopped in 32nds; a tape dive into the turn.
+    // Drops: the "low" chant chopped in 32nds stepping down the chord; a
+    // fifth-and-octave "charge" stutter into the turn.
     for (const name of ["Drop 1", "Drop 2", "Last drop"]) {
       const bar = at(name);
-      stutter(s, song, "s_low", bar + 3, 3, 8, 0.125, -1200, 0.75, 0.4);
-      stutter(s, song, "s_charge", bar + 7, 2, 8, 0.25, 700, 0.4, 0.8);
-    }
-    // Power down: everything dives, then the voice alone over D, E, F#.
-    const down = at("Power down");
-    dropout(s, down - 1, 2, 2, ["lead", "vlead"]);
-    s.note("lead", down - 1, 2, 78, 2, 0.7, flick.dive(-2400, 0.05));
-    s.note("vlead", down - 1, 2, 66, 2, 0.6, flick.dive(-1200, 0.05));
-    s.note("vox", down, -0.25, slot(vox, "ch2"), 8.25, 0.72);
-    s.note("vlead", down + 2, 0, 66, 7.5, 0.55);
-    s.note("vlead", down + 6, 0, 70, 7.5, 0.55, flick.up(-200, 0.1));
-    const SOLO = [
-      "4.4.4..6.5..5.3.",
-      ".4.4..5..6.5..4.",
-      "4.46.5.46.5.4.3.",
-      "7.6.5.4.6.5.4.3-",
-    ];
-    for (let i = 3; i < 8; i++)
-      glitch(
+      stutter(
         s,
         song,
-        BOOK,
-        down + i,
-        SOLO[(i - 3) % 4]!,
-        ["low", "fade", "ah", "up", "charge", "hey"],
-        0.6,
+        "s_low",
+        bar + 3,
+        3,
+        8,
+        0.125,
+        [0, 0, -3, -3, -8, -8, -12, -12],
+        0.75,
+        0.45,
       );
+      stutter(
+        s,
+        song,
+        "s_charge",
+        bar + 7,
+        2,
+        8,
+        0.25,
+        [0, 0, 7, 0, 7, 12, 7, 12],
+        0.45,
+        0.8,
+      );
+    }
+    // Low power: the voice stutters on chord tones, the lead dives out.
+    const down = at("Low power");
+    dropout(s, down - 1, 2, 2, ["lead", "vlead"]);
+    s.note("lead", down - 1, 2, 78, 2, 0.7, flick.dive(-1200, 0.05));
+    singStutter(s, down, 0, 6, 0.5, [78, 73, 78, 81], "low", 0.5, 0.7);
+    s.note("sing", down, 3, 76, 1, 0.6, { lyric: "bat-" });
+    singStutter(s, down + 1, 0, 8, 0.25, [80, 76, 71, 76], "tery", 0.5, 0.65);
+    s.note("sing", down + 1, 2.5, 76, 1.5, 0.6, { lyric: "ah" });
+    singStutter(s, down + 2, 0, 12, 0.25, [80, 76, 73, 76], "fade", 0.45, 0.75);
+    s.note("sing", down + 3, 0, 78, 1.5, 0.65, { lyric: "a-" });
+    s.note("sing", down + 3, 1.5, 81, 1.5, 0.7, { lyric: "way" });
+    glitch(
+      s,
+      song,
+      BOOK,
+      down + 1,
+      "4.4..6.5..5.3...",
+      ["low", "fade", "ah"],
+      0.55,
+    );
+    glitch(
+      s,
+      song,
+      BOOK,
+      down + 3,
+      ".4.4..5..6.5..4.",
+      ["charge", "up", "hey"],
+      0.55,
+    );
     // One silent beat before the last chorus.
     const last = at("Last chorus");
     dropout(s, last - 1, 3, 1, [
@@ -479,59 +597,54 @@ export const lowBattery: DemoDefinition = {
       "chops",
       "stabs",
     ]);
+    // Shutdown: the hook hummed once more, the pad running down.
     const out = at("Shutdown");
-    s.note("vox", out, -0.25, slot(vox, "ch1"), 8.25, 0.6);
-    s.note("pad", out + 4, 0, 54, 8, 0.4, flick.dive(-1200, 0.5));
+    singPart(s, out, BOOK.melody.ch1, { velocity: 0.55 });
+    s.note("pad", out + 2, 0, 54, 8, 0.4, flick.dive(-1200, 0.5));
 
     // ---------------------------------------------------------- lanes
-    patch(s, "vox", {
-      delayMixAutomation: throws(song.throwsAt, 0.05, 0.42, 1),
+    for (const id of ["vox", "sing"])
+      patch(s, id, {
+        delayMixAutomation: throws(song.throwsAt, 0.05, 0.4, 1),
+      });
+    patch(s, "sing", {
+      fxAutomation: {
+        "crush-mix": steps([0, 0], [down, 0.35], [down + 4, 0]),
+      },
     });
     patch(s, "sweep", { filterAutomation: riserLane(song.builds) });
     patch(s, "chops", {
       fxAutomation: {
-        // Down a minor third in the drops, climbing through the recharge.
-        "formant-shift": merge(
-          steps(
-            [0, 0],
-            [at("Drop 1"), -3],
-            [at("Verse 2"), 0],
-            [at("Drop 2"), -3],
-            [down, 0],
-          ),
-          ramps([at("Recharge"), 0], [at("Recharge") + 3.9, 6]),
-          steps(
-            [at("Last chorus"), 6],
-            [at("Last chorus") + 0.002, 0],
-            [at("Last drop"), -3],
-            [out, 0],
-          ),
+        // Down a minor third in the drops.
+        "formant-shift": steps(
+          [0, 0],
+          [at("Drop 1"), -3],
+          [at("Verse 2"), 0],
+          [at("Drop 2"), -3],
+          [down, 0],
+          [at("Last drop"), -3],
+          [out, 0],
         ),
-        "crush-mix": steps([0, 0.3], [4, 0], [down, 0.3], [down + 8, 0]),
+        "crush-mix": steps([0, 0.3], [4, 0], [down, 0.3], [down + 4, 0]),
       },
     });
     patch(s, "stut", {
       fxAutomation: {
-        "crush-mix": ramps(
-          [0, 0],
-          [down + 3, 0],
-          [down + 7.9, 0.7],
-          [down + 8, 0],
-        ),
+        "crush-mix": ramps([0, 0], [down, 0], [down + 3.9, 0.6], [down + 4, 0]),
       },
     });
     patch(s, "pad", {
       filterAutomation: ramps(
         [0, 900],
-        [at("Pre 1"), 1400],
-        [at("Chorus 1") - 0.01, 3800],
+        [at("Verse 1"), 1300],
+        [at("Chorus 1") - 0.01, 2400],
         [at("Chorus 1"), 3200],
         [at("Drop 1"), 1600],
         [at("Verse 2"), 1500],
         [at("Chorus 2"), 3600],
         [down, 2600],
-        [down + 7.9, 700],
-        [at("Recharge"), 900],
+        [down + 3.9, 900],
+        [at("Recharge"), 1000],
         [last - 0.01, 4200],
         [last, 4000],
         [out, 2000],
