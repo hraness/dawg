@@ -2,6 +2,16 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.27.0
+
+### Changed
+
+- **Low Battery and Glass Garden, rewritten around their drops and a synth singer.** A formant synth singer, in the style of Candy Fault, now sings every line with its words. The recorded book sits under it, quiet in the verses and up in the choruses, and a backing singer takes thirds under the held chorus notes. The pre-choruses are gone: each verse turns into its chorus on a stutter of the chorus head. Every pitch-sliding stutter and climbing ramp now leaps between chord tones instead. The section-end snare fills vary, and the stabs, chops, stutters and growl drift a few milliseconds. The voicings drop their semitone rubs, and Glass Garden no longer borrows D minor or F major. The long breakdowns become four-bar drumless breaks where the synth singer stutters on chord tones.
+
+### Removed
+
+- **The Soft Reboot demo.** Its vocal book stays in the sample library as `soft-reboot-vox`.
+
 ## 0.26.0
 
 ### Changed

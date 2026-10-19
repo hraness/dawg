@@ -1,24 +1,25 @@
 /**
- * Glass Garden: bright, glassy hyperpop in A major at 128. Tresillo and
- * broken-beat verses, FM bells and a syllable arp that blooms out of the
- * vocal, a borrowed D minor that clouds every fourth bar, and a
- * half-speed bridge where the voice is frozen into a grain pad.
+ * Glass Garden: bright, glassy hyperpop in A major at 128. A synth singer
+ * carries every line with the recorded words blended under it, FM bells
+ * and syllable arps that bloom after each line, tresillo and four-floor
+ * blooms, and a drumless greenhouse where the voice freezes and glitches.
  */
 import { Composer } from "./build.ts";
 import {
+  RHYTHM,
   dropout,
   flick,
   glitch,
   kitTracks,
-  merge,
   patch,
   ramps,
   riserLane,
-  slot,
+  singPart,
+  singStutter,
   steps,
   stutter,
+  sungLine,
   throws,
-  trackOf,
   writeSong,
   type Book,
   type Chord,
@@ -27,7 +28,9 @@ import {
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
 const BPM = 128;
+const { r1, r1l, r2, r2l, l4, l4l } = RHYTHM;
 
+// The book's tunes (scripts/vox/songs.py), sung by the synth too.
 const BOOK: Book = {
   sample: "glass-garden-vox",
   root: 69,
@@ -47,23 +50,79 @@ const BOOK: Book = {
     ch2: 2.5,
     ch3: 4,
   },
+  melody: {
+    v1: sungLine(
+      "plant- ed some- thing in the light",
+      r1,
+      [73, 73, 74, 73, 76, 74, 73],
+      r1l,
+    ),
+    v2: sungLine(
+      "watched it grow- ing through the night",
+      r2,
+      [73, 73, 78, 76, 73, 69, 66],
+      r2l,
+    ),
+    v3: sungLine(
+      "ev- ery flow- er made of glass",
+      r1,
+      [73, 73, 76, 73, 71, 69, 73],
+      r1l,
+    ),
+    v4: sungLine(
+      "hold it close but not too fast",
+      r2,
+      [71, 71, 73, 71, 69, 68, 71],
+      r2l,
+    ),
+    v5: sungLine("rain on the roof", l4, [76, 73, 69, 73], l4l),
+    v6: sungLine("drops of the truth", l4, [69, 73, 78, 76], l4l),
+    v7: sungLine("I'll make it new", l4, [69, 73, 76, 81], l4l),
+    v8: sungLine("grow out of you", l4, [78, 76, 73, 78], l4l),
+    pre1: sungLine(
+      "care- ful care- ful now",
+      [0, 0.5, 1, 1.5, 2],
+      [76, 73, 76, 73, 71],
+      [0.5, 0.5, 0.5, 0.5, 1.8],
+    ),
+    pre2: sungLine(
+      "let it bloom and grow",
+      [0, 0.5, 1, 2, 2.5],
+      [74, 76, 78, 76, 80],
+      [0.5, 0.5, 0.9, 0.5, 1.4],
+    ),
+    ch1: sungLine(
+      "in my glass gar- den",
+      [0, 0.5, 1, 2, 3],
+      [74, 78, 81, 78, 76],
+      [0.5, 0.5, 0.9, 0.9, 3],
+    ),
+    ch2: sungLine(
+      "ev- ery- thing's gold- en",
+      [0, 0.5, 1, 2, 2.5],
+      [73, 76, 80, 78, 81],
+      [0.5, 0.5, 0.9, 0.5, 3.5],
+    ),
+    ch3: sungLine(
+      "don't you ev- er let the sun- light go",
+      [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4],
+      [76, 76, 80, 76, 80, 81, 80, 76, 78],
+      [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 3],
+    ),
+  },
 };
+const SCALE = [1, 2, 4, 6, 8, 9, 11];
 
 const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
-// Four-note voicings with sevenths and ninths; the stabs take the top three.
-const A = c(45, 59, 61, 64, 69);
-const E = c(40, 59, 64, 66, 68);
-const Fsm = c(42, 61, 64, 66, 69);
-const D = c(38, 61, 62, 66, 69);
-const Dm = c(38, 62, 64, 65, 69);
-const Bm = c(47, 61, 62, 66, 69);
-const Csm = c(37, 59, 61, 64, 68);
-const F = c(41, 60, 64, 65, 69);
-const VERSE = [A, E, Fsm, Dm];
+// Open voicings with sevenths and ninths, no semitone rubs; the stabs take
+// the top three. Everything stays in A major.
+const A = c(45, 57, 61, 64, 71);
+const E = c(40, 56, 59, 64, 66);
+const Fsm = c(42, 57, 61, 64, 68);
+const D = c(38, 57, 61, 66, 69);
+const Csm = c(37, 56, 59, 64, 68);
+const VERSE = [A, E, Fsm, D];
 const CHORUS = [D, E, Csm, Fsm];
-const PRE = [Bm, Csm, D, E];
-// The greenhouse borrows F and D minor twice, then turns to the chorus.
-const BRIDGE = [F, Dm, A, E, F, Dm, A, E, D, E, Csm, Fsm];
 
 const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
   [
@@ -160,7 +219,7 @@ const RIFF_POST2 = [
   "3.53.64.5.75.86.",
   "4.64.75.6.86.97.",
   "3.53.64.5.75.86.",
-  "9876876576546543",
+  "9.7.5.86.4.75.3.",
 ];
 // Choruses hold the stabs back for their first four bars, so each one
 // climbs into its drop.
@@ -194,10 +253,20 @@ const ARP_SKIP = ["0.24.6.0.24.6.4.", "6.42.0.6.42.0.2."];
 // Bass lines (`bassLine` steps): held and gliding under the verses, an
 // offbeat octave pump under the choruses and blooms.
 const LINE_VERSE = ["0-------....2~0.", "0.......0...1~0."];
-const LINE_PRE = ["0.2.0.2~0.2.0.2.", "0.2.0.2.0.2.1~2."];
 const LINE_CHORUS = ["0.2~..2~0...2~.2", "0.2...2~0...1.2~"];
 const LINE_BLOOM = ["..2.0.2~0..2.0.2", "..2.0.2...2.1~2~"];
 const LINE_BLOOM2 = ["0.2..20.2~0.2.3~", "2.0..20.1.2.5~2~"];
+
+const CHORUS_LINES: SongSection["lines"] = [
+  "ch1",
+  null,
+  "ch2",
+  null,
+  "ch1",
+  null,
+  "ch3",
+  null,
+];
 
 const SECTIONS: readonly SongSection[] = [
   {
@@ -205,39 +274,25 @@ const SECTIONS: readonly SongSection[] = [
     name: "Seed",
     bars: 8,
     chords: VERSE,
-    drums: ["none"],
+    drums: ["none", "tresillo"],
     energy: 0.75,
     play: ["cloud", "bells", "pad"],
     bursts: true,
     bells: BELLS_VERSE,
   },
   {
-    // The first verse floats on the pad and a held bass; the tresillo
-    // arrives halfway.
     kind: "verse",
     name: "Verse 1",
     bars: 8,
     chords: VERSE,
-    drums: ["none", "tresillo"],
+    drums: ["tresillo", "skip"],
     energy: 0.85,
     play: ["sub", "bells", "pad"],
     bursts: true,
     bells: BELLS_VERSE,
     line: LINE_VERSE,
     lines: ["v1", null, "v2", null, "v3", null, "v4", null],
-  },
-  {
-    kind: "pre",
-    name: "Pre 1",
-    bars: 4,
-    chords: PRE,
-    drums: ["none"],
-    energy: 0.85,
-    play: ["sub", "pad", "arp", "stabs"],
-    arp: ARP_SKIP,
-    stabs: ["8.......8.......", "8.....8.....8..."],
-    line: LINE_PRE,
-    lines: ["pre1", "pre2", null, null],
+    words: 0.28,
   },
   {
     kind: "chorus",
@@ -245,19 +300,21 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro", "tresillo"],
-    energy: 0.88,
+    energy: 0.84,
     play: ["sub", "pad", "stabs"],
     bursts: true,
     stabs: [null, null, null, null, ...STABS],
     line: LINE_CHORUS,
-    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+    lines: CHORUS_LINES,
+    words: 0.58,
+    thirds: true,
   },
   {
     kind: "post",
     name: "Bloom 1",
-    bars: 4,
+    bars: 8,
     chords: CHORUS,
-    drums: ["euro"],
+    drums: ["euro", "tresillo"],
     play: ["sub", "growl", "stabs", "arp", "riff", "lead"],
     stabs: STABS_POST,
     arp: ARP_16,
@@ -270,7 +327,7 @@ const SECTIONS: readonly SongSection[] = [
     name: "Verse 2",
     bars: 8,
     chords: VERSE,
-    drums: ["none", "skip"],
+    drums: ["skip", "tresillo"],
     energy: 0.9,
     play: ["sub", "arp", "pad", "bells"],
     bursts: true,
@@ -278,19 +335,7 @@ const SECTIONS: readonly SongSection[] = [
     bells: BELLS_VERSE,
     line: LINE_VERSE,
     lines: ["v5", null, "v6", null, "v7", null, "v8", null],
-  },
-  {
-    kind: "pre",
-    name: "Pre 2",
-    bars: 4,
-    chords: PRE,
-    drums: ["skip"],
-    energy: 0.9,
-    play: ["sub", "pad", "arp", "stabs"],
-    arp: ARP_SKIP,
-    stabs: STABS,
-    line: LINE_PRE,
-    lines: ["pre1", "pre2", null, null],
+    words: 0.3,
   },
   {
     kind: "chorus",
@@ -298,12 +343,14 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro"],
-    energy: 0.88,
+    energy: 0.84,
     play: ["sub", "pad", "stabs", "riff", "double"],
     stabs: [null, null, null, null, ...STABS],
     riff: RIFF_POST,
     line: LINE_CHORUS,
-    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+    lines: CHORUS_LINES,
+    words: 0.62,
+    thirds: true,
   },
   {
     kind: "post",
@@ -320,35 +367,28 @@ const SECTIONS: readonly SongSection[] = [
     line: LINE_BLOOM2,
   },
   {
-    // Twelve drumless bars; the bass comes back for the turn home.
+    // Drumless: the voice frozen into the grain pad, glitching over it.
     kind: "break",
     name: "Greenhouse",
-    bars: 12,
-    chords: BRIDGE,
+    bars: 4,
+    chords: [Fsm, D, A, E],
     drums: ["none"],
     energy: 0.7,
-    play: ["sub", "pad", "cloud", "bells"],
+    play: ["pad", "cloud", "bells"],
     bells: BELLS_VERSE,
-    line: [
-      ...Array.from({ length: 8 }, () => null),
-      "0---------------",
-      "0---------------",
-      "0---------------",
-      "0-----------1~2.",
-    ],
   },
   {
     kind: "build",
     name: "Sunlight",
     bars: 4,
-    chords: PRE,
+    chords: [D, E, Fsm, E],
     drums: ["broken"],
     energy: 0.9,
     play: ["sub", "pad", "arp", "riff", "stabs"],
     arp: ARP_SKIP,
     riff: RIFF_CHORUS,
     stabs: ["8...8...8...8...", "8.8.8.8.8.8.8.8."],
-    line: LINE_PRE,
+    line: LINE_CHORUS,
   },
   {
     kind: "chorus",
@@ -356,13 +396,15 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["euro", "tresillo"],
-    energy: 0.92,
+    energy: 0.88,
     play: ["sub", "pad", "stabs", "riff", "bells", "double"],
     stabs: [null, null, null, null, ...STABS_POST],
     bells: BELLS,
     riff: RIFF_POST2,
     line: LINE_CHORUS,
-    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+    lines: CHORUS_LINES,
+    words: 0.68,
+    thirds: true,
   },
   {
     kind: "post",
@@ -382,12 +424,11 @@ const SECTIONS: readonly SongSection[] = [
   {
     kind: "outro",
     name: "Glass",
-    bars: 6,
-    chords: [D, A, Dm, A],
+    bars: 4,
+    chords: [D, A],
     drums: ["none"],
     play: ["pad", "cloud", "bells"],
-    bursts: true,
-    bells: ["7...6...5.......", null, "5...4...3.......", null],
+    bells: ["7...6...5.......", null],
   },
 ];
 const BARS = SECTIONS.reduce((n, s) => n + s.bars, 0);
@@ -398,29 +439,27 @@ export const glassGarden: DemoDefinition = {
     title: "Glass Garden",
     style: "Hyperpop",
     description:
-      "Bright, glassy hyperpop in A major at 128: a drumless seed and first half-verse carried by the pad, the bells and the voice, tresillo verses closed by glitch bursts, blooms that pump an offbeat octave bass under a clap, a borrowed D minor clouding every fourth bar, and a twelve-bar greenhouse bridge where the voice freezes into a grain pad under a glitching vocal solo.",
+      "Bright, glassy hyperpop in A major at 128: a synth singer carries every line with the recorded words blended under it, FM bells and syllable arps blooming after each line, tresillo and four-floor blooms on an offbeat octave bass, and a drumless greenhouse where the voice freezes into a grain pad and glitches.",
     tempoBpm: BPM,
     key: "A",
     bars: BARS,
-    highlightBar: 52,
+    highlightBar: 24,
     trackId: "chops",
     features: [
-      "a whole-step key change into the last bloom: harmony, bass, riffs and lead all lift",
-      "an original vocal book: two verses, a pre-chorus and a soaring chorus",
+      "a synth singer on every line, the book's recorded words blended under it",
+      "a backing singer a third under the held chorus notes",
       "syllable arps that bloom up through the chord after every line",
-      "an offbeat octave bass pumping under the blooms, held and gliding in the verses",
-      "a borrowed D minor in the verse and an F-major bridge",
-      "long drumless stretches; tresillo, two-step and four-floor beats by phrase",
-      "a greenhouse bridge: frozen grain voice, glitching solo",
-      "stuttered chorus heads and reversed syllables into every section but the verses",
+      "an offbeat octave bass pumping under the blooms",
+      "tresillo, two-step and four-floor beats by phrase",
+      "a drumless greenhouse: frozen grain voice, stuttering synth singer",
+      "a whole-step key change into the last bloom",
       "vowel wavetable lead doubled by the looped voice",
-      "an octave-up chipmunk double on the second and last chorus",
     ],
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
+      "the synth singer leads; the recorded words sit 5 to 10 dB under it",
       "bells ring above the arp so the syllables fill the middle",
       "delay throws open on the last word of every sung line",
-      "the chops' formant rises in the blooms and falls in the bridge",
       "kick pumps the whole bed on orbit 2",
     ],
   }),
@@ -428,21 +467,54 @@ export const glassGarden: DemoDefinition = {
     const s = new Composer(this.info);
     kitTracks(s, BOOK, {
       bpm: BPM,
-      levels: { bells: 0.2, saw: 0.16, arp: 0.18, chops: 0.8, vgrain: 0.32 },
+      levels: {
+        bells: 0.2,
+        saw: 0.16,
+        arp: 0.18,
+        chops: 0.8,
+        vgrain: 0.32,
+        sing: 0.34,
+        harm: 0.15,
+      },
+      extra: {
+        // Glassier than Low Battery: a higher formant, more air.
+        sing: {
+          sing: {
+            preset: "aah",
+            voice: "soprano",
+            formant: 3,
+            bright: 0.78,
+            articulate: 1,
+            breath: 0.09,
+            jitter: 0.22,
+            vib: 5.8,
+            vibmod: 0.15,
+            vibdelay: 0.3,
+            ring: 0.36,
+          },
+        },
+      },
     });
-    const song = writeSong(s, { book: BOOK, sections: SECTIONS });
+    const song = writeSong(s, { book: BOOK, scale: SCALE, sections: SECTIONS });
     const { at } = song;
-    const vox = trackOf(s, "vox");
 
-    // Seed: the voice grows out of a held vowel, syllables sprouting.
+    // Seed: the voice grows out of a held vowel, the synth singer humming
+    // the chorus shape with no words, syllables sprouting.
     s.note("vlead", 0, 0, 69, 7.5, 0.5, flick.up(-1200, 0.4));
-    stutter(s, song, "s_glass", 2, 0, 8, 0.5, 700, 0.3, 0.6);
+    s.note("sing", 2, 0, 76, 3.5, 0.42, { lyric: "ooh" });
+    s.note("sing", 3, 0.5, 73, 3, 0.45, { lyric: "_" });
+    singPart(
+      s,
+      4,
+      BOOK.melody.ch1.map(([b, p, l]) => [b, p, l, "ooh"] as const),
+      { velocity: 0.5 },
+    );
     glitch(
       s,
       song,
       BOOK,
       5,
-      "0.1.2.3.4.5.6789",
+      "0.2.4.2.5.4.7.6.",
       ["glass", "bloom", "gold", "grow"],
       0.55,
     );
@@ -461,19 +533,19 @@ export const glassGarden: DemoDefinition = {
         "ooh",
       ]);
     }
-    // Blooms: a rising "ah" scatter on the turn of each phrase.
+    // Blooms: an "ah" scattered over the chord on each phrase's turn, and a
+    // glitch burst leaping down through it on the last bar.
     for (const name of ["Bloom 1", "Bloom 2", "Last bloom"]) {
       const bar = at(name);
-      const bars = song.sectionAt(bar).bars;
       stutter(
         s,
         song,
         "s_ah",
-        bar + (bars === 4 ? 1 : 3),
+        bar + 3,
         2,
         8,
         0.25,
-        1200,
+        [0, 4, 0, -3, 0, 4, 9, 4],
         0.45,
         0.8,
       );
@@ -481,39 +553,41 @@ export const glassGarden: DemoDefinition = {
         s,
         song,
         BOOK,
-        bar + bars - 1,
-        "9876543298765432",
+        bar + 7,
+        "97.5.86.4.75.3.2",
         ["gold", "glass"],
         0.55,
       );
     }
-    // Greenhouse: the voice alone, frozen and glitching over F, Dm, A, E,
-    // then the chorus sung over the turn home.
+    // Greenhouse: the synth singer stutters the chorus words on chord
+    // tones over the frozen voice.
     const gh = at("Greenhouse");
-    // "let it bloom and grow" lands on the A bars; the voice holds F, then A.
-    for (const bar of [gh + 2, gh + 6])
-      s.note("vox", bar, -0.25, slot(vox, "pre2"), 4.25, 0.7);
-    s.note("vlead", gh, 0, 65, 7.5, 0.5);
-    s.note("vlead", gh + 4, 0, 69, 7.5, 0.5);
-    const SOLO = [
+    s.note("vlead", gh, 0, 69, 15.5, 0.5);
+    singStutter(s, gh, 0, 6, 0.5, [76, 73, 81, 76], "glass", 0.5, 0.7);
+    s.note("sing", gh, 3, 74, 1, 0.6, { lyric: "gar-" });
+    singStutter(s, gh + 1, 0, 8, 0.25, [78, 74, 81, 78], "den", 0.5, 0.65);
+    s.note("sing", gh + 1, 2, 76, 2, 0.6, { lyric: "ooh" });
+    singStutter(s, gh + 2, 0, 12, 0.25, [76, 73, 81, 76], "gold", 0.45, 0.75);
+    s.note("sing", gh + 3, 0, 80, 1.5, 0.65, { lyric: "gold-" });
+    s.note("sing", gh + 3, 1.5, 83, 2.25, 0.7, { lyric: "en" });
+    glitch(
+      s,
+      song,
+      BOOK,
+      gh + 1,
       "2.4.5.4.2..4.5..",
-      "3.5.6.5.3..5.6..",
-      "4.5.6.7.6.5.4.5.",
-      "6.7.8.9.8.7.6.5-",
-    ];
-    for (let i = 4; i < 8; i++)
-      glitch(
-        s,
-        song,
-        BOOK,
-        gh + i,
-        SOLO[i - 4]!,
-        ["glass", "bloom", "ooh", "gold", "grow", "ah"],
-        0.6,
-      );
-    s.note("vox", gh + 8, -0.25, slot(vox, "ch1"), 8.25, 0.7);
-    s.note("vox", gh + 10, -0.25, slot(vox, "ch3"), 8.25, 0.7);
-    s.note("lead", gh + 7, 2, 81, 2, 0.6, flick.wobble(150, 8));
+      ["glass", "bloom", "ooh"],
+      0.55,
+    );
+    glitch(
+      s,
+      song,
+      BOOK,
+      gh + 3,
+      "4.5.6.4.6.5.2...",
+      ["gold", "grow", "ah"],
+      0.55,
+    );
     // A held breath before the last chorus.
     const last = at("Last chorus");
     dropout(s, last - 1, 3.5, 0.5, [
@@ -528,12 +602,18 @@ export const glassGarden: DemoDefinition = {
       "bells",
     ]);
     const out = at("Glass");
-    s.note("vox", out, -0.25, slot(vox, "ch3"), 8.25, 0.6);
-    s.note("bells", out + 3, 0, 93, 4, 0.4, flick.dive(-1200, 0.6));
+    singPart(s, out, BOOK.melody.ch1, { velocity: 0.55 });
+    s.note("bells", out + 2, 0, 93, 4, 0.4, flick.dive(-1200, 0.6));
 
     // ---------------------------------------------------------- lanes
-    patch(s, "vox", {
-      delayMixAutomation: throws(song.throwsAt, 0.06, 0.38, 1),
+    for (const id of ["vox", "sing"])
+      patch(s, id, {
+        delayMixAutomation: throws(song.throwsAt, 0.06, 0.38, 1),
+      });
+    patch(s, "sing", {
+      fxAutomation: {
+        "crush-mix": steps([0, 0], [gh, 0.3], [gh + 4, 0]),
+      },
     });
     patch(s, "sweep", { filterAutomation: riserLane(song.builds) });
     patch(s, "chops", {
@@ -548,24 +628,24 @@ export const glassGarden: DemoDefinition = {
           [at("Last bloom"), 3],
           [out, 0],
         ),
-        "crush-mix": steps([0, 0], [gh, 0.2], [gh + 8, 0]),
+        "crush-mix": steps([0, 0], [gh, 0.2], [gh + 4, 0]),
       },
     });
     patch(s, "stut", {
       fxAutomation: {
-        "crush-mix": ramps([0, 0], [gh + 4, 0], [gh + 7.9, 0.55], [gh + 8, 0]),
+        "crush-mix": ramps([0, 0], [gh, 0], [gh + 3.9, 0.5], [gh + 4, 0]),
       },
     });
     patch(s, "pad", {
       filterAutomation: ramps(
         [0, 1200],
-        [at("Pre 1"), 1800],
-        [at("Chorus 1") - 0.01, 4200],
+        [at("Verse 1"), 1600],
+        [at("Chorus 1") - 0.01, 2800],
         [at("Chorus 1"), 3800],
         [at("Verse 2"), 1800],
         [at("Chorus 2"), 4200],
         [gh, 1400],
-        [gh + 11.9, 2800],
+        [gh + 3.9, 2400],
         [at("Sunlight"), 1600],
         [last - 0.01, 5000],
         [last, 4600],

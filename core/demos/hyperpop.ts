@@ -364,7 +364,44 @@ export type Book = Readonly<{
   root: number;
   syllables: readonly string[];
   ends: Readonly<Record<Part, number>>;
+  /** Every part's tune, as the book sings it; the synth singer sings it too. */
+  melody: Readonly<Record<Part, readonly Sung[]>>;
 }>;
+
+/** A sung note: beat from the part's downbeat, pitch, beats, syllable. */
+export type Sung = readonly [number, number, number, string];
+
+/**
+ * A line as `scripts/vox/songs.py` writes it: syllables on `beats`, each
+ * lasting until the next unless `lens` says.
+ */
+export function sungLine(
+  words: string,
+  beats: readonly number[],
+  pitches: readonly number[],
+  lens?: readonly number[],
+): Sung[] {
+  return words
+    .split(" ")
+    .map((syl, k) => [
+      beats[k]!,
+      pitches[k]!,
+      lens?.[k] ?? (beats[k + 1] ?? beats[k]! + 1) - beats[k]!,
+      syl,
+    ]);
+}
+
+/** The book's verse rhythms (songs.py R1, R2, L4, L5) and their lengths. */
+export const RHYTHM = {
+  r1: [0, 0.75, 1.5, 2, 2.25, 2.5, 3],
+  r1l: [0.6, 0.6, 0.45, 0.25, 0.25, 0.45, 0.9],
+  r2: [0, 0.25, 0.5, 1, 1.75, 2.5, 3],
+  r2l: [0.25, 0.25, 0.45, 0.6, 0.6, 0.45, 0.9],
+  l4: [0, 0.75, 1.5, 2],
+  l4l: [0.6, 0.6, 0.45, 1.6],
+  l5: [0, 0.75, 1.5, 2, 2.5],
+  l5l: [0.6, 0.6, 0.45, 0.45, 1.3],
+} as const;
 
 /** Parts carry a quarter beat of lead-in before their first downbeat. */
 const LEAD = 0.25;
@@ -618,6 +655,133 @@ export function grainTrack(
   });
 }
 
+/**
+ * The synth singer: a formant voice that sings every line with the book's
+ * words, abstract and glassy where the book is plain speech pitched into
+ * tune. The book's words sit under it where a section asks for them.
+ */
+export function singerTrack(
+  level: number,
+  extra: Partial<TrackInput> = {},
+): TrackInput {
+  return voice("sing", "Synth singer", "sing", level, {
+    sing: {
+      preset: "aah",
+      voice: "soprano",
+      formant: 2.5,
+      bright: 0.7,
+      articulate: 1,
+      breath: 0.07,
+      jitter: 0.25,
+      vib: 5.6,
+      vibmod: 0.14,
+      vibdelay: 0.3,
+      ring: 0.38,
+    },
+    filter: { type: "hpf", cutoff: 230, resonance: 0 },
+    fx: { crush: { bits: 16, coarse: 1, mix: 0 } },
+    delay: { beats: 0.75, feedback: 0.3, mix: 0.08, pingpong: true },
+    reverb: { mix: 0.16, size: 0.6, fade: 2.2, lowpass: 11000 },
+    humanize: { timing: 6, velocity: 5, length: 4, seed: 16 },
+    ...extra,
+  });
+}
+
+/** Backing singer: a soft three-voice alto a third under the held notes. */
+export function harmonyTrack(
+  level: number,
+  extra: Partial<TrackInput> = {},
+): TrackInput {
+  return voice("harm", "Synth double", "sing", level, {
+    pan: 0.3,
+    sing: {
+      preset: "aah",
+      voice: "alto",
+      formant: 2,
+      bright: 0.55,
+      articulate: 1,
+      breath: 0.12,
+      voices: 3,
+      spread: 14,
+      vib: 5.2,
+      vibmod: 0.1,
+      vibdelay: 0.35,
+    },
+    filter: { type: "hpf", cutoff: 300, resonance: 0 },
+    reverb: hall,
+    humanize: { timing: 9, velocity: 6, seed: 17 },
+    ...extra,
+  });
+}
+
+/** Scoop into a note from below, the hard-tune snap of a pitched vocal. */
+const scoop = (cents = -80, at = 0.1): Extra => ({
+  bend: [
+    { at: 0, cents },
+    { at, cents: 0 },
+  ] as Bend,
+});
+
+/** The diatonic third below `pitch` in a scale of pitch classes. */
+export function thirdBelow(scale: readonly number[], pitch: number): number {
+  return scale.includes((pitch - 3 + 120) % 12) ? pitch - 3 : pitch - 4;
+}
+
+/** One sung part on the synth singer from `bar`; thirds under held notes. */
+export function singPart(
+  s: Composer,
+  bar: number,
+  notes: readonly Sung[],
+  o: Readonly<{
+    velocity?: number;
+    thirds?: readonly number[];
+    transpose?: number;
+  }> = {},
+): void {
+  const t = o.transpose ?? 0;
+  for (const [beat, pitch, beats, lyric] of notes) {
+    const up = pitch + t;
+    s.note("sing", bar, beat, up, beats, o.velocity ?? 0.8, {
+      lyric,
+      ...(beats >= 0.85 ? scoop() : {}),
+      ...(beats >= 1.4 && up >= 75
+        ? { vibrato: { rate: 5.8, depth: 32, delay: 0.28 } }
+        : {}),
+    });
+    if (o.thirds && beats >= 0.8)
+      s.note("harm", bar, beat, thirdBelow(o.thirds, up), beats, 0.6, {
+        lyric,
+      });
+  }
+}
+
+/**
+ * A syllable stuttered on the synth singer: `count` hits `step` beats
+ * apart, cycling through `pitches` (chord tones, never a slide).
+ */
+export function singStutter(
+  s: Composer,
+  bar: number,
+  beat: number,
+  count: number,
+  step: number,
+  pitches: readonly number[],
+  lyric: string,
+  from = 0.55,
+  to = 0.85,
+): void {
+  for (let i = 0; i < count; i++)
+    s.note(
+      "sing",
+      bar,
+      beat + i * step,
+      pitches[i % pitches.length]!,
+      step * 0.8,
+      from + ((to - from) * i) / Math.max(1, count - 1),
+      { lyric },
+    );
+}
+
 // ------------------------------------------------------------- writers
 
 /** Drum families (see guides/hyperpop.md). */
@@ -787,6 +951,34 @@ export function drums(
   if (g.rim) s.grid("hats", bar, 37, g.rim, energy);
   if (g.clap) s.grid("snare", bar, 39, g.clap, energy);
 }
+
+/** Section-end snare fills: [beat, velocity] hits, chosen by section. */
+const FILLS: readonly (readonly (readonly [number, number])[])[] = [
+  [
+    [3, 0.5],
+    [3.25, 0.62],
+    [3.5, 0.74],
+    [3.75, 0.86],
+  ],
+  [
+    [2.5, 0.55],
+    [3, 0.62],
+    [3.5, 0.78],
+    [3.75, 0.86],
+  ],
+  [
+    [3, 0.72],
+    [3.5, 0.6],
+    [3.625, 0.68],
+    [3.75, 0.78],
+    [3.875, 0.9],
+  ],
+  [
+    [2, 0.5],
+    [2.75, 0.62],
+    [3.5, 0.86],
+  ],
+];
 
 /** A snare roll over the bar: quarters to eighths to 16ths to 32nds. */
 export function roll(s: Composer, bar: number, from = 0.3, to = 0.85): void {
@@ -1039,8 +1231,15 @@ export type SongSection = Readonly<{
   /** Drum family per four-bar phrase, cycling. */
   drums: readonly DrumFamily[];
   energy?: number;
-  /** The sung part starting on each bar (`null`: none), by bar. */
+  /**
+   * The sung part starting on each bar (`null`: none), by bar. The synth
+   * singer sings every part; the book's own words join it at `words`.
+   */
   lines?: readonly (Part | null)[];
+  /** Velocity of the book's recorded words under the synth singer (0: none). */
+  words?: number;
+  /** The backing singer takes a third under the held notes. */
+  thirds?: boolean;
   /** Layers the section plays. */
   play: readonly Layer[];
   /** Vocal-chop riff cells (ladder 55-84), cycling by bar. */
@@ -1087,6 +1286,8 @@ export type Placed = SongSection & Readonly<{ start: number; index: number }>;
 
 export type SongPlan = Readonly<{
   book: Book;
+  /** The key's pitch classes, for the backing singer's thirds. */
+  scale: readonly number[];
   sections: readonly SongSection[];
 }>;
 
@@ -1177,14 +1378,11 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
           next.kind !== "break" &&
           next.kind !== "outro"
         ) {
-          // The fill replaces the pattern's own last-beat snares.
-          dropout(s, bar, 3, 1, ["snare"]);
-          for (const [beat, v] of [
-            [3, 0.5],
-            [3.25, 0.62],
-            [3.5, 0.74],
-            [3.75, 0.86],
-          ] as const)
+          // The fill replaces the pattern's own snares from its first hit;
+          // each section turns around on its own fill.
+          const fill = FILLS[p.index % FILLS.length]!;
+          dropout(s, bar, fill[0]![0], 4 - fill[0]![0], ["snare"]);
+          for (const [beat, v] of fill)
             s.note("snare", bar, beat, 38, 0.1, v * energy);
         }
       }
@@ -1260,14 +1458,18 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       // Sung lines; the double sings with them where the section asks.
       const part = p.lines?.[i] ?? null;
       if (part) {
-        s.note(
-          "vox",
-          bar,
-          -LEAD,
-          slot(voxTrack, part),
-          partBeats(part) + LEAD,
-          0.82,
-        );
+        singPart(s, bar, book.melody[part], {
+          thirds: p.thirds ? plan.scale : undefined,
+        });
+        if (p.words)
+          s.note(
+            "vox",
+            bar,
+            -LEAD,
+            slot(voxTrack, part),
+            partBeats(part) + LEAD,
+            p.words,
+          );
         if (on("double"))
           s.note(
             "dbl",
@@ -1322,6 +1524,26 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       const syl = book.syllables[p.index % book.syllables.length]!;
       s.note("stut", p.start - 1, 2.7, stut(`r_${syl}`), 1.3, 0.62);
     }
+    // A verse turns into its chorus on a stutter of the chorus head over
+    // its last two beats.
+    if (p.kind !== "pre" && p.kind !== "build" && next?.kind === "chorus") {
+      const bar = p.start + p.bars - 1;
+      const head = stut(
+        next.lines?.[0]?.startsWith("ch") ? `h_${next.lines[0]}` : "h_ch1",
+      );
+      const hits = [2, 2.5, 3, 3.25, 3.5, 3.625, 3.75, 3.875];
+      hits.forEach((beat, k) =>
+        s.note(
+          "stut",
+          bar,
+          beat,
+          head,
+          (hits[k + 1] ?? 4) - beat - 0.02,
+          0.5 + k * 0.04,
+          k >= hits.length - 2 ? { cents: 1200 } : {},
+        ),
+      );
+    }
     if (p.kind === "pre" || p.kind === "build") {
       const bar = p.start + p.bars - 1;
       const head = stut(
@@ -1330,6 +1552,7 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       const hits = [
         0, 0.5, 1, 1.5, 2, 2.25, 2.5, 2.75, 3, 3.125, 3.25, 3.375, 3.5, 3.625,
       ];
+      // One pitch, the last hits an octave up: a stutter, never a slide.
       hits.forEach((beat, k) =>
         s.note(
           "stut",
@@ -1338,9 +1561,7 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
           head,
           (hits[k + 1] ?? 3.75) - beat - 0.02,
           0.5 + k * 0.025,
-          {
-            cents: Math.round((k / hits.length) * 500),
-          },
+          k >= hits.length - 3 ? { cents: 1200 } : {},
         ),
       );
       dropout(s, bar, 0, 4, ["snare"]);
@@ -1421,6 +1642,12 @@ export type KitOptions = Readonly<{
 export function kitTracks(s: Composer, book: Book, o: KitOptions): void {
   const lv = (id: string, fallback: number) => o.levels?.[id] ?? fallback;
   const ex = (id: string) => o.extra?.[id] ?? {};
+  // Played parts drift a few milliseconds and push their accents, so the
+  // grid breathes like hands on pads rather than a sequencer.
+  const loose = (id: string, timing: number, seed: number) => ({
+    humanize: { timing, velocity: 7, seed },
+    ...ex(id),
+  });
   // The voice is the lead instrument: the singer sits about 5 dB under the
   // drums and the chops and stutters about 8, over a darker bed pumped
   // harder than the kit's stand-alone defaults, the sub driven into
@@ -1443,16 +1670,18 @@ export function kitTracks(s: Composer, book: Book, o: KitOptions): void {
     sounds.snare(lv("snare", 0.3), o.snare, ex("snare")),
     sounds.hats(lv("hats", 0.3), o.hats, ex("hats")),
     sounds.sub(lv("sub", 0.42), { ...sub, ...ex("sub") }),
-    sounds.saw(lv("saw", 0.2), ex("saw")),
+    sounds.saw(lv("saw", 0.2), loose("saw", 4, 41)),
     sounds.pad(lv("pad", 0.24), { ...pad, ...ex("pad") }),
-    sounds.stabs(lv("stabs", 0.28), ex("stabs")),
+    sounds.stabs(lv("stabs", 0.28), loose("stabs", 5, 42)),
     sounds.arp(lv("arp", 0.2), ex("arp")),
     sounds.bells(lv("bells", 0.18), ex("bells")),
     sounds.lead(lv("lead", 0.24), ex("lead")),
     vocalTrack(book, lv("vox", 1), ex("vox")),
+    singerTrack(lv("sing", 0.72), ex("sing")),
+    harmonyTrack(lv("harm", 0.5), ex("harm")),
     doubleTrack(book, lv("dbl", 0.5), ex("dbl")),
-    chopTrack(book, lv("chops", 1), ex("chops")),
-    stutterTrack(book, lv("stut", 0.95), ex("stut")),
+    chopTrack(book, lv("chops", 1), loose("chops", 6, 43)),
+    stutterTrack(book, lv("stut", 0.95), loose("stut", 3, 44)),
     voiceLeadTrack(book, lv("vlead", 0.5), ex("vlead")),
     grainTrack(book, lv("vgrain", 0.35), ex("vgrain")),
     sounds.sweep(lv("sweep", 0.12), ex("sweep")),
@@ -1497,7 +1726,10 @@ export function glitch(
   });
 }
 
-/** `count` repeats of a voice on the stutter track, ramping up in pitch. */
+/**
+ * `count` repeats of a voice on the stutter track, cycling through `jumps`
+ * (semitones from the syllable's pitch): chord-tone leaps, never a slide.
+ */
 export function stutter(
   s: Composer,
   song: Song,
@@ -1506,11 +1738,12 @@ export function stutter(
   beat: number,
   count: number,
   step: number,
-  rise = 0,
+  jumps: readonly number[] = [0],
   from = 0.5,
   to = 0.8,
 ): void {
-  for (let i = 0; i < count; i++)
+  for (let i = 0; i < count; i++) {
+    const cents = jumps[i % jumps.length]! * 100;
     s.note(
       "stut",
       bar,
@@ -1518,8 +1751,7 @@ export function stutter(
       song.stut(name),
       step * 0.9,
       from + ((to - from) * i) / Math.max(1, count - 1),
-      {
-        cents: Math.round((rise * i) / Math.max(1, count - 1)),
-      },
+      cents ? { cents } : {},
     );
+  }
 }

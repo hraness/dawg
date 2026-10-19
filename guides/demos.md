@@ -5,19 +5,20 @@ parent: arrange
 order: 0
 ---
 
-Ten complete, editable songs with original patterns and sounds. Every
+Nine complete, editable songs with original patterns and sounds. Every
 part works offline. Open a song's notes to explore its production.
-Three are hyperpop songs with full original vocals:
+Three are hyperpop:
 
-- Soft Reboot · D major, stutter pickups, a glitch-vox breakdown
-- Low Battery · F# minor, half-time growl drops, a power-down
-- Glass Garden · A major, tresillo verses, syllable arps, grain bridge
+- Candy Fault · an abstract synth singer over glitch breaks
+- Low Battery · F# minor, half-time growl drops, a low-power break
+- Glass Garden · A major, tresillo blooms, syllable arps, grain voice
 
-Their vocals double as instruments: syllables played as riffs that
-answer each line, stutters pitched through the chords, reversed swells,
-a looped vowel doubling the lead and a grain cloud. `guide hyperpop`
-explains the techniques. The other seven span garage, jungle, acid
-techno, neo soul, synth pop, trip hop and an earlier hyperpop sketch.
+Low Battery and Glass Garden blend a synth singer with recorded words
+and play the vocal as an instrument: syllable riffs that answer each
+line, stutters on chord tones, reversed swells, a looped vowel doubling
+the lead and a grain cloud. `guide hyperpop` explains the techniques.
+The other six span garage, jungle, acid techno, neo soul, synth pop and
+trip hop.
 
 ## Ask
 
@@ -26,7 +27,7 @@ techno, neo soul, synth pop, trip hop and an earlier hyperpop sketch.
 ## Type it yourself
 
 - `demo` opens the song shelf · `demo search techno`
-- `demo info soft-reboot` explains its arrangement and mix
+- `demo info glass-garden` explains its arrangement and mix
 - `demo glass-garden` loads the song and opens TAPE, paused
 - `sample library` browses the bundled sounds
 - `sample chop soft-reboot-vox 8` slices a vocal book into a pattern

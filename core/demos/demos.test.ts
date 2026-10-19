@@ -21,14 +21,14 @@ const longestKickRest = (score: ReturnType<typeof createDemo>) => {
 };
 
 /** The three songs built on the shared hyperpop kit. */
-const HYPER = ["soft-reboot", "low-battery", "glass-garden"];
+const HYPER = ["low-battery", "glass-garden"];
 
 describe("complete demo songs", () => {
-  test("ten distinct entries expose truthful form and duration metadata", () => {
-    expect(DEMOS).toHaveLength(10);
-    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(10);
-    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(10);
-    expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(3);
+  test("nine distinct entries expose truthful form and duration metadata", () => {
+    expect(DEMOS).toHaveLength(9);
+    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(9);
+    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(9);
+    expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(2);
     for (const demo of DEMOS) {
       if (HYPER.includes(demo.id)) expect(demo.style).toBe("Hyperpop");
       expect(demo.title.length).toBeLessThanOrEqual(16);
@@ -150,7 +150,20 @@ describe("complete demo songs", () => {
       expect(
         new Set(notesOf("vox").map((note) => note.pitch)).size,
         demo.id,
-      ).toBeGreaterThanOrEqual(13);
+      ).toBeGreaterThanOrEqual(11);
+      // The synth singer sings every line with its words, the recorded
+      // book quieter under it; the backing singer takes thirds.
+      const sung = notesOf("sing");
+      expect(sung.length, demo.id).toBeGreaterThan(150);
+      expect(
+        sung.filter((note) => note.lyric !== undefined).length,
+        demo.id,
+      ).toBe(sung.length);
+      expect(notesOf("harm").length, demo.id).toBeGreaterThan(20);
+      expect(
+        Math.max(...notesOf("vox").map((note) => note.velocity)),
+        demo.id,
+      ).toBeLessThan(0.75);
       expect(
         vox?.delayMixAutomation?.some((point) => point.value >= 0.3),
         demo.id,
