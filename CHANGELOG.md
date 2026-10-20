@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.28.0
+
+### Fixed
+
+- **Long songs start quickly and stop cutting out.** Songs over 45 seconds stream through render windows, and each window used to render about nine seconds of extra pre-roll on one background thread. A window could take longer to render than the audio it held, so the playhead outran it: playback began late and dropped out. Now a pool of background workers fills the gaps ahead of the playhead, up to 48 seconds out. Each window is sized from the measured render speed so it lands before the playhead reaches it. Sound starts once a few seconds of audio are ready past the playhead. Edits keep the old version playing until the new one covers the playhead, and a failed window retries with backoff. Playback never depended on the network; the cutouts came from render speed.
+
 ## 0.27.0
 
 ### Changed

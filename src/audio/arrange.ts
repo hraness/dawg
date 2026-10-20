@@ -68,7 +68,20 @@ export type ArrangedRenderOptions = RenderOptions &
     monitorFrame?: number;
     /** Internal raw loop-tail request; never used by exact rendering. */
     monitorTailOnly?: boolean;
+    /** Seconds a monitor window keeps beyond its cursor (default 4). */
+    monitorSeconds?: number;
+    /**
+     * Start fast: a short pre-roll that restarts older held notes, and no
+     * loop-tail pass. Playback starts and recovers on these, then streams
+     * full-quality windows once it has runway.
+     */
+    monitorQuick?: boolean;
   }>;
+
+/** Monitor windows start and end on this grid. */
+const MONITOR_GRID_SECONDS = 1;
+/** Pre-roll a quick monitor window renders before its first kept frame. */
+export const QUICK_PREROLL_SECONDS = 1;
 
 /** What one default render pass holds before the renderer cuts it. */
 const DEFAULT_PASS_SECONDS = 30;
@@ -349,17 +362,24 @@ function renderMonitorWindow(
   const target =
     ((Math.floor(options.monitorFrame!) % loopFrames) + loopFrames) %
     loopFrames;
-  const span = Math.round(4 * sampleRate);
-  const start = Math.floor(target / span) * span;
-  // An arbitrary seek can land one frame before an aligned seam. Retain a
-  // full window beyond that cursor so the next job has time to finish.
-  const end = Math.min(loopFrames, Math.ceil((target + span) / span) * span);
+  const span = Math.max(
+    1,
+    Math.round(
+      Math.min(16, Math.max(1, options.monitorSeconds ?? 4)) * sampleRate,
+    ),
+  );
+  const grid = Math.max(1, Math.round(MONITOR_GRID_SECONDS * sampleRate));
+  const start = Math.floor(target / grid) * grid;
+  // An arbitrary seek can land one frame before a grid seam. Retain a full
+  // span beyond that cursor so the next job has time to finish.
+  const end = Math.min(loopFrames, Math.ceil((target + span) / grid) * grid);
+  const quick = options.monitorQuick === true;
   const frameAt = (tick: number) =>
     Math.round(secondsAtTick(timeline, tick) * sampleRate);
   const tickAt = (sample: number) =>
     tickAtSeconds(timeline, sample / sampleRate);
   const overhang = Math.max(
-    OVERHANG_SECONDS,
+    quick ? QUICK_PREROLL_SECONDS : OVERHANG_SECONDS,
     ...score.tracks.map((track) => vocoderPrerollSeconds(track.vocoder)),
   );
   // Keep a fermata with its whole felt beat: slicing into its stretched span
@@ -389,7 +409,13 @@ function renderMonitorWindow(
   );
   // Pull reachable held notes into the pre-roll; restart older drones inside
   // the same bounded budget, as the exact renderer does at long seams.
-  const earliest = Math.max(0, end - WINDOW_BUDGET_SECONDS * sampleRate);
+  // A quick window restarts anything older than its own short pre-roll.
+  const earliest = Math.max(
+    0,
+    quick
+      ? start - overhang * sampleRate
+      : end - WINDOW_BUDGET_SECONDS * sampleRate,
+  );
   for (const note of all) {
     const candidate = beforeHold(note.startTick);
     if (
@@ -448,7 +474,7 @@ function renderMonitorWindow(
     // The last window also supplies a bounded tail to the start of the loop.
     maxSeconds: Math.min(
       60,
-      (end - preFrame) / sampleRate + (last ? overhang : 1),
+      (end - preFrame) / sampleRate + (last ? overhang : quick ? 0.25 : 1),
     ),
   };
   const key = options.windowCache
@@ -469,7 +495,7 @@ function renderMonitorWindow(
     };
   }
   let input = audio.pcm;
-  if (options.loop && preFrame < overhang * sampleRate) {
+  if (options.loop && !quick && preFrame < overhang * sampleRate) {
     const tail = renderMonitorWindow(
       renderer,
       score,
@@ -520,7 +546,7 @@ function renderMonitorWindow(
       timeline,
       notesIn,
       frame,
-      { ...options, monitorFrame: 0 },
+      { ...options, monitorFrame: 0, monitorSeconds: undefined },
     );
     const headFrames = Math.min(head.frames, start + 2 * span - loopFrames);
     const joined = new Int16Array(pcm.length + headFrames * RENDER_CHANNELS);

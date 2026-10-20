@@ -13,6 +13,9 @@ import { WindowCache } from "./window-cache.ts";
 
 export type RenderRequest = Readonly<{
   monitorFrame?: number;
+  /** Monitor window shape (see `MonitorJob`). */
+  monitorSeconds?: number;
+  monitorQuick?: boolean;
   id: number;
   score: unknown;
   sampleRate: number;
@@ -53,6 +56,8 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
     maxLoopCacheBytes,
     maxWindowCacheBytes,
     monitorFrame,
+    monitorSeconds,
+    monitorQuick,
   } = event.data;
   try {
     const started = performance.now();
@@ -80,6 +85,8 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
         samples,
         windowCache,
         monitorFrame,
+        ...(monitorSeconds === undefined ? {} : { monitorSeconds }),
+        ...(monitorQuick ? { monitorQuick } : {}),
       });
     if (!cached && key !== undefined) loopCache.set(key, audio);
     const reply: RenderReply = {

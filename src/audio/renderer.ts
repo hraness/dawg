@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import type { TrackScore } from "../../core/score.ts";
 import type { MasterReport } from "./master.ts";
 import type { RenderReply, RenderRequest } from "./render-worker.ts";
@@ -30,19 +31,54 @@ export type LoopRendererOptions = Readonly<{
   /** Retained finished PCM budget; zero disables it (diagnostics). */
   maxLoopCacheBytes?: number;
   maxWindowCacheBytes?: number;
+  /** Background monitor workers (default: by core count). */
+  backgroundWorkers?: number;
 }>;
 
 /**
- * Renders loops for the engine off the main thread. A single long-lived
- * worker owns a stem cache; the PCM buffer comes back transferred, not
- * copied. If the worker cannot start or crashes, rendering falls back to the
- * calling thread with its own cache, so sound never depends on the worker.
+ * The shape of one monitor window: how many seconds it keeps beyond its
+ * cursor, whether it trades pre-roll for speed, and whether it may run on a
+ * background worker beside the foreground render.
+ */
+export type MonitorJob = Readonly<{
+  seconds?: number;
+  quick?: boolean;
+  background?: boolean;
+}>;
+
+type Waiter = {
+  resolve: (render: LoopRender) => void;
+  reject: (error: Error) => void;
+};
+
+type Slot = {
+  worker: Bun.Worker | undefined;
+  broken: boolean;
+  readonly pending: Map<number, Waiter>;
+};
+
+/**
+ * Background monitor workers for this machine: up to three, leaving a core
+ * for the main thread and one for the foreground render.
+ */
+export function defaultBackgroundWorkers(): number {
+  return Math.max(1, Math.min(3, availableParallelism() - 2));
+}
+
+/**
+ * Renders loops for the engine off the main thread. A long-lived foreground
+ * worker owns a stem cache; background workers render monitor windows ahead
+ * of the playhead in parallel, so a song that synthesizes slower than real
+ * time on one core still streams without gaps. PCM comes back transferred,
+ * not copied. If a worker cannot start or crashes, its work moves to the
+ * foreground worker, then to the calling thread, so sound never depends on
+ * a worker.
  */
 export class LoopRenderer {
   private readonly sampleRate: number;
   private readonly useWorker: boolean;
-  private worker: Bun.Worker | undefined;
-  private workerBroken = false;
+  private readonly slots: Slot[];
+  private readonly backgroundCount: number;
   private inline: StemRenderer | undefined;
   private library: SampleLibrary | undefined;
   private readonly projectRoot: string | undefined;
@@ -52,10 +88,6 @@ export class LoopRenderer {
   private readonly maxWindowCacheBytes: number | undefined;
   private nextId = 1;
   private epoch = 0;
-  private readonly pending = new Map<
-    number,
-    { resolve: (render: LoopRender) => void; reject: (error: Error) => void }
-  >();
   private disposed = false;
 
   public constructor(options: LoopRendererOptions) {
@@ -66,51 +98,102 @@ export class LoopRenderer {
     this.loopCache = new LoopCache(options.maxLoopCacheBytes);
     this.maxWindowCacheBytes = options.maxWindowCacheBytes;
     this.windowCache = new WindowCache(options.maxWindowCacheBytes);
+    this.backgroundCount = Math.max(
+      0,
+      Math.floor(
+        options.backgroundWorkers ??
+          (this.useWorker ? defaultBackgroundWorkers() : 1),
+      ),
+    );
+    const count = this.useWorker ? 1 + this.backgroundCount : 0;
+    this.slots = Array.from({ length: count }, () => ({
+      worker: undefined,
+      broken: false,
+      pending: new Map<number, Waiter>(),
+    }));
   }
 
   /** True while renders run in the worker. */
   public get offThread(): boolean {
-    return this.useWorker && !this.workerBroken;
+    return this.useWorker && !this.slots[0]!.broken;
+  }
+
+  /**
+   * Monitor windows that can render at once in the background. Inline
+   * rendering is serial, but honors a configured count so tests can model a
+   * pool behind a mocked `render`.
+   */
+  public get backgroundSlots(): number {
+    if (!this.useWorker) return Math.max(1, this.backgroundCount);
+    const live = this.slots.slice(1).filter((slot) => !slot.broken).length;
+    return Math.max(1, live);
   }
 
   public async render(
     score: TrackScore,
     monitorFrame?: number,
+    job?: MonitorJob,
   ): Promise<LoopRender> {
     if (this.disposed) throw new Error("renderer disposed");
     const epoch = this.epoch;
-    if (this.offThread) {
+    for (const slot of this.candidates(job)) {
       try {
-        return await this.renderInWorker(score, monitorFrame);
+        return await this.renderInWorker(slot, score, monitorFrame, job);
       } catch (error) {
         if (this.disposed) throw error;
         if (!(error instanceof WorkerLostError)) throw error;
       }
     }
-    return this.renderInline(score, epoch, monitorFrame);
+    return this.renderInline(score, epoch, monitorFrame, job);
   }
 
-  /** Cancel pending work without discarding an idle worker's finished cache. */
+  /** Cancel pending foreground work without discarding an idle cache. */
   public cancelPending(): void {
     this.epoch += 1;
-    if (this.pending.size > 0)
-      this.failWorker(new RenderCancelledError("render cancelled"), false);
+    const foreground = this.slots[0];
+    if (foreground && foreground.pending.size > 0)
+      this.failSlot(
+        foreground,
+        new RenderCancelledError("render cancelled"),
+        false,
+      );
   }
 
-  /** Stops the worker and rejects in-flight renders without starting new work. */
+  /** Drop background windows nobody will hear (a stop, seek or new song). */
+  public cancelBackground(): void {
+    for (const slot of this.slots.slice(1))
+      if (slot.pending.size > 0)
+        this.failSlot(
+          slot,
+          new RenderCancelledError("render cancelled"),
+          false,
+        );
+  }
+
+  /** Stops the workers and rejects in-flight renders without starting new work. */
   public dispose(): void {
     this.disposed = true;
-    this.failWorker(new WorkerLostError("renderer disposed"));
+    for (const slot of this.slots)
+      this.failSlot(slot, new WorkerLostError("renderer disposed"));
     this.loopCache.clear();
-    this.windowCache.clear();
-    this.inline = undefined;
-    this.library = undefined;
+  }
+
+  private candidates(job: MonitorJob | undefined): Slot[] {
+    const [foreground, ...background] = this.slots;
+    if (!foreground) return [];
+    const usable = [foreground].filter((slot) => !slot.broken);
+    if (!job?.background) return usable;
+    const idle = background
+      .filter((slot) => !slot.broken)
+      .sort((a, b) => a.pending.size - b.pending.size)[0];
+    return idle ? [idle, ...usable] : usable;
   }
 
   private async renderInline(
     score: TrackScore,
     epoch: number,
     monitorFrame?: number,
+    job?: MonitorJob,
   ): Promise<LoopRender> {
     this.inline ??= new StemRenderer();
     const started = performance.now();
@@ -120,7 +203,7 @@ export class LoopRenderer {
       samples = await this.library.load(score);
     }
     if (this.disposed) throw new Error("renderer disposed");
-    if (epoch !== this.epoch)
+    if (epoch !== this.epoch && !job?.background)
       throw new RenderCancelledError("render cancelled");
     const key =
       monitorFrame === undefined
@@ -137,6 +220,8 @@ export class LoopRenderer {
         samples,
         windowCache: this.windowCache,
         monitorFrame,
+        ...(job?.seconds === undefined ? {} : { monitorSeconds: job.seconds }),
+        ...(job?.quick ? { monitorQuick: true } : {}),
       });
     if (!cached && key !== undefined) this.loopCache.set(key, audio);
     return {
@@ -150,17 +235,21 @@ export class LoopRenderer {
   }
 
   private renderInWorker(
+    slot: Slot,
     score: TrackScore,
     monitorFrame?: number,
+    job?: MonitorJob,
   ): Promise<LoopRender> {
-    const worker = this.ensureWorker();
+    const worker = this.ensureWorker(slot);
     const id = this.nextId;
     this.nextId += 1;
     return new Promise<LoopRender>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      slot.pending.set(id, { resolve, reject });
       const request: RenderRequest = {
         id,
         monitorFrame,
+        ...(job?.seconds === undefined ? {} : { monitorSeconds: job.seconds }),
+        ...(job?.quick ? { monitorQuick: true } : {}),
         score: score.toJSON(),
         sampleRate: this.sampleRate,
         maxLoopCacheBytes: this.maxLoopCacheBytes,
@@ -172,7 +261,8 @@ export class LoopRenderer {
       try {
         worker.postMessage(request);
       } catch (error) {
-        this.failWorker(
+        this.failSlot(
+          slot,
           new WorkerLostError(
             error instanceof Error ? error.message : String(error),
           ),
@@ -181,8 +271,8 @@ export class LoopRenderer {
     });
   }
 
-  private ensureWorker(): Bun.Worker {
-    if (this.worker) return this.worker;
+  private ensureWorker(slot: Slot): Bun.Worker {
+    if (slot.worker) return slot.worker;
     let worker: Bun.Worker;
     try {
       // The DOM lib's Worker type lacks Bun's `unref`; the runtime object is Bun's.
@@ -190,15 +280,16 @@ export class LoopRenderer {
         new URL("./render-worker.ts", import.meta.url).href,
       ) as unknown as Bun.Worker;
     } catch (error) {
+      slot.broken = true;
       throw new WorkerLostError(
         error instanceof Error ? error.message : String(error),
       );
     }
     worker.addEventListener("message", (event: Event) => {
       const reply = (event as MessageEvent<RenderReply>).data;
-      const waiter = this.pending.get(reply.id);
+      const waiter = slot.pending.get(reply.id);
       if (!waiter) return;
-      this.pending.delete(reply.id);
+      slot.pending.delete(reply.id);
       if (reply.ok)
         waiter.resolve({
           ...(reply.monitor ? { monitor: reply.monitor } : {}),
@@ -211,9 +302,10 @@ export class LoopRenderer {
       else waiter.reject(new Error(reply.error));
     });
     worker.addEventListener("error", (event: Event) => {
-      if (this.worker !== worker) return;
+      if (slot.worker !== worker) return;
       const message = (event as Partial<ErrorEvent>).message;
-      this.failWorker(
+      this.failSlot(
+        slot,
         new WorkerLostError(
           typeof message === "string" ? message : "worker error",
         ),
@@ -221,17 +313,17 @@ export class LoopRenderer {
     });
     // A render worker never keeps the process alive on its own.
     worker.unref();
-    this.worker = worker;
+    slot.worker = worker;
     return worker;
   }
 
-  private failWorker(error: Error, broken = true): void {
-    this.workerBroken = broken;
-    const worker = this.worker;
-    this.worker = undefined;
+  private failSlot(slot: Slot, error: Error, broken = true): void {
+    if (broken) slot.broken = true;
+    const worker = slot.worker;
+    slot.worker = undefined;
     worker?.terminate();
-    const waiters = [...this.pending.values()];
-    this.pending.clear();
+    const waiters = [...slot.pending.values()];
+    slot.pending.clear();
     for (const waiter of waiters) waiter.reject(error);
   }
 }
