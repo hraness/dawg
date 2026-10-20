@@ -7,6 +7,7 @@ import {
   LoopRenderer,
   RenderCancelledError,
   type LoopRender,
+  type MonitorJob,
 } from "./renderer.ts";
 import {
   clickSounds,
@@ -26,7 +27,7 @@ import {
   readAudioChoice,
   resolveOutputDevice,
 } from "./devices.ts";
-import { playbackTime } from "./arrange.ts";
+import { playbackTime, QUICK_PREROLL_SECONDS } from "./arrange.ts";
 import { transportMapFor, type TransportMap } from "./clock.ts";
 import {
   openNativePlayer,
@@ -308,6 +309,8 @@ export type AudioEngineOptions = Readonly<{
   worker?: boolean;
   /** Cursor-first fixed-gain windows for arrangements over 45 seconds. */
   progressive?: boolean;
+  /** Background workers rendering those windows ahead (default by cores). */
+  renderWorkers?: number;
   /** Project root for sampler voices; without it samplers render silent. */
   projectRoot?: string;
   /** Base delay before a dead player is respawned; doubles per attempt. */
@@ -369,9 +372,47 @@ const RESPAWN_RESET_MS = 10_000;
 const DEFAULT_LEAD_MS = 100;
 /** Inline renders grow the lead to this multiple of the last render time. */
 const LEAD_RENDER_FACTOR = 1.5;
+/** Seconds of monitor audio kept rendered ahead of the playhead. */
+const MONITOR_AHEAD_SECONDS = 48;
+/** While a new song version renders, the old one keeps only this runway. */
+const MONITOR_HANDOFF_SECONDS = 6;
+/** The first window a start renders: short, so sound comes in quickly. */
+const MONITOR_START_SECONDS = 2;
+const MONITOR_CATCH_UP_SECONDS = 3;
+// Runway a start waits for past the playhead: about four seconds per unit of
+// render cost, so slow machines buffer a little longer instead of cutting out.
+const MONITOR_RUNWAY_PER_COST = 4;
+const MONITOR_RUNWAY_MAX_SECONDS = 6;
+const MONITOR_START_WAIT_MS = 6000;
+/** Longest window; long windows spread the pre-roll over more output. */
+const MONITOR_FULL_SECONDS = 16;
+/** Shortest full-quality window worth its pre-roll. */
+const MONITOR_MIN_FULL_SECONDS = 6;
+/** Pre-roll a full-quality window renders (the arranger's overhang). */
+const MONITOR_FULL_PREROLL_SECONDS = 8;
+/** Retained monitor PCM: about 170 s of stereo at 48 kHz. */
+const MONITOR_BYTES = 32 * 1024 * 1024;
+/** Longest wait before retrying a window that failed. */
+const MONITOR_RETRY_MAX_MS = 4000;
+
+type MonitorStream = { score: TrackScore; buffer: MonitorBuffer };
+
+/** A monitor window being rendered, and the frames it is expected to cover. */
+type MonitorFill = {
+  stream: MonitorStream;
+  start: number;
+  end: number;
+  /** The foreground render a play or edit waits on (not a pool slot). */
+  foreground?: boolean;
+  /** Cancelled with the pool; settling, and no longer holding a slot. */
+  cancelled?: boolean;
+};
+
+const wrapFrame = (frame: number, frames: number) =>
+  ((frame % frames) + frames) % frames;
 
 type Loop = Readonly<{
-  monitor?: { score: TrackScore; buffer: MonitorBuffer };
+  monitor?: MonitorStream;
   pcm: Int16Array;
   frames: number;
   framesPerBeat: number;
@@ -499,9 +540,25 @@ export class AudioEngine {
   private renderRevision = 0;
   private seekRevision = 0;
   private seekAnchor: { beat: number; atMs: number } | undefined;
-  private monitorRevision = 0;
-  private filling: Loop | undefined;
-  private monitorFailed: Loop | undefined;
+  /** Monitor windows in flight, foreground and background. */
+  private fills: MonitorFill[] = [];
+  /** A play or edit whose first window is still rendering. */
+  private pendingLoop: { loop: Loop; request: PlayRequest } | undefined;
+  /** A rendered edit waiting until its windows cover the playhead. */
+  private incoming: { loop: Loop; request: PlayRequest } | undefined;
+  /** Wall seconds per rendered second, learned from finished windows. */
+  private renderCost = 0.75;
+  /** Seconds from a play request until its first window lands. */
+  private startLatency = 0;
+  /** A starting stream waiting for any window to cover its playhead. */
+  private startWaiter?: {
+    stream: MonitorStream;
+    resolve: (render: LoopRender) => void;
+    reject: (error: Error) => void;
+    render?: LoopRender;
+  };
+  private monitorFailed:
+    { stream: MonitorStream; atMs: number; count: number } | undefined;
   private monitorBuffering = false;
   private monitorWanted = false;
   private readonly respawnMs: number;
@@ -590,6 +647,9 @@ export class AudioEngine {
     this.renderer = new LoopRenderer({
       sampleRate: this.sampleRate,
       ...(options.worker === undefined ? {} : { worker: options.worker }),
+      ...(options.renderWorkers === undefined
+        ? {}
+        : { backgroundWorkers: options.renderWorkers }),
       ...(options.projectRoot === undefined
         ? {}
         : { projectRoot: options.projectRoot }),
@@ -615,9 +675,7 @@ export class AudioEngine {
 
   /** Foreground synthesis takes priority over optional full-song analysis. */
   public get preparing(): boolean {
-    return (
-      this.draining || this.queued !== undefined || this.filling !== undefined
-    );
+    return this.draining || this.queued !== undefined || this.fills.length > 0;
   }
 
   /**
@@ -638,7 +696,7 @@ export class AudioEngine {
    */
   public get audioNote(): string {
     const monitor = this.loop?.monitor
-      ? ` · causal monitor${this.loop.monitor.score.master?.target !== undefined ? " · target on export" : ""}${this.monitorBuffering ? " · buffering" : ""}${this.monitorFailed === this.loop ? " · unavailable" : ""}`
+      ? ` · causal monitor${this.loop.monitor.score.master?.target !== undefined ? " · target on export" : ""}${this.monitorBuffering ? " · buffering" : ""}${this.monitorFailed?.stream === this.loop.monitor ? " · unavailable" : ""}`
       : "";
     if (this.info.backend === "native") return "native sink" + monitor;
     return this.info.nativeUnavailable
@@ -839,8 +897,8 @@ export class AudioEngine {
     if (this.fallback) return this.fallback.play(score, beat);
     this.monitorWanted = true;
     const revision = ++this.renderRevision;
-    this.monitorRevision += 1;
     this.renderer.cancelPending();
+    this.cancelStart();
     return new Promise<void>((resolve, reject) => {
       const waiters = this.queued?.waiters ?? [];
       waiters.push({ resolve, reject });
@@ -879,35 +937,28 @@ export class AudioEngine {
                 ((beat % map.loopBeats) + map.loopBeats) % map.loopBeats,
               )
             : (beat * 60) / timeline.tempoBpm;
-          const monitorFrame =
+          const streamed =
             this.progressive &&
             this.info.streaming &&
-            loopSecondsOf(timeline) > 45
-              ? Math.max(0, Math.round(seconds * this.sampleRate))
-              : undefined;
-          const render = await this.renderer.render(
-            request.score,
-            monitorFrame,
-          );
-          if (render.monitor && monitorFrame !== undefined) {
-            const target = monitorFrame % render.monitor.loopFrames;
-            if (
-              !(render.monitor.loopFrames > 0) ||
-              render.monitor.startFrame > target ||
-              render.monitor.startFrame + render.frames <= target
-            )
-              throw new Error(
-                "monitor render did not cover the requested frame",
-              );
+            loopSecondsOf(timeline) > 45;
+          let render: LoopRender;
+          let next: Loop;
+          if (streamed) {
+            ({ render, next } = await this.renderStart(
+              request,
+              Math.max(0, Math.round(seconds * this.sampleRate)),
+            ));
+          } else {
+            render = await this.renderer.render(request.score);
+            next = this.toLoop(render, request.score);
           }
-
           this.lastRenderMs = render.renderMs;
           // Stopped while rendering: the result is stale, not an error.
           if (
             request.generation === this.generation &&
             request.revision === this.renderRevision
           ) {
-            await this.apply(this.toLoop(render, request.score), request);
+            await this.apply(next, request);
             if (request.revision === this.renderRevision) {
               this.lastLoopPcm = render.pcm;
               this.lastMaster = render.master;
@@ -931,6 +982,7 @@ export class AudioEngine {
       }
     } finally {
       this.draining = false;
+      this.pendingLoop = undefined;
       this.prefetchMonitor();
     }
   }
@@ -953,13 +1005,13 @@ export class AudioEngine {
 
   private async apply(loop: Loop, request: PlayRequest): Promise<void> {
     if (this.child) {
-      this.swap(loop, this.beatForRequest(loop, request));
+      this.handOff(loop, request);
       return;
     }
     if (this.starting) {
       await this.starting;
       if (this.child && request.revision === this.renderRevision)
-        this.swap(loop, this.beatForRequest(loop, request));
+        this.handOff(loop, request);
       return;
     }
     this.starting = this.start(loop, 0, request.revision, request).finally(
@@ -975,7 +1027,6 @@ export class AudioEngine {
     this.seekRevision += 1;
     this.seekAnchor = { beat, atMs: this.now() };
     if (!this.loop || !this.child) return;
-    this.monitorRevision += 1;
     this.monitorFailed = undefined;
     if (!this.draining) this.renderer.cancelPending();
     this.cursor = this.frameForBeat(
@@ -1010,10 +1061,13 @@ export class AudioEngine {
   public async stopAsync(): Promise<void> {
     this.generation += 1;
     this.renderRevision += 1;
-    this.monitorRevision += 1;
     this.monitorBuffering = false;
     this.monitorWanted = false;
+    this.pendingLoop = undefined;
+    this.incoming = undefined;
     this.renderer.cancelPending();
+    this.renderer.cancelBackground();
+    this.cancelStart();
     this.lastLoopPcm = undefined;
     this.lastMaster = undefined;
     this.respawns = 0;
@@ -1064,6 +1118,10 @@ export class AudioEngine {
     const loop = this.loop;
     if (!child || (!loop && !this.monitoring)) return;
     if (this.followChoice()) return;
+    if (this.incoming && this.trySwapIncoming()) {
+      this.pump();
+      return;
+    }
     let remaining: number;
     if (child.clock) {
       // Device-clocked: top the ring up to the lead. Frames the device
@@ -1254,48 +1312,414 @@ export class AudioEngine {
     };
   }
 
-  /** One bounded job at a time, with current cursor before two-window read-ahead. */
-  private prefetchMonitor(): void {
-    const loop = this.loop;
-    if (
-      !this.monitorWanted ||
-      !loop?.monitor ||
-      this.filling ||
-      this.draining ||
-      this.queued ||
-      this.monitorFailed === loop
-    )
-      return;
-    const current = loop.monitor.buffer.at(this.cursor);
-    let target = this.cursor;
-    if (current) {
-      target = current.end % loop.frames;
-      const next = loop.monitor.buffer.at(target);
-      if (next) return;
-    }
-    const revision = this.monitorRevision;
-    this.filling = loop;
-    void this.renderer
-      .render(loop.monitor.score, target)
+  /** An empty streamed loop whose windows arrive as they render. */
+  private monitorLoop(score: TrackScore, frames: number): Loop {
+    const timeline = playbackTime(score);
+    const map = transportMapFor(timeline);
+    return {
+      monitor: { score, buffer: new MonitorBuffer(frames, MONITOR_BYTES) },
+      pcm: new Int16Array(0),
+      frames,
+      framesPerBeat: (60 * this.sampleRate) / timeline.tempoBpm,
+      sampleRate: this.sampleRate,
+      ...(map ? { map } : {}),
+    };
+  }
+
+  /**
+   * Render a streamed song's first window where the playhead will be when
+   * it lands, while the background pool renders the windows after it, so
+   * sound starts quickly and has runway once it does.
+   */
+  private async renderStart(
+    request: PlayRequest,
+    frame: number,
+  ): Promise<{ render: LoopRender; next: Loop }> {
+    const timeline = playbackTime(request.score);
+    const frames = Math.max(
+      1,
+      Math.round(loopSecondsOf(timeline) * this.sampleRate),
+    );
+    let next = this.monitorLoop(request.score, frames);
+    const stream = next.monitor!;
+    const landing = this.child
+      ? this.projectedCursor(next, request)
+      : wrapFrame(frame, frames);
+    const lead = Math.max(
+      this.startLatency * 0.8,
+      this.renderCost * (MONITOR_START_SECONDS + QUICK_PREROLL_SECONDS + 0.25),
+    );
+    const head = wrapFrame(
+      landing + Math.round(lead * this.sampleRate),
+      frames,
+    );
+    const job = { quick: true, seconds: MONITOR_START_SECONDS };
+    const fill: MonitorFill = {
+      stream,
+      start: head,
+      end: head + MONITOR_START_SECONDS * this.sampleRate,
+      foreground: true,
+    };
+    this.fills.push(fill);
+    this.pendingLoop = { loop: next, request };
+    // The first window goes out first; the pool then reads ahead beside it.
+    // Sound starts once the windows cover enough runway past the playhead
+    // that the pool stays ahead of it, whichever windows those are.
+    const ready = new Promise<LoopRender>((resolve, reject) => {
+      this.startWaiter = { stream, resolve, reject };
+    });
+    let adopted: Loop | undefined;
+    const first = this.renderer
+      .render(request.score, head, job)
       .then((render) => {
-        if (this.loop !== loop || revision !== this.monitorRevision) return;
-        loop.monitor!.buffer.add(render);
-        // An invalid or truncated window must not recursively re-request the
-        // same missing frame, especially when a cache answers synchronously.
-        if (!loop.monitor!.buffer.at(target))
+        this.noteCost(render, job);
+        const range = render.monitor;
+        if (
+          !range ||
+          !(range.loopFrames > 0) ||
+          range.startFrame > head % range.loopFrames ||
+          range.startFrame + render.frames <= head % range.loopFrames
+        )
           throw new Error("monitor render did not cover the requested frame");
-        this.lastLoopPcm = render.pcm;
+        // The arranger owns the loop length; follow it if rounding
+        // disagrees, starting from this window alone.
+        if (range.loopFrames !== frames) {
+          adopted = this.monitorLoop(request.score, range.loopFrames);
+          adopted.monitor!.buffer.add(render);
+          this.startWaiter?.resolve(render);
+          return;
+        }
+        if (this.streamLive(stream)) stream.buffer.add(render);
+        this.checkStart(stream, render);
       })
       .catch((error: unknown) => {
-        if (
-          !(error instanceof RenderCancelledError) &&
-          this.loop === loop &&
-          revision === this.monitorRevision
-        )
-          this.monitorFailed = loop;
+        if (this.startWaiter?.stream === stream)
+          this.startWaiter.reject(
+            error instanceof Error ? error : new Error(String(error)),
+          );
       })
       .finally(() => {
-        if (this.filling === loop) this.filling = undefined;
+        this.fills = this.fills.filter((other) => other !== fill);
+        this.prefetchMonitor();
+      });
+    this.prefetchMonitor();
+    let render: LoopRender;
+    try {
+      render = await ready;
+    } finally {
+      if (this.startWaiter?.stream === stream) this.startWaiter = undefined;
+    }
+    void first;
+    this.startLatency =
+      0.5 * this.startLatency + 0.5 * ((this.now() - request.atMs) / 1000);
+    if (adopted) {
+      next = adopted;
+      if (this.pendingLoop?.request === request)
+        this.pendingLoop = { loop: next, request };
+    }
+    return { render, next };
+  }
+
+  /** Contiguous frames `stream` holds from `from` on, up to `cap`. */
+  private covered(stream: MonitorStream, from: number, cap: number): number {
+    const frames = stream.buffer.loopFrames;
+    let position = from;
+    let total = 0;
+    while (total < cap) {
+      const end = stream.buffer.at(position)?.end;
+      if (end === undefined) break;
+      total += wrapFrame(end - position, frames) || frames;
+      position = wrapFrame(end, frames);
+    }
+    return Math.min(total, cap);
+  }
+
+  /** A newer play or a stop supersedes a start still gathering runway. */
+  private cancelStart(): void {
+    const waiter = this.startWaiter;
+    this.startWaiter = undefined;
+    waiter?.reject(new RenderCancelledError("render cancelled"));
+  }
+
+  /** Start a waiting stream once its windows give the playhead runway. */
+  private checkStart(
+    stream: MonitorStream,
+    render?: LoopRender,
+    anyway = false,
+  ): void {
+    const waiter = this.startWaiter;
+    const pending = this.pendingLoop;
+    if (waiter?.stream !== stream || pending?.loop.monitor !== stream) return;
+    if (render) waiter.render = render;
+    const latest = waiter.render;
+    if (!latest) return;
+    const loop = pending.loop;
+    const runway = Math.min(
+      loop.frames,
+      Math.round(
+        Math.min(
+          MONITOR_RUNWAY_MAX_SECONDS,
+          this.renderCost * MONITOR_RUNWAY_PER_COST,
+        ) * this.sampleRate,
+      ),
+    );
+    const from = this.projectedCursor(loop, pending.request);
+    const have = this.covered(stream, from, runway);
+    // A failing pool, or one too slow to ever build the runway, starts with
+    // whatever covers the playhead rather than holding the song silent.
+    const waited = this.now() - pending.request.atMs > MONITOR_START_WAIT_MS;
+    if (have < Math.max(1, runway) && !((anyway || waited) && have > 0)) return;
+    this.startWaiter = undefined;
+    waiter.resolve(latest);
+  }
+
+  /** Where `next` would play now if it replaced (or started) the loop. */
+  private projectedCursor(next: Loop, request: PlayRequest): number {
+    const beat = this.beatForRequest(next, request);
+    if (this.child && this.loop) return this.swapCursor(next, beat);
+    return this.frameForBeat(next, beat ?? 0);
+  }
+
+  /**
+   * Swap in a rendered edit, or, for a streamed song whose windows do not
+   * cover the playhead yet, keep the old version playing until they do.
+   */
+  private handOff(loop: Loop, request: PlayRequest): void {
+    this.incoming = undefined;
+    if (loop.monitor && this.loop) {
+      this.incoming = { loop, request };
+      if (!this.trySwapIncoming()) this.prefetchMonitor();
+      return;
+    }
+    this.swap(loop, this.beatForRequest(loop, request));
+  }
+
+  private trySwapIncoming(): boolean {
+    const next = this.incoming;
+    if (!next || !this.child) return false;
+    if (next.request.revision !== this.renderRevision) {
+      this.incoming = undefined;
+      return false;
+    }
+    const beat = this.beatForRequest(next.loop, next.request);
+    if (!next.loop.monitor!.buffer.at(this.swapCursor(next.loop, beat)))
+      return false;
+    this.incoming = undefined;
+    this.swap(next.loop, beat);
+    return true;
+  }
+
+  /** Learn how fast windows render, for sizing the next ones. */
+  private noteCost(render: LoopRender, job: MonitorJob): void {
+    if (!(render.renderMs > 0) || !(render.frames > 0)) return;
+    const rendered =
+      render.frames / this.sampleRate +
+      (job.quick
+        ? QUICK_PREROLL_SECONDS + 0.25
+        : MONITOR_FULL_PREROLL_SECONDS + 1);
+    const cost = render.renderMs / 1000 / rendered;
+    this.renderCost = 0.6 * this.renderCost + 0.4 * cost;
+  }
+
+  /** Seconds a quick window of `seconds` takes to land at the learned cost. */
+  private landSeconds(seconds: number): number {
+    return (
+      Math.max(0.05, this.renderCost) * (seconds + QUICK_PREROLL_SECONDS + 0.25)
+    );
+  }
+
+  /**
+   * The largest window that should land before the playhead reaches it:
+   * full quality when there is time for its pre-roll, otherwise a quick one.
+   */
+  private monitorJob(secondsAhead: number): MonitorJob {
+    const budget = secondsAhead * 0.75 - 0.25;
+    const cost = Math.max(0.05, this.renderCost);
+    const full = Math.min(
+      MONITOR_FULL_SECONDS,
+      Math.floor(budget / cost - MONITOR_FULL_PREROLL_SECONDS - 1),
+    );
+    if (full >= MONITOR_MIN_FULL_SECONDS)
+      return { seconds: full, background: true };
+    const quick = Math.floor(budget / cost - QUICK_PREROLL_SECONDS - 0.25);
+    return {
+      seconds: Math.min(
+        MONITOR_FULL_SECONDS,
+        Math.max(MONITOR_START_SECONDS, quick),
+      ),
+      quick: true,
+      background: true,
+    };
+  }
+
+  private streamLive(stream: MonitorStream): boolean {
+    return (
+      stream === this.loop?.monitor ||
+      stream === this.incoming?.loop.monitor ||
+      stream === this.pendingLoop?.loop.monitor
+    );
+  }
+
+  private failedRecently(stream: MonitorStream): boolean {
+    const failed = this.monitorFailed;
+    if (failed?.stream !== stream) return false;
+    const wait = Math.min(
+      MONITOR_RETRY_MAX_MS,
+      250 * 2 ** Math.max(0, failed.count - 1),
+    );
+    return this.now() - failed.atMs < wait;
+  }
+
+  /**
+   * Keep the pool busy rendering the first missing windows ahead of each
+   * playhead that will be heard: the playing loop, then an edit waiting to
+   * swap in or a start still rendering its first window.
+   */
+  private prefetchMonitor(): void {
+    if (!this.monitorWanted) return;
+    const handing = [this.incoming, this.pendingLoop].some(
+      (next) => next !== undefined && next.loop !== this.loop,
+    );
+    const plans: {
+      loop: Loop;
+      cursor: number;
+      horizon: number;
+      catchUp?: boolean;
+    }[] = [];
+    if (this.loop?.monitor && this.child)
+      plans.push({
+        loop: this.loop,
+        cursor: this.cursor,
+        horizon: handing ? MONITOR_HANDOFF_SECONDS : MONITOR_AHEAD_SECONDS,
+        catchUp: true,
+      });
+    for (const next of [this.incoming, this.pendingLoop])
+      if (next && next.loop !== this.loop)
+        plans.push({
+          loop: next.loop,
+          cursor: this.projectedCursor(next.loop, next.request),
+          horizon: MONITOR_AHEAD_SECONDS,
+          catchUp: true,
+        });
+    // A window nobody will hear soon (an old version, a stopped song, a
+    // spot the playhead jumped away from) would hold a worker for seconds.
+    // Windows the playhead already passed finish on their own; only far
+    // ahead or stale ones are worth restarting the pool for.
+    const wanted = (fill: MonitorFill) =>
+      plans.some(({ loop, cursor, horizon }) => {
+        if (loop.monitor !== fill.stream) return false;
+        const offset = wrapFrame(fill.start - cursor, loop.frames);
+        return (
+          offset < horizon * this.sampleRate ||
+          offset > loop.frames - MONITOR_FULL_SECONDS * this.sampleRate
+        );
+      });
+    const pool = () =>
+      this.fills.filter((fill) => !fill.foreground && !fill.cancelled);
+    if (pool().some((fill) => !wanted(fill))) {
+      for (const fill of pool()) fill.cancelled = true;
+      this.renderer.cancelBackground();
+    }
+    let free = this.renderer.backgroundSlots - pool().length;
+    for (const plan of plans) {
+      const { loop, cursor, horizon } = plan;
+      const stream = loop.monitor!;
+      if (this.failedRecently(stream)) continue;
+      const frames = loop.frames;
+      const limit = Math.min(frames, Math.round(horizon * this.sampleRate));
+      let position = wrapFrame(cursor, frames);
+      let ahead = 0;
+      let catchingUp = false;
+      while (free > 0 && ahead < limit) {
+        const end =
+          stream.buffer.at(position)?.end ??
+          this.fills.find(
+            (fill) =>
+              !fill.cancelled &&
+              fill.stream === stream &&
+              wrapFrame(position - fill.start, frames) < fill.end - fill.start,
+          )?.end;
+        if (end === undefined) {
+          // A gap even the smallest window cannot reach in time is lost
+          // already; aim past it so the next window lands with room for
+          // a useful size instead of chasing the playhead one second late.
+          // Step at most to the next grid second so the skip stops at any
+          // window already rendered or in flight.
+          if (
+            plan.catchUp &&
+            ahead < this.landSeconds(MONITOR_START_SECONDS) * this.sampleRate
+          )
+            catchingUp = true;
+          const target = Math.round(
+            this.landSeconds(MONITOR_CATCH_UP_SECONDS) * 1.15 * this.sampleRate,
+          );
+          if (catchingUp && ahead < target) {
+            const skip = Math.min(
+              target - ahead,
+              this.sampleRate - (position % this.sampleRate),
+            );
+            ahead += skip;
+            position = wrapFrame(position + skip, frames);
+            continue;
+          }
+          catchingUp = false;
+          this.launchFill(
+            stream,
+            position,
+            this.monitorJob(ahead / this.sampleRate),
+          );
+          free -= 1;
+          continue;
+        }
+        catchingUp = false;
+        ahead += wrapFrame(end - position, frames) || frames;
+        position = wrapFrame(end, frames);
+      }
+    }
+  }
+
+  private launchFill(
+    stream: MonitorStream,
+    frame: number,
+    job: MonitorJob,
+  ): void {
+    const fill: MonitorFill = {
+      stream,
+      start: frame,
+      end: frame + Math.round((job.seconds ?? 4) * this.sampleRate),
+    };
+    this.fills.push(fill);
+    void this.renderer
+      .render(stream.score, frame, job)
+      .then((render) => {
+        this.noteCost(render, job);
+        if (!this.streamLive(stream)) return;
+        stream.buffer.add(render);
+        // An invalid or truncated window must not recursively re-request the
+        // same missing frame, especially when a cache answers synchronously.
+        if (!stream.buffer.at(frame))
+          throw new Error("monitor render did not cover the requested frame");
+        if (this.monitorFailed?.stream === stream)
+          this.monitorFailed = undefined;
+        this.lastLoopPcm = render.pcm;
+        this.checkStart(stream, render);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof RenderCancelledError))
+          this.checkStart(stream, undefined, true);
+        if (!(error instanceof RenderCancelledError) && this.streamLive(stream))
+          this.monitorFailed = {
+            stream,
+            atMs: this.now(),
+            count:
+              (this.monitorFailed?.stream === stream
+                ? this.monitorFailed.count
+                : 0) + 1,
+          };
+      })
+      .finally(() => {
+        this.fills = this.fills.filter((other) => other !== fill);
+        this.trySwapIncoming();
         this.prefetchMonitor();
       });
   }
@@ -1305,7 +1729,8 @@ export class AudioEngine {
     return ((frame % loop.frames) + loop.frames) % loop.frames;
   }
 
-  private swap(next: Loop, beat?: number): void {
+  /** The cursor `next` takes over at, as `swap` places it. */
+  private swapCursor(next: Loop, beat?: number): number {
     const previous = this.loop;
     // Keep the musical position: the same beat inside the new loop.
     let cursor = previous
@@ -1324,6 +1749,12 @@ export class AudioEngine {
       if (!previous || wrapped > this.sampleRate * RESYNC_SECONDS)
         cursor = anchored;
     }
+    return cursor;
+  }
+
+  private swap(next: Loop, beat?: number): void {
+    const previous = this.loop;
+    const cursor = this.swapCursor(next, beat);
     if (previous && this.child) {
       // The outgoing loop keeps its current gain (below 1 when it was
       // itself still fading in) and fades from there.

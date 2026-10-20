@@ -11,7 +11,11 @@ import { StemRenderer } from "./wav.ts";
 import { applyMaster, applyMasterPcm, applyMonitorMaster } from "./master.ts";
 import { MonitorBuffer } from "./monitor-buffer.ts";
 import { WindowCache } from "./window-cache.ts";
-import { LoopRenderer, type LoopRender } from "./renderer.ts";
+import {
+  LoopRenderer,
+  RenderCancelledError,
+  type LoopRender,
+} from "./renderer.ts";
 import { AudioEngine } from "./engine.ts";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -258,7 +262,7 @@ test("native-clock monitoring reads ahead, seeks by cursor and stops pending ref
       expect(frame).toBeDefined();
       requests.push(frame!);
       const start = Math.floor(frame! / (4 * RATE)) * 4 * RATE;
-      return block(start, 4 * RATE, 1000, 64 * RATE);
+      return { ...block(start, 4 * RATE, 1000, 64 * RATE), renderMs: 50 };
     },
   );
   const chunks: Int16Array[] = [];
@@ -309,7 +313,10 @@ test("native-clock monitoring reads ahead, seeks by cursor and stops pending ref
     await engine.play(song(), 0);
     await Promise.resolve();
     await Promise.resolve();
-    expect(requests.slice(0, 2)).toEqual([0, 4 * RATE]);
+    // A short first window aimed where the playhead will be when it lands,
+    // then the pool reads ahead past it.
+    expect(requests[0]).toBeGreaterThan(0);
+    expect(requests.some((frame) => frame > requests[0]!)).toBe(true);
     expect(chunks[0]!.some((sample) => sample !== 0)).toBe(true);
     expect(engine.audioNote).toContain("causal monitor");
     expect(engine.loudness).toBeUndefined();
@@ -571,16 +578,151 @@ test("non-covering monitor replies fail once instead of recursively refilling", 
   try {
     await engine.play(song(), 0);
     for (let turn = 0; turn < 8; turn++) await Promise.resolve();
-    expect(calls).toBe(2);
+    // The first window succeeds; the first read-ahead that cannot cover
+    // its frame marks the stream failed.
+    const initial = calls;
+    expect(initial).toBeGreaterThanOrEqual(2);
     expect(engine.audioNote).toContain("unavailable");
     engine.pump();
     for (let turn = 0; turn < 8; turn++) await Promise.resolve();
-    expect(calls).toBe(2);
+    // The retry waits for its backoff; the clock has not moved.
+    expect(calls).toBe(initial);
     await engine.stopAsync();
     await expect(engine.play(song(), 120)).rejects.toThrow("did not cover");
-    expect(calls).toBe(3);
+    const failed = calls;
+    for (let turn = 0; turn < 8; turn++) await Promise.resolve();
+    expect(calls).toBe(failed);
   } finally {
     await engine.dispose();
     render.mockRestore();
   }
+});
+
+/**
+ * Play a long song against a renderer that synthesizes slower than real time
+ * on one core (`cost` wall seconds per rendered second), on a virtual clock,
+ * and report how long sound took to start and how many frames went silent
+ * after it did.
+ */
+async function simulate(options: {
+  cost: number;
+  workers: number;
+  beat: number;
+  seconds: number;
+  edits?: number[];
+}) {
+  const total = 120 * RATE;
+  let now = 0;
+  const due: {
+    at: number;
+    slot: number;
+    finish: () => void;
+    cancel: () => void;
+  }[] = [];
+  const busy = new Array<number>(options.workers + 1).fill(0);
+  const cancel = spyOn(
+    LoopRenderer.prototype,
+    "cancelBackground",
+  ).mockImplementation(() => {
+    for (const job of due.filter((job) => job.slot > 0)) {
+      due.splice(due.indexOf(job), 1);
+      job.cancel();
+    }
+    busy.fill(now, 1);
+  });
+  let finished = false;
+  const render = spyOn(LoopRenderer.prototype, "render").mockImplementation(
+    (_score, frame, job) =>
+      new Promise((resolve, reject) => {
+        const grid = RATE;
+        const seconds = job?.seconds ?? 4;
+        const start = Math.floor(frame! / grid) * grid;
+        const end = Math.min(
+          total,
+          Math.ceil((frame! + seconds * RATE) / grid) * grid,
+        );
+        const pre = job?.quick ? 1.25 : 9;
+        const work = options.cost * (pre + (end - start) / RATE) * 1000;
+        // Foreground jobs use slot 0; background ones the first free worker.
+        const slot = job?.background
+          ? 1 + busy.slice(1).indexOf(Math.min(...busy.slice(1)))
+          : 0;
+        const begin = Math.max(now, busy[slot]!);
+        busy[slot] = begin + work;
+        due.push({
+          at: begin + work,
+          slot,
+          cancel: () => reject(new RenderCancelledError("render cancelled")),
+          finish: () => {
+            finished = true;
+            resolve({
+              ...block(start, end - start, 1000, total),
+              renderMs: work,
+            });
+          },
+        });
+      }),
+  );
+  const { engine, chunks } = monitorEngine(`sim-${options.cost}`, {
+    now: () => now,
+    renderWorkers: options.workers,
+  });
+  let started: number | undefined;
+  let silent = 0;
+  try {
+    const score = createScore({ ...song().toJSON(), bars: 60 });
+    void engine.play(score, options.beat);
+    const edits = [...(options.edits ?? [])];
+    for (; now < options.seconds * 1000; now += 20) {
+      if (edits.length && now >= edits[0]! * 1000) {
+        edits.shift();
+        void engine.play(createScore({ ...score.toJSON() }));
+      }
+      finished = false;
+      for (const job of due.filter((job) => job.at <= now)) {
+        due.splice(due.indexOf(job), 1);
+        job.finish();
+      }
+      // The playback lock does real file I/O; let it and the renders settle
+      // without the virtual clock running ahead of a starting player.
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+      for (let wait = 0; wait < 500 && finished && !engine.playerStarts; wait++)
+        await Bun.sleep(1);
+      const before = chunks.length;
+      engine.pump();
+      for (const chunk of chunks.slice(before)) {
+        if (started === undefined && chunk.some((sample) => sample !== 0))
+          started = now;
+        if (started !== undefined)
+          for (let index = 0; index < chunk.length; index += 2)
+            if (chunk[index] === 0) silent++;
+      }
+    }
+  } finally {
+    await engine.dispose();
+    render.mockRestore();
+    cancel.mockRestore();
+  }
+  return { startedMs: started, silentFrames: silent };
+}
+
+test("a song that renders slower than real time per core streams without gaps", async () => {
+  for (const beat of [0, 120]) {
+    const run = await simulate({ cost: 0.75, workers: 3, beat, seconds: 60 });
+    expect(run.startedMs).toBeDefined();
+    expect(run.startedMs!).toBeLessThan(4000);
+    expect(run.silentFrames).toBe(0);
+  }
+});
+
+test("edits to a streamed song keep playing the old version until the new one covers the playhead", async () => {
+  const run = await simulate({
+    cost: 0.75,
+    workers: 3,
+    beat: 0,
+    seconds: 50,
+    edits: [12, 30],
+  });
+  expect(run.silentFrames).toBe(0);
 });
