@@ -73,6 +73,11 @@
       "sha256": "d29e0c7471805d6143c05c52a8a2912cdc27c366e9f3ebf0eac8a611ef4e659e",
       "seconds": 37.030833333333334,
       "bytes": 1777524
+    },
+    "redline-vox": {
+      "sha256": "5056ffee043ff67ce2868a14107ca12f92f584a4693bbc6f680b47af05658400",
+      "seconds": 27.557958333333332,
+      "bytes": 1322826
     }
   }
 }

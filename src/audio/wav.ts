@@ -753,11 +753,18 @@ export class StemRenderer {
         const side = sideSource
           ? this.vocoderTap(sideSource, context, bank)
           : undefined;
+        // A vocoder whitens its carrier, which would cancel a volume baked
+        // into the voice: the carrier renders at unity and the track's
+        // volume (and its lane) applies after the vocoder stage.
+        const voiceTrack =
+          track && vocoderSource
+            ? { ...track, volume: 1, volumeAutomation: [] }
+            : track;
         const stereo = renderVoiceInto(
           dry,
           dryR,
           played,
-          track,
+          voiceTrack,
           context,
           score,
           bank,
@@ -778,6 +785,8 @@ export class StemRenderer {
             context,
             vocoderSource.gateDb,
           );
+        if (track && vocoderSource)
+          applyTrackGain(dry, stereo ? dryR : undefined, track, context);
         // A non-finite source sample would poison every feedback stage.
         let bad = scrubNonFinite(dry) + (stereo ? scrubNonFinite(dryR) : 0);
         // Note-aware stages (bloom, swell) see the notes; others never do.
@@ -1554,6 +1563,29 @@ function renderSamplerNotes(
   renderSamplerVoices(target, voices, timing, gainAt, "left");
   renderSamplerVoices(targetRight, voices, timing, gainAt, "right");
   return true;
+}
+
+/** Scales a rendered voice by its track's volume and volume lane, per sample. */
+function applyTrackGain(
+  left: Float64Array,
+  right: Float64Array | undefined,
+  track: Track,
+  context: RenderContext,
+): void {
+  const fixed = (track.volumeAutomation ?? []).length === 0;
+  const flat = trackGainAt(track, 0);
+  for (let index = 0; index < left.length; index += 1) {
+    const gain = fixed
+      ? flat
+      : trackGainAt(
+          track,
+          context.warp
+            ? context.warp.tick(index)
+            : index / context.samplesPerTick,
+        );
+    left[index]! *= gain;
+    if (right) right[index]! *= gain;
+  }
 }
 
 /** Track volume and volume automation at a score tick (pan is applied in stereo). */

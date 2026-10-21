@@ -419,7 +419,6 @@ const SECTIONS: readonly SongSection[] = [
     lead: [...ANSWER, ...HOOK],
     voiceLead: true,
     line: LINE_BLOOM2,
-    transpose: 2,
   },
   {
     kind: "outro",
@@ -452,7 +451,6 @@ export const glassGarden: DemoDefinition = {
       "an offbeat octave bass pumping under the blooms",
       "tresillo, two-step and four-floor beats by phrase",
       "a drumless greenhouse: frozen grain voice, stuttering synth singer",
-      "a whole-step key change into the last bloom",
       "vowel wavetable lead doubled by the looped voice",
     ],
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
@@ -477,7 +475,7 @@ export const glassGarden: DemoDefinition = {
         harm: 0.15,
       },
       extra: {
-        // Glassier than Low Battery: a higher formant, more air.
+        // Glassy: a high formant and plenty of air.
         sing: {
           sing: {
             preset: "aah",

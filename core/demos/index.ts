@@ -11,7 +11,7 @@ import { copperWire } from "./copper-wire.ts";
 import { lowTide } from "./low-tide.ts";
 import { amberRoom } from "./amber-room.ts";
 import { candyFault } from "./candy-fault.ts";
-import { lowBattery } from "./low-battery.ts";
+import { redline } from "./redline.ts";
 import { glassGarden } from "./glass-garden.ts";
 export type { DemoInfo } from "./types.ts";
 
@@ -23,7 +23,7 @@ const definitions = [
   lowTide,
   amberRoom,
   candyFault,
-  lowBattery,
+  redline,
   glassGarden,
 ] as const;
 export const DEMOS = Object.freeze(definitions.map(({ info }) => info));

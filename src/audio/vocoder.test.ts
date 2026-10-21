@@ -101,6 +101,36 @@ describe("vocoder stage", () => {
   }, 60_000);
 });
 
+describe("carrier volume", () => {
+  // The vocoder whitens its carrier, so a volume baked into the carrier's
+  // voice used to cancel out: every carrier played at full level.
+  test("a carrier's volume and volume lane scale the vocoded output", () => {
+    const options = { sampleRate: SR, samples: bank() };
+    const at = (carrier: Partial<TrackInput>) =>
+      renderScorePcm(
+        updateTrack(songOf({ vocoder: { src: "vox" }, ...carrier }), "vox", {
+          muted: true,
+        }),
+        options,
+      ).pcm;
+    const full = at({ volume: 1 });
+    const half = at({ volume: 0.5 });
+    expect(rms(half) / rms(full)).toBeCloseTo(0.5, 1);
+    const ducked = at({
+      volume: 1,
+      volumeAutomation: [
+        { tick: 0, value: 1 },
+        { tick: 480 * 8 - 1, value: 1 },
+        { tick: 480 * 8, value: 0.25 },
+      ],
+    });
+    const mid = ducked.length / 2;
+    const second = (pcm: Int16Array) =>
+      rms(pcm.subarray(mid + SR, mid + SR * 3));
+    expect(second(ducked) / second(full)).toBeCloseTo(0.25, 1);
+  }, 60_000);
+});
+
 /** `bars` bars of the vocal every 4 bars against a held carrier chord. */
 function longSong(
   bars: number,

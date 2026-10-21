@@ -97,17 +97,17 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. Ten editable songs span garage,
-jungle, acid techno, neo soul, synth pop, trip hop and hyperpop. Three
+For a complete song, type `demo`. Nine editable songs span garage,
+jungle, acid techno, neo soul, synth pop, trip hop and hyperpop. Two
 hyperpop songs share one kit with full original vocals played as an
 instrument: syllable riffs, glitch stutters, reversals, a looped-vowel
 lead and a grain cloud, over syncopated stabs and changing beats. Each has production notes, named scenes, instruments,
 effects and automation; `guide hyperpop` explains the techniques.
-`demo low-battery` loads one and opens TAPE; Space plays, Tab changes
+`demo redline` loads one and opens TAPE; Space plays, Tab changes
 tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
-`sample library` opens fourteen original sounds that work offline,
-including three vocal books, three sung hooks, synthetic vocal phrases, vowels, hits and a
+`sample library` opens fifteen original sounds that work offline,
+including four vocal books, three sung hooks, synthetic vocal phrases, vowels, hits and a
 riser. Preview a sound with `sample preview hold-on`, add it with
 `sample use hold-on`, or create playable slices with
 `sample chop stay-tonight 4`. The same library is available
@@ -148,17 +148,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.28.0/hraness-dawg-0.28.0.tgz"
+bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.29.0/hraness-dawg-0.29.0.tgz"
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.28.0 --repo hraness/dawg
+gh release download v0.29.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.28.0.tgz --repo hraness/dawg
-bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.28.0.tgz"
+gh attestation verify hraness-dawg-0.29.0.tgz --repo hraness/dawg
+bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.29.0.tgz"
 ```
 
 To run from source instead:

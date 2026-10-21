@@ -10,10 +10,10 @@ part works offline. Open a song's notes to explore its production.
 Three are hyperpop:
 
 - Candy Fault · an abstract synth singer over glitch breaks
-- Low Battery · F# minor, half-time growl drops, a low-power break
+- Redline · F minor drum-and-bass, words over a classic vocoder
 - Glass Garden · A major, tresillo blooms, syllable arps, grain voice
 
-Low Battery and Glass Garden blend a synth singer with recorded words
+Redline and Glass Garden blend a synth singer with recorded words
 and play the vocal as an instrument: syllable riffs that answer each
 line, stutters on chord tones, reversed swells, a looped vowel doubling
 the lead and a grain cloud. `guide hyperpop` explains the techniques.

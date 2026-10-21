@@ -796,6 +796,9 @@ export type DrumFamily =
   | "broken" // broken kick, single taps
   | "skip" // two-step: skipping kick, ghosted snares
   | "taps" // hat taps and clicks only
+  | "dnb" // two-step breakbeat: kick on one and the and-of-three, 16th hats
+  | "roller" // two-step with ghost snares and an offbeat ride, for drops
+  | "halfstep" // one kick, one snare on three, hats running 16ths
   | "none";
 
 type Grid = Readonly<{
@@ -926,6 +929,45 @@ const FAMILIES: Readonly<Record<DrumFamily, readonly Grid[]>> = {
       kick: "9.....7.7.......",
       snare: "....8.......8.3.",
       hat: "5.35.3.35.35.335",
+    },
+  ],
+  dnb: [
+    {
+      kick: "9.........8.....",
+      snare: "....9.......9...",
+      hat: "6.4.6.4.6.4.6.4.",
+    },
+    {
+      kick: "9.........8..6..",
+      snare: "....9.......9..3",
+      hat: "6.4.6.4.6.4.6434",
+    },
+  ],
+  roller: [
+    {
+      kick: "9..........8....",
+      snare: "....9..3....9...",
+      hat: "6...6...6...6...",
+      open: "..6...6...6...6.",
+    },
+    {
+      kick: "9.7.......8.....",
+      snare: "....9..3....9.3.",
+      hat: "6...6...6...6.43",
+      open: "..6...6...6...6.",
+    },
+  ],
+  halfstep: [
+    {
+      kick: "9...............",
+      snare: "........9.......",
+      hat: "5.4.5.4.5.4.5.4.",
+    },
+    {
+      kick: "9.........7.....",
+      snare: "........9.....3.",
+      hat: "5.4.5.4.5.4.5434",
+      rim: "...3.......3....",
     },
   ],
   taps: [
@@ -1250,6 +1292,8 @@ export type SongSection = Readonly<{
   bells?: Cells;
   /** Stab grids (16 digits). */
   stabs?: Cells;
+  /** Semitones the stabs move: 12 lifts them clear above the singer. */
+  stabShift?: number;
   /** Sub grids (16 digits; held to the next onset). */
   bass?: Cells;
   /** Moving bass lines (`bassLine` steps); replaces `bass` where given. */
@@ -1436,7 +1480,9 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
           "stabs",
           bar,
           stabGrid,
-          chord.tones.slice(on("pad") ? -2 : -3).map((t) => t + 12),
+          chord.tones
+            .slice(on("pad") ? -2 : -3)
+            .map((t) => t + 12 + (p.stabShift ?? 0)),
         );
       // Where the lead and the chop riff both play, the arp sits out and the
       // chops drop a fourth, so the three never pile into one register.
