@@ -5,7 +5,7 @@ parent: sound
 order: 0
 ---
 
-The studio library includes three vocal books, each a whole song's
+The studio library includes four vocal books, each a whole song's
 verses, pre-chorus, chorus, six syllables and a held vowel as named
 slices, and three sung pop hooks with two lines and three syllables,
 plus machine-voice phrases, sustained

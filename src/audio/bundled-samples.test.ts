@@ -69,14 +69,14 @@ const context: ToolContext = {
   newNoteId: (track, i) => `${track}-${i}`,
 };
 
-test("all fourteen packaged files match manifest, pitch metadata, guards and canonical digests", async () => {
+test("all fifteen packaged files match manifest, pitch metadata, guards and canonical digests", async () => {
   const manifest = JSON.parse(
     await readFile(
       new URL("../../assets/samples/studio/manifest.json", import.meta.url),
       "utf8",
     ),
   );
-  expect(BUNDLED_SAMPLES).toHaveLength(14);
+  expect(BUNDLED_SAMPLES).toHaveLength(15);
   for (const sample of BUNDLED_SAMPLES) {
     const file = await readBundledSample(sample.id);
     expect(manifest.samples[sample.id]).toEqual({

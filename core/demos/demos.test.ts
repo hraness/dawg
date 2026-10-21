@@ -21,7 +21,7 @@ const longestKickRest = (score: ReturnType<typeof createDemo>) => {
 };
 
 /** The three songs built on the shared hyperpop kit. */
-const HYPER = ["low-battery", "glass-garden"];
+const HYPER = ["redline", "glass-garden"];
 
 describe("complete demo songs", () => {
   test("nine distinct entries expose truthful form and duration metadata", () => {
@@ -152,7 +152,8 @@ describe("complete demo songs", () => {
         demo.id,
       ).toBeGreaterThanOrEqual(11);
       // The synth singer sings every line with its words, the recorded
-      // book quieter under it; the backing singer takes thirds.
+      // book under it (Glass Garden) or leading it (Redline); the backing
+      // singer harmonises.
       const sung = notesOf("sing");
       expect(sung.length, demo.id).toBeGreaterThan(150);
       expect(
@@ -163,7 +164,7 @@ describe("complete demo songs", () => {
       expect(
         Math.max(...notesOf("vox").map((note) => note.velocity)),
         demo.id,
-      ).toBeLessThan(0.75);
+      ).toBeLessThanOrEqual(0.95);
       expect(
         vox?.delayMixAutomation?.some((point) => point.value >= 0.3),
         demo.id,

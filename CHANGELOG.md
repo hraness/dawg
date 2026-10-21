@@ -2,6 +2,25 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.29.0
+
+### Added
+
+- **Redline, a new hyperpop demo in place of Low Battery.** Redline is a hard-driving night-drive song in F minor at 172 BPM, built on two-step drum-and-bass breaks and a rolling reese bass. The recorded words lead. A classic vocoder sings them back as a melody over two held chord tones, a backing singer takes a chord tone under each held chorus note, and syllable ostinatos with delay throws answer between the lines. The chorus stabs and arp sit an octave above the singer so the voice has its own register. Redline stays in one key throughout. Its vocal book ships as `redline-vox`.
+- **Three more drum families for the hyperpop kit:** `dnb` (a two-step break), `roller` (a rolling break with open hats) and `halfstep` (a half-time 86 feel at the same tempo).
+
+### Changed
+
+- **Glass Garden plays its last bloom in the home key.** The whole-step key change into the last section is gone.
+
+### Fixed
+
+- **A vocoder track's volume and volume lane now change its level.** The vocoder whitens its carrier, which cancelled any volume applied to the carrier's voice, so every vocoder track played at full level. The carrier now renders at unity and the track volume applies after the vocoder. A vocoder track below volume 1 now plays quieter than it did.
+
+### Removed
+
+- **The Low Battery demo.** Its vocal book stays in the sample library as `low-battery-vox`.
+
 ## 0.28.0
 
 ### Fixed

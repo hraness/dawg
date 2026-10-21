@@ -5,7 +5,7 @@ parent: arrange
 order: 7
 ---
 
-One kit for three songs: seventh chords, a moving bass, whole
+One kit for two songs: seventh chords, a moving bass, whole
 sections without drums, and the voice as an instrument.
 
 - Six sung syllables on one keyed sampler in round robin: every chord
@@ -16,10 +16,10 @@ sections without drums, and the voice as an instrument.
   and the same vowel as a grain cloud locked to the chord
 - Delay throws on each line's last word; formant and crush on the chops
 - Syncopated chord stabs with a pitch blip, pulse arps, FM bells
-- Drums sit out whole sections; four-floor with a backbeat clap,
-  half-time bounce, tresillo; a snare pickup into each section
-- A bass line that glides like an 808 and pumps offbeat octaves; the
-  growl saw doubles it an octave up in the drops
+- Drums sit out whole sections; four-floor, half-time, tresillo,
+  two-step and rolling drum-and-bass breaks; a snare pickup per section
+- A vocoder sings the recorded words back as chords under them
+- An 808-style gliding sub; a growl saw doubles it in the drops
 - One-beat dropouts, a tape-stop dive, a kickless breakdown
 
 ## Ask
@@ -28,8 +28,8 @@ sections without drums, and the voice as an instrument.
 
 ## Type it yourself
 
-- `demo info low-battery` explains where each move happens
-- `sample chop low-battery-vox 8` slices a vocal book into chops
+- `demo info redline` explains where each move happens
+- `sample chop redline-vox 8` slices a vocal book into chops
 - `glide 100 legato` slides the sub · `fx duck preset pump`
 - `fx duck hold on` keeps the dip down until each kick note ends
 - `fx eq high 4 highfreq 8000` adds air · `fx eq mid -2 midfreq 500`
@@ -38,7 +38,7 @@ sections without drums, and the voice as an instrument.
 
 ## Menu
 
-- Ctrl-K › Arrange › demo songs › Low Battery › load song
+- Ctrl-K › Arrange › demo songs › Redline › load song
 - Ctrl-K › Effects › Delay · Reverb
 
 ## Keys

@@ -54,6 +54,15 @@ L4 = [0, 0.75, 1.5, 2]
 L4L = [0.6, 0.6, 0.45, 1.6]
 L5 = [0, 0.75, 1.5, 2, 2.5]
 L5L = [0.6, 0.6, 0.45, 0.45, 1.3]
+# Redline sings half-time over 172: eighths only, the last word held.
+E1 = [0, 0.5, 1, 1.5, 2, 3]
+E1L = [0.45, 0.45, 0.45, 0.45, 0.9, 0.9]
+E2 = [0, 0.5, 1, 1.5, 2.5, 3]
+E2L = [0.45, 0.45, 0.45, 0.9, 0.45, 0.9]
+Q4 = [0, 0.5, 1, 2]
+Q4L = [0.45, 0.45, 0.9, 1.8]
+Q5 = [0, 0.5, 1, 1.5, 2]
+Q5L = [0.45, 0.45, 0.45, 0.45, 1.8]
 
 SONGS = {
     # Soft Reboot, D major at 140. Verse Bm-G-D-A, chorus G-A-Bm-D.
@@ -117,6 +126,28 @@ SONGS = {
             ("ch3", 8, line("don't you ev- er let the sun- light go".split(), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4], [76, 76, 80, 76, 80, 81, 80, 76, 78], [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 3.0], fall=2.0)),
             *chops(69, ["glass", "bloom", "gold", "grow", "ah", "ooh"]),
             ("hold", 4, [N("ooh", 0, 3.8, 69, vib=0.15)]),
+        ],
+    ),
+    # Redline, F minor at 172, sung half-time over the breaks. Verse
+    # Fm-Ab-Eb-Db, pre Db-Eb, chorus Fm-Db-Ab-Eb.
+    "redline-vox": dict(
+        title="Redline Vocal", voice="af_heart", bpm=172, formant=1.0, clarity=1.6, root=68,
+        parts=[
+            ("v1", 4, line("ne- on on the high- way".split(), E1, [72, 72, 68, 72, 75, 72], E1L)),
+            ("v2", 4, line("cit- y in the mir- ror".split(), E2, [70, 70, 67, 70, 75, 70], E2L, fall=1.0)),
+            ("v3", 4, line("hands up out the win- dow".split(), E1, [72, 72, 75, 72, 77, 75], E1L)),
+            ("v4", 4, line("no- bod- y can catch us".split(), E2, [75, 72, 70, 67, 70, 67], E2L, fall=1.0)),
+            ("v5", 4, line("fast- er than the fear".split(), Q5, [77, 75, 72, 75, 72], Q5L)),
+            ("v6", 4, line("no- where but here".split(), Q4, [75, 70, 67, 70], Q4L, fall=1.0)),
+            ("v7", 4, line("en- gine in my chest".split(), Q5, [72, 75, 77, 75, 80], Q5L)),
+            ("v8", 4, line("nev- er gon- na rest".split(), Q5, [79, 77, 75, 70, 75], Q5L, scoop=1.0)),
+            ("pre1", 4, line("turn it up turn it up".split(), [0, 0.5, 1, 2, 2.5, 3], [68, 68, 73, 73, 73, 77], [0.45, 0.45, 0.9, 0.45, 0.45, 0.9])),
+            ("pre2", 4, line("take it to the red".split(), Q5, [75, 75, 77, 75, 80], Q5L, scoop=1.0)),
+            ("ch1", 8, line("red- line we're on the red- line".split(), [0, 1, 2.5, 3, 3.5, 4, 5], [80, 77, 75, 75, 77, 80, 77], [0.9, 1.4, 0.45, 0.45, 0.45, 0.9, 2.8], fall=1.0)),
+            ("ch2", 8, line("don't you slow it down to- night".split(), [0, 0.5, 1, 2, 2.5, 4, 4.5], [75, 75, 80, 77, 75, 77, 79], [0.45, 0.45, 0.9, 0.45, 1.4, 0.45, 3.0], vib=0.3)),
+            ("ch3", 8, line("hold on tight 'til the sky turns white".split(), [0, 0.5, 1, 2, 2.5, 3, 4, 5], [75, 77, 80, 77, 75, 80, 77, 79], [0.45, 0.45, 0.9, 0.45, 0.45, 0.9, 0.9, 2.8], fall=1.0)),
+            *chops(68, ["red", "line", "go", "up", "hey", "oh"]),
+            ("hold", 4, [N("ah", 0, 3.8, 68, vib=0.15)]),
         ],
     ),
 }
