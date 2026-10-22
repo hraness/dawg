@@ -2,6 +2,19 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.30.0
+
+### Changed
+
+- **Glass Garden and Candy Fault take Redline's vocal production.**
+  - **Glass Garden:**
+    - The backing singer now harmonises every chorus line a diatonic third under, not just the held notes.
+    - The synth singer is closer and more present, with a presence lift, gentle compression and a plate.
+    - The bed dips about 4 dB while a line sings.
+    - The chorus stabs move an octave above the singer's register.
+    - The syllable arps tuck under the sung lines and open up in the blooms.
+  - **Candy Fault:** the singer gets a presence lift and gentle compression, and her delay throws now bounce between the speakers. The Overload chord stack sits a touch under her. The song itself is unchanged.
+
 ## 0.29.0
 
 ### Added

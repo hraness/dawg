@@ -866,7 +866,7 @@ export const candyFault: DemoDefinition = {
     ],
     mixNotes: [
       "The 808 follows the kick but phrases across the bar: one verse bar in four holds its root, the octave pop comes only before the phrase-end IV, vi and I are reached by step, IV from a half step below, and it rests on beat three under 'oh'; in the bridge it walks down alone, E to F#, under the Rhodes.",
-      "The singer is pitched bright with a formant lift; a softer double sings thirds below (in the bridge, the 10th above the walking bass, so her 7-6 and its 4-3 resolve together) and a thin octave-up double joins every line of the final chorus; dotted-eighth delay throws catch the last word of each line.",
+      "The singer is pitched bright with a formant lift, compressed with a presence lift so she stays on top of the Overload stack; a softer double sings thirds below (in the bridge, the 10th above the walking bass, so her 7-6 and its 4-3 resolve together) and a thin octave-up double joins every line of the final chorus; dotted-eighth delay throws catch the last word of each line.",
       "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines, owns the fourth bar of each chorus phrase, and answers verse two an octave above her.",
       "The pre-chorus supersaw sits close under the singer (A3 to D#5) with its top voice climbing A4 B4 C#5 D#5 into the drop; the chorus opens the stack to E3..B4 so her line stays clear, with octave stabs above her from chorus one (two a bar, then four) and a held top voice in the Overload; the Rhodes voicings in the verses top out under her lowest notes.",
       "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. Every phrase end gets its own fill (a tom climb in chorus one, a hats-only glitch fill in chorus two's dropout bar, a 32nd ratchet in the Overload), and the drums leave a half-bar hole under the Overload's stuttered 'pix-els' before the landing. After one beat of silence the final chorus jumps from E to F, detunes the supersaw from pretty to harsh and stutters the hook; its last bar turns to the tonic on beat three under a crash, her held F# becoming a 9th that resolves, and the song powers down with the 808 and the last chip fragment diving an octave.",
@@ -989,7 +989,8 @@ export const candyFault: DemoDefinition = {
         filter: { type: "hpf", cutoff: 160, resonance: 0 },
         reverb: room,
         fx: { ...orbit, crush: { bits: 16, coarse: 1, mix: 0 } },
-        volumeAutomation: steps([0, 0.8], [40, 0.9], [56, 1]),
+        // The Overload stack sits a touch under her.
+        volumeAutomation: steps([0, 0.8], [40, 0.9], [56, 0.8]),
         fxAutomation: {
           "synth-lpf": lanes(
             [0, 5200],
@@ -1075,8 +1076,20 @@ export const candyFault: DemoDefinition = {
           ring: 0.38,
         },
         filter: { type: "hpf", cutoff: 230, resonance: 0 },
-        fx: { crush: { bits: 16, coarse: 1, mix: 0 } },
-        delay: { beats: 0.75, feedback: 0.28, mix: 0.08 },
+        // Close and present: a presence lift, a little air and a gentle
+        // compressor hold her level steady over the stack.
+        fx: {
+          crush: { bits: 16, coarse: 1, mix: 0 },
+          eq: { mid: 2, midfreq: 3000, high: 2, highfreq: 9000 },
+          compressor: {
+            threshold: -20,
+            ratio: 3,
+            attack: 0.006,
+            release: 0.12,
+            makeup: 4,
+          },
+        },
+        delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
         delayMixAutomation: throws(
           [13, 17, 19, 21, 23, 37, 41, 43, 45, 47, 49, 51, 57, 59, 61, 63],
           0.07,

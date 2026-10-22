@@ -19,6 +19,7 @@ import {
   steps,
   stutter,
   sungLine,
+  thirdBelow,
   throws,
   writeSong,
   type Book,
@@ -304,6 +305,7 @@ const SECTIONS: readonly SongSection[] = [
     play: ["sub", "pad", "stabs"],
     bursts: true,
     stabs: [null, null, null, null, ...STABS],
+    stabShift: 12,
     line: LINE_CHORUS,
     lines: CHORUS_LINES,
     words: 0.58,
@@ -346,6 +348,7 @@ const SECTIONS: readonly SongSection[] = [
     energy: 0.84,
     play: ["sub", "pad", "stabs", "riff", "double"],
     stabs: [null, null, null, null, ...STABS],
+    stabShift: 12,
     riff: RIFF_POST,
     line: LINE_CHORUS,
     lines: CHORUS_LINES,
@@ -399,6 +402,7 @@ const SECTIONS: readonly SongSection[] = [
     energy: 0.88,
     play: ["sub", "pad", "stabs", "riff", "bells", "double"],
     stabs: [null, null, null, null, ...STABS_POST],
+    stabShift: 12,
     bells: BELLS,
     riff: RIFF_POST2,
     line: LINE_CHORUS,
@@ -446,7 +450,7 @@ export const glassGarden: DemoDefinition = {
     trackId: "chops",
     features: [
       "a synth singer on every line, the book's recorded words blended under it",
-      "a backing singer a third under the held chorus notes",
+      "a backing singer a diatonic third under every chorus line",
       "syllable arps that bloom up through the chord after every line",
       "an offbeat octave bass pumping under the blooms",
       "tresillo, two-step and four-floor beats by phrase",
@@ -455,7 +459,9 @@ export const glassGarden: DemoDefinition = {
     ],
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
-      "the synth singer leads; the recorded words sit 5 to 10 dB under it",
+      "the synth singer leads, close and compressed on a plate; the recorded words sit about 4 dB under it",
+      "chorus stabs sit an octave above the singer's register",
+      "the bed dips about 4 dB while a line sings; the syllable arps tuck under the lines and open up in the blooms",
       "bells ring above the arp so the syllables fill the middle",
       "delay throws open on the last word of every sung line",
       "kick pumps the whole bed on orbit 2",
@@ -471,8 +477,8 @@ export const glassGarden: DemoDefinition = {
         arp: 0.18,
         chops: 0.8,
         vgrain: 0.32,
-        sing: 0.34,
-        harm: 0.15,
+        sing: 0.35,
+        harm: 0.26,
       },
       extra: {
         // Glassy: a high formant and plenty of air.
@@ -490,11 +496,53 @@ export const glassGarden: DemoDefinition = {
             vibdelay: 0.3,
             ring: 0.36,
           },
+          // Close and present, with a plate behind it. With the book's own
+          // duck this dips the bed on orbit 2 about 4 dB while a line sings.
+          fx: {
+            crush: { bits: 16, coarse: 1, mix: 0 },
+            eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 10000 },
+            compressor: {
+              threshold: -20,
+              ratio: 3,
+              attack: 0.006,
+              release: 0.12,
+              makeup: 2,
+            },
+            duck: {
+              orbit: 2,
+              depth: 0.2,
+              attack: 0.5,
+              onset: 0.06,
+              hold: true,
+            },
+          },
+          reverb: { mix: 0.22, size: 0.7, fade: 2.6, lowpass: 10000 },
         },
       },
     });
     const song = writeSong(s, { book: BOOK, scale: SCALE, sections: SECTIONS });
     const { at } = song;
+
+    // The backing singer takes the whole chorus line a diatonic third
+    // under, not just the held notes (writeSong places those).
+    for (const p of song.placed)
+      if (p.kind === "chorus")
+        (p.lines ?? []).forEach((part, i) => {
+          if (!part) return;
+          for (const [beat, pitch, beats, lyric] of BOOK.melody[part])
+            if (beats >= 0.45 && beats < 0.8)
+              s.note(
+                "harm",
+                p.start + i,
+                beat,
+                thirdBelow(SCALE, pitch),
+                beats,
+                0.55,
+                {
+                  lyric,
+                },
+              );
+        });
 
     // Seed: the voice grows out of a held vowel, the synth singer humming
     // the chorus shape with no words, syllables sprouting.
@@ -615,6 +663,18 @@ export const glassGarden: DemoDefinition = {
     });
     patch(s, "sweep", { filterAutomation: riserLane(song.builds) });
     patch(s, "chops", {
+      // The syllable arps tuck under the sung lines and open up in the blooms.
+      volumeAutomation: steps(
+        [0, 1],
+        [at("Verse 1"), 0.75],
+        [at("Chorus 1"), 0.6],
+        [at("Bloom 1"), 1],
+        [at("Verse 2"), 0.75],
+        [at("Chorus 2"), 0.6],
+        [at("Bloom 2"), 1],
+        [last, 0.6],
+        [at("Last bloom"), 1],
+      ),
       fxAutomation: {
         "formant-shift": steps(
           [0, 0],
