@@ -10,11 +10,7 @@ import { redline } from "./redline.ts";
 import { glassGarden } from "./glass-garden.ts";
 export type { DemoInfo } from "./types.ts";
 
-const definitions = [
-  candyFault,
-  redline,
-  glassGarden,
-] as const;
+const definitions = [candyFault, redline, glassGarden] as const;
 export const DEMOS = Object.freeze(definitions.map(({ info }) => info));
 const templates = new Map<string, TrackScore>();
 

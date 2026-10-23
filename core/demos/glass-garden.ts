@@ -24,15 +24,16 @@ import {
   writeSong,
   type Book,
   type Chord,
+  type KitOptions,
   type SongSection,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
-const BPM = 128;
+export const BPM = 128;
 const { r1, r1l, r2, r2l, l4, l4l } = RHYTHM;
 
 // The book's tunes (scripts/vox/songs.py), sung by the synth too.
-const BOOK: Book = {
+export const BOOK: Book = {
   sample: "glass-garden-vox",
   root: 69,
   syllables: ["glass", "bloom", "gold", "grow", "ah", "ooh"],
@@ -112,7 +113,7 @@ const BOOK: Book = {
     ),
   },
 };
-const SCALE = [1, 2, 4, 6, 8, 9, 11];
+export const SCALE = [1, 2, 4, 6, 8, 9, 11];
 
 const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
 // Open voicings with sevenths and ninths, no semitone rubs; the stabs take
@@ -122,49 +123,54 @@ const E = c(40, 56, 59, 64, 66);
 const Fsm = c(42, 57, 61, 64, 68);
 const D = c(38, 57, 61, 66, 69);
 const Csm = c(37, 56, 59, 64, 68);
-const VERSE = [A, E, Fsm, D];
-const CHORUS = [D, E, Csm, Fsm];
+export const VERSE = [A, E, Fsm, D];
+export const CHORUS = [D, E, Csm, Fsm];
 
-const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
+export const HOOK: readonly (readonly (readonly [number, number, number])[])[] =
   [
-    [0, 81, 0.4],
-    [0.5, 80, 0.25],
-    [0.75, 78, 0.25],
-    [1, 76, 0.75],
-    [2, 81, 0.25],
-    [2.25, 83, 0.25],
-    [2.5, 85, 1.25],
-  ],
-  [
-    [0, 83, 0.4],
-    [0.5, 80, 0.4],
-    [1, 76, 0.4],
-    [1.5, 80, 0.25],
-    [1.75, 83, 0.75],
-    [2.75, 88, 1],
-  ],
-  [
-    [0, 85, 0.25],
-    [0.25, 83, 0.25],
-    [0.5, 80, 0.5],
-    [1.25, 76, 0.5],
-    [2, 80, 0.25],
-    [2.25, 81, 0.25],
-    [2.5, 83, 0.75],
-    [3.25, 80, 0.5],
-  ],
-  [
-    [0, 81, 1.5],
-    [1.75, 78, 0.25],
-    [2, 81, 0.5],
-    [2.5, 85, 0.5],
-    [3, 88, 0.9],
-  ],
-];
+    [
+      [0, 81, 0.4],
+      [0.5, 80, 0.25],
+      [0.75, 78, 0.25],
+      [1, 76, 0.75],
+      [2, 81, 0.25],
+      [2.25, 83, 0.25],
+      [2.5, 85, 1.25],
+    ],
+    [
+      [0, 83, 0.4],
+      [0.5, 80, 0.4],
+      [1, 76, 0.4],
+      [1.5, 80, 0.25],
+      [1.75, 83, 0.75],
+      [2.75, 88, 1],
+    ],
+    [
+      [0, 85, 0.25],
+      [0.25, 83, 0.25],
+      [0.5, 80, 0.5],
+      [1.25, 76, 0.5],
+      [2, 80, 0.25],
+      [2.25, 81, 0.25],
+      [2.5, 83, 0.75],
+      [3.25, 80, 0.5],
+    ],
+    [
+      [0, 81, 1.5],
+      [1.75, 78, 0.25],
+      [2, 81, 0.5],
+      [2.5, 85, 0.5],
+      [3, 88, 0.9],
+    ],
+  ];
 
 // Bloom cells: syllables rising through the chord, scattering on the turn.
 // The hook's answer: the same contour a third higher, opening to the top F#.
-const ANSWER: readonly (readonly (readonly [number, number, number])[])[] = [
+export const ANSWER: readonly (readonly (readonly [
+  number,
+  number,
+  number,
+])[])[] = [
   [
     [0, 86, 0.4],
     [0.5, 85, 0.25],
@@ -204,19 +210,19 @@ const ANSWER: readonly (readonly (readonly [number, number, number])[])[] = [
     [2.5, 90, 1.4],
   ],
 ];
-const RIFF_CHORUS = [
+export const RIFF_CHORUS = [
   "3.4.5.3.4.5.6.4.",
   "5.6.7.5.6.7.8.6.",
   "3.4.5.3.4.5.6.4.",
   "8.7.6.5.7.6.5.4.",
 ];
-const RIFF_POST = [
+export const RIFF_POST = [
   "34567.5.4.3.4.5.",
   "56789.7.6.5.6.7.",
   "34567.5.4.3.4.5.",
   "9.8.7.6.8.7.6.5-",
 ];
-const RIFF_POST2 = [
+export const RIFF_POST2 = [
   "3.53.64.5.75.86.",
   "4.64.75.6.86.97.",
   "3.53.64.5.75.86.",
@@ -224,39 +230,39 @@ const RIFF_POST2 = [
 ];
 // Choruses hold the stabs back for their first four bars, so each one
 // climbs into its drop.
-const STABS = [
+export const STABS = [
   "8.....7...8..7..",
   "..8..7..8.....7.",
   "8.....7...8..7..",
   "8..7..8..7..8.7.",
 ];
-const STABS_POST = [
+export const STABS_POST = [
   "8..7..8...7..8..",
   ".8.7..8...8..7..",
   "8..7..8...7..8..",
   "8..7..8.7.8..7.8",
 ];
-const BELLS = [
+export const BELLS = [
   "7...6...5.......",
   "8.....6.....5...",
   "7...6...5.......",
   "8...7...6...5...",
 ];
-const BELLS_VERSE = [
+export const BELLS_VERSE = [
   "5.......4.......",
   "........6...5...",
   "5.......4.......",
   "4...3...2...1...",
 ];
-const ARP_16 = ["0246024602460246", "6420642064206420"];
-const ARP_SKIP = ["0.24.6.0.24.6.4.", "6.42.0.6.42.0.2."];
+export const ARP_16 = ["0246024602460246", "6420642064206420"];
+export const ARP_SKIP = ["0.24.6.0.24.6.4.", "6.42.0.6.42.0.2."];
 
 // Bass lines (`bassLine` steps): held and gliding under the verses, an
 // offbeat octave pump under the choruses and blooms.
-const LINE_VERSE = ["0-------....2~0.", "0.......0...1~0."];
-const LINE_CHORUS = ["0.2~..2~0...2~.2", "0.2...2~0...1.2~"];
-const LINE_BLOOM = ["..2.0.2~0..2.0.2", "..2.0.2...2.1~2~"];
-const LINE_BLOOM2 = ["0.2..20.2~0.2.3~", "2.0..20.1.2.5~2~"];
+export const LINE_VERSE = ["0-------....2~0.", "0.......0...1~0."];
+export const LINE_CHORUS = ["0.2~..2~0...2~.2", "0.2...2~0...1.2~"];
+export const LINE_BLOOM = ["..2.0.2~0..2.0.2", "..2.0.2...2.1~2~"];
+export const LINE_BLOOM2 = ["0.2..20.2~0.2.3~", "2.0..20.1.2.5~2~"];
 
 const CHORUS_LINES: SongSection["lines"] = [
   "ch1",
@@ -269,7 +275,7 @@ const CHORUS_LINES: SongSection["lines"] = [
   null,
 ];
 
-const SECTIONS: readonly SongSection[] = [
+export const SECTIONS: readonly SongSection[] = [
   {
     kind: "intro",
     name: "Seed",
@@ -434,6 +440,58 @@ const SECTIONS: readonly SongSection[] = [
     bells: ["7...6...5.......", null],
   },
 ];
+/** The kit's levels and patch changes for this song (bpm aside). */
+export const KIT: Omit<KitOptions, "bpm"> = {
+  levels: {
+    bells: 0.2,
+    saw: 0.16,
+    arp: 0.18,
+    chops: 0.8,
+    vgrain: 0.32,
+    sing: 0.35,
+    harm: 0.26,
+  },
+  extra: {
+    // Glassy: a high formant and plenty of air.
+    sing: {
+      sing: {
+        preset: "aah",
+        voice: "soprano",
+        formant: 3,
+        bright: 0.78,
+        articulate: 1,
+        breath: 0.09,
+        jitter: 0.22,
+        vib: 5.8,
+        vibmod: 0.15,
+        vibdelay: 0.3,
+        ring: 0.36,
+      },
+      // Close and present, with a plate behind it. With the book's own
+      // duck this dips the bed on orbit 2 about 4 dB while a line sings.
+      fx: {
+        crush: { bits: 16, coarse: 1, mix: 0 },
+        eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 10000 },
+        compressor: {
+          threshold: -20,
+          ratio: 3,
+          attack: 0.006,
+          release: 0.12,
+          makeup: 2,
+        },
+        duck: {
+          orbit: 2,
+          depth: 0.2,
+          attack: 0.5,
+          onset: 0.06,
+          hold: true,
+        },
+      },
+      reverb: { mix: 0.22, size: 0.7, fade: 2.6, lowpass: 10000 },
+    },
+  },
+};
+
 const BARS = SECTIONS.reduce((n, s) => n + s.bars, 0);
 
 export const glassGarden: DemoDefinition = {
@@ -469,57 +527,7 @@ export const glassGarden: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    kitTracks(s, BOOK, {
-      bpm: BPM,
-      levels: {
-        bells: 0.2,
-        saw: 0.16,
-        arp: 0.18,
-        chops: 0.8,
-        vgrain: 0.32,
-        sing: 0.35,
-        harm: 0.26,
-      },
-      extra: {
-        // Glassy: a high formant and plenty of air.
-        sing: {
-          sing: {
-            preset: "aah",
-            voice: "soprano",
-            formant: 3,
-            bright: 0.78,
-            articulate: 1,
-            breath: 0.09,
-            jitter: 0.22,
-            vib: 5.8,
-            vibmod: 0.15,
-            vibdelay: 0.3,
-            ring: 0.36,
-          },
-          // Close and present, with a plate behind it. With the book's own
-          // duck this dips the bed on orbit 2 about 4 dB while a line sings.
-          fx: {
-            crush: { bits: 16, coarse: 1, mix: 0 },
-            eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 10000 },
-            compressor: {
-              threshold: -20,
-              ratio: 3,
-              attack: 0.006,
-              release: 0.12,
-              makeup: 2,
-            },
-            duck: {
-              orbit: 2,
-              depth: 0.2,
-              attack: 0.5,
-              onset: 0.06,
-              hold: true,
-            },
-          },
-          reverb: { mix: 0.22, size: 0.7, fade: 2.6, lowpass: 10000 },
-        },
-      },
-    });
+    kitTracks(s, BOOK, { bpm: BPM, ...KIT });
     const song = writeSong(s, { book: BOOK, scale: SCALE, sections: SECTIONS });
     const { at } = song;
 

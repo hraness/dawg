@@ -120,7 +120,7 @@ export type ChatStreamEvent =
 
 export type GatewayClient = {
   /** Which service this client talks to. */
-  readonly provider?: ApiProvider;
+  readonly provider?: ApiProvider | "local";
   /** The provider model ID that a turn will use (for diagnostics only). */
   modelId(model: string): string;
   stream(
@@ -211,12 +211,35 @@ export function createGatewayClient(
   });
 }
 
+/**
+ * The streaming client for a local llama.cpp server: no key, the model alias
+ * passed through as is, and longer budgets, since a local model loads and
+ * reads a long prompt before its first byte.
+ */
+export function createLocalApiClient(
+  options: ApiClientOptions & { baseUrl: string },
+): GatewayClient {
+  return createApiClient("local", {
+    headerTimeoutMs: 240_000,
+    firstByteTimeoutMs: 240_000,
+    ...options,
+  });
+}
+
 function createApiClient(
-  provider: ApiProvider,
+  provider: ApiProvider | "local",
   options: ApiClientOptions,
 ): GatewayClient {
   const fetcher = options.fetcher ?? fetch;
-  const name = provider === "openrouter" ? "OpenRouter" : "AI Gateway";
+  const local = provider === "local";
+  const name =
+    provider === "openrouter"
+      ? "OpenRouter"
+      : local
+        ? "Local model"
+        : "AI Gateway";
+  // Model ids are checked against the key-based provider's id shape.
+  const api: ApiProvider = provider === "openrouter" ? "openrouter" : "gateway";
   const baseUrl = (options.baseUrl ?? GATEWAY_BASE_URL).replace(/\/$/, "");
   const apiKey = options.apiKey;
   const retries = options.retry?.retries ?? GATEWAY_RETRIES;
@@ -236,18 +259,20 @@ function createApiClient(
 
   return {
     provider,
-    modelId: (model) => resolveModelId(model, overrides, provider),
+    modelId: (model) => (local ? model : resolveModelId(model, overrides, api)),
     async *stream(request, signal) {
-      const primary =
-        request.modelId !== undefined
-          ? checkedModelId(request.modelId, provider)
-          : resolveModelId(request.model, overrides, provider);
+      const primary = local
+        ? (request.modelId ?? request.model)
+        : request.modelId !== undefined
+          ? checkedModelId(request.modelId, api)
+          : resolveModelId(request.model, overrides, api);
       const fallback =
+        !local &&
         request.fallbackModelId !== undefined &&
         request.fallbackModelId !== primary
-          ? checkedModelId(request.fallbackModelId, provider)
+          ? checkedModelId(request.fallbackModelId, api)
           : undefined;
-      if (!apiKey)
+      if (!apiKey && !local)
         throw new GatewayError(
           provider === "openrouter"
             ? "no OpenRouter key; run `dawg model key openrouter` or set OPENROUTER_API_KEY"
@@ -256,7 +281,7 @@ function createApiClient(
       const encodeFor = (model: string): string => {
         const body: Record<string, unknown> = {
           model,
-          messages: withPromptCache(provider, model, request.messages),
+          messages: withPromptCache(api, model, request.messages),
           stream: true,
           // The final chunk then carries token usage (and OpenRouter's cost).
           stream_options: { include_usage: true },
@@ -264,7 +289,8 @@ function createApiClient(
         if (provider === "openrouter") body.usage = { include: true };
         // The Gateway adds Anthropic cache breakpoints itself when asked; it
         // documents the option as a no-op for implicitly caching providers.
-        else body.providerOptions = { gateway: { caching: "auto" } };
+        else if (!local)
+          body.providerOptions = { gateway: { caching: "auto" } };
         if (request.tools && request.tools.length > 0) {
           body.tools = request.tools;
           body.tool_choice = "auto";
@@ -315,7 +341,7 @@ function createApiClient(
         const init: RequestInit = {
           method: "POST",
           headers: {
-            authorization: `Bearer ${apiKey}`,
+            ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
             "content-type": "application/json",
             accept: "text/event-stream",
             ...(provider === "openrouter" ? OPENROUTER_HEADERS : {}),

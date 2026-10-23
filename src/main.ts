@@ -640,10 +640,12 @@ Usage:
   dawg sessions
   dawg history [filters] [--json] [--follow]  edits and comments (--help)
   ${wrapUsage(RENDER_USAGE.replace(/^usage: /, ""), 76, "               ")}
+  dawg make "<brief>"  a hyperpop song from the local model (--help)
   dawg init [dir]      song.ts, tracks/<slug>/track.ts and .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg docs --agent [page]  agent docs: tool reference, recipes (--help)
-  dawg <command> --help  sessions history render init check docs media model
+  dawg <command> --help  sessions history render make init check docs media
+                       model
   dawg doctor          audio backend, native sink and devices
   dawg dev [options]   the editor in dev mode: log rows in history (--dev)
   dawg dev screen [A]  print a dev-mode pane's last frame as text
@@ -789,6 +791,20 @@ if (process.argv[2] === "docs") {
       process.cwd(),
       stdout,
       process.stderr,
+    ),
+  );
+}
+if (process.argv[2] === "make") {
+  const { runMakeCommand } = await import("./make.ts");
+  const abort = new AbortController();
+  process.once("SIGINT", () => abort.abort());
+  process.exit(
+    await runMakeCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
+      abort.signal,
     ),
   );
 }

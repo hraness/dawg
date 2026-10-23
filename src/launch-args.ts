@@ -14,6 +14,7 @@ export const SUBCOMMANDS: readonly string[] = [
   "model",
   "sessions",
   "render",
+  "make",
   "init",
   "check",
   "media",

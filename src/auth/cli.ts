@@ -155,6 +155,7 @@ export function parseLoginArgs(
     };
     if ((LOGIN_OPTIONS as readonly string[]).includes(arg))
       target = arg as LoginTarget;
+    else if (arg === "local" || arg === "--local") target = "local";
     else if (arg === "--gateway") target = "gateway";
     else if (arg === "--openrouter") target = "openrouter";
     else if (arg === "--xcb") target = "xcb";
