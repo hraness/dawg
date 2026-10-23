@@ -2,6 +2,24 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.31.0
+
+### Added
+
+- **`dawg make "<brief>"` writes a new hyperpop song with a local model.** The model fills in a song sheet: key, palette, progressions, and sung lines as scale-degree notes with syllables. The sheet also has a lead hook and sections that name library patterns, drums and layers. A critic scores each sheet and sends plain-language fixes back, up to three rounds, until one scores 90. dawg then compiles the sheet through the same hyperpop kit, mix and vocal production as Redline and Glass Garden: vocoder, backing harmonies, drop chants, glitch answers, throws and automation. A harmony guard stops any sheet from holding a semitone rub on a strong beat. `--wav` renders the result, `--sheet` keeps the sheet, and `--from <sheet.json>` compiles a sheet without a model. See [docs/distill.md](./docs/distill.md).
+- **The distill framework** (`core/distill/hyperpop/`). Hand-polished demos are distilled into a playbook, a pattern library, example sheets, a JSON schema and a critic, so a small model can write in the demos' style. Adding a demo to `DEMO_SOURCES` makes it an example. `bun scripts/distill-eval.ts` runs briefs against the local model and reports each round.
+- **Agent tools `song_guide` and `write_song`.** Any model can read the playbook and replace the song with a compiled sheet in one undoable edit. The tools report the critic's score and notes.
+- **A local model provider.** dawg finds a Gemma 4 GGUF in `~/.cache/dawg/models`, `~/.cache/sponge-llm` or `~/.lmstudio/models` and `llama-server` on PATH. It starts the server on a loopback port on the first request and stops it on exit. `dawg model key local` selects it. `DAWG_LOCAL_MODEL`, `DAWG_LLAMA_SERVER`, `DAWG_LOCAL_BASE_URL` and `DAWG_LOCAL_ALIAS` override the defaults.
+
+### Changed
+
+- **AI generation defaults to the local model.** When a local model is installed, `auto` provider selection uses it ahead of any saved key or subscription. A saved provider choice still wins.
+- **The demo shelf is hyperpop only for now: Candy Fault, Redline and Glass Garden.** Other styles will come back later, layered onto the same distill framework.
+
+### Removed
+
+- **Six demos:** Amber Room, Coil Driver, Copper Wire, Low Tide, Signal Bloom and Velvet Circuit. Their samples stay in the library.
+
 ## 0.30.0
 
 ### Changed

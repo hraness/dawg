@@ -5,7 +5,7 @@
  * chord tones, a backing singer shadows the chorus a chord tone under, and the
  * syllables run as delayed ostinatos between the lines. No key change.
  */
-import type { NoteInput } from "../score.ts";
+import type { NoteInput, TrackInput } from "../score.ts";
 import { Composer, voice } from "./build.ts";
 import {
   dropout,
@@ -24,11 +24,12 @@ import {
   type Book,
   type Chord,
   type Part,
+  type KitOptions,
   type SongSection,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
-const BPM = 172;
+export const BPM = 172;
 // The book's half-time rhythms (scripts/vox/songs.py E1, E2, Q4, Q5).
 const E1 = [0, 0.5, 1, 1.5, 2, 3];
 const E1L = [0.45, 0.45, 0.45, 0.45, 0.9, 0.9];
@@ -39,7 +40,7 @@ const Q4L = [0.45, 0.45, 0.9, 1.8];
 const Q5 = [0, 0.5, 1, 1.5, 2];
 const Q5L = [0.45, 0.45, 0.45, 0.45, 1.8];
 
-const BOOK: Book = {
+export const BOOK: Book = {
   sample: "redline-vox",
   root: 68,
   syllables: ["red", "line", "go", "up", "hey", "oh"],
@@ -100,7 +101,7 @@ const BOOK: Book = {
   },
 };
 // F minor: F G Ab Bb C Db Eb.
-const SCALE = [0, 1, 3, 5, 7, 8, 10];
+export const SCALE = [0, 1, 3, 5, 7, 8, 10];
 
 const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
 // Every voicing shares Ab and Eb, so the bed barely moves while the bass
@@ -109,78 +110,79 @@ const Fm = c(41, 56, 60, 63, 65);
 const Db = c(37, 56, 61, 63, 65);
 const Ab = c(44, 56, 60, 63, 70);
 const Eb = c(39, 55, 58, 63, 65);
-const VERSE = [Fm, Ab, Eb, Db];
-const PRE = [Db, Eb];
-const CHORUS = [Fm, Db, Ab, Eb];
+export const VERSE = [Fm, Ab, Eb, Db];
+export const PRE = [Db, Eb];
+export const CHORUS = [Fm, Db, Ab, Eb];
 
 // The drop hook on the vowel lead, doubled an octave down by the looped
 // voice: 3-3-2 into each bar, chord tones on every strong beat.
-const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
+export const HOOK: readonly (readonly (readonly [number, number, number])[])[] =
   [
-    [0, 77, 0.5],
-    [0.75, 80, 0.5],
-    [1.5, 84, 0.4],
-    [2, 82, 0.25],
-    [2.5, 80, 0.5],
-    [3, 77, 0.4],
-    [3.5, 75, 0.4],
-  ],
-  [
-    [0, 77, 0.5],
-    [0.75, 80, 0.5],
-    [1.5, 85, 0.4],
-    [2, 82, 0.25],
-    [2.5, 80, 0.5],
-    [3, 77, 0.9],
-  ],
-  [
-    [0, 75, 0.5],
-    [0.75, 80, 0.5],
-    [1.5, 84, 0.4],
-    [2, 82, 0.25],
-    [2.5, 80, 0.5],
-    [3, 75, 0.4],
-    [3.5, 72, 0.4],
-  ],
-  [
-    [0, 75, 1],
-    [1.5, 79, 0.5],
-    [2, 82, 0.5],
-    [2.75, 79, 1.1],
-  ],
-];
+    [
+      [0, 77, 0.5],
+      [0.75, 80, 0.5],
+      [1.5, 84, 0.4],
+      [2, 82, 0.25],
+      [2.5, 80, 0.5],
+      [3, 77, 0.4],
+      [3.5, 75, 0.4],
+    ],
+    [
+      [0, 77, 0.5],
+      [0.75, 80, 0.5],
+      [1.5, 85, 0.4],
+      [2, 82, 0.25],
+      [2.5, 80, 0.5],
+      [3, 77, 0.9],
+    ],
+    [
+      [0, 75, 0.5],
+      [0.75, 80, 0.5],
+      [1.5, 84, 0.4],
+      [2, 82, 0.25],
+      [2.5, 80, 0.5],
+      [3, 75, 0.4],
+      [3.5, 72, 0.4],
+    ],
+    [
+      [0, 75, 1],
+      [1.5, 79, 0.5],
+      [2, 82, 0.5],
+      [2.75, 79, 1.1],
+    ],
+  ];
 
 // Vocal ostinatos: the syllables arpeggiate the chord in eighths between
 // the verse lines, then lock into 3-3-2 riffs in the drops.
-const RIFF_INTRO = ["0.2.4.2.0.2.4.2.", "0.2.4.2.5.4.2.4."];
-const RIFF_VERSE = ["0.2.4.2.5.4.2.4.", "0.2.4.2.5.4.6.5."];
-const RIFF_CHORUS = ["6.5.4.5.6.5.4.2.", "6.5.4.5.7.6.5.4."];
-const RIFF_DROP = [
+export const RIFF_INTRO = ["0.2.4.2.0.2.4.2.", "0.2.4.2.5.4.2.4."];
+export const RIFF_VERSE = ["0.2.4.2.5.4.2.4.", "0.2.4.2.5.4.6.5."];
+export const RIFF_CHORUS = ["6.5.4.5.6.5.4.2.", "6.5.4.5.7.6.5.4."];
+export const RIFF_DROP = [
   "44.4..6.55.5..4.",
   "4..44.5.6..55.4.",
   "44.4..6.55.5.66.",
   "6.6.5.5.4.4.2.2.",
 ];
-const RIFF_DROP2 = [
+export const RIFF_DROP2 = [
   "4.44.46.5.55.54.",
   "4.44.45.6.65.54.",
   "4.44.46.5.55.566",
   "6.5.4.2.6.5.4.24",
 ];
-const ARP_8 = ["0.1.2.3.2.1.2.3.", "0.1.2.3.4.3.2.1."];
+export const ARP_8 = ["0.1.2.3.2.1.2.3.", "0.1.2.3.4.3.2.1."];
 // The chorus arp on its top rungs, above the singer.
-const ARP_HI = ["5.6.7.8.7.6.7.8.", "5.6.7.8.9.8.7.6."];
-const ARP_16 = ["0123432101234321", "0123454321234543"];
-const BELLS = ["6.......4.......", "5.......3...4..."];
-const STABS = ["8.....8...8.....", "8.....8...8...7."];
-const STABS_DROP = ["8..8..8...8.....", "8..8..8...8...7."];
+export const ARP_HI = ["5.6.7.8.7.6.7.8.", "5.6.7.8.9.8.7.6."];
+export const ARP_16 = ["0123432101234321", "0123454321234543"];
+export const BELLS = ["6.......4.......", "5.......3...4..."];
+export const STABS = ["8.....8...8.....", "8.....8...8...7."];
+export const STABS_DROP = ["8..8..8...8.....", "8..8..8...8...7."];
 // Bass steps: 0 root, 1 fifth, 2 octave, 3 octave fifth (all diatonic on
 // every root here); `~` glides into the next note.
-const LINE_INTRO = ["0---------------", "0-----------2~0-"];
-const LINE_VERSE = ["0-----0---0-----", "0-----0---2~0---"];
-const LINE_CHORUS = ["0-------0-----2~", "0-----1-2-----0-"];
-const LINE_DROP = ["0--0----2~0---1-", "0--0--2~0---2-1-"];
-const LINE_DROP2 = ["0-20--0-2~0-1-2-", "0--0-2-0-3~2-1-0"];
+export const LINE_INTRO = ["0---------------", "0-----------2~0-"];
+export const LINE_VERSE = ["0-----0---0-----", "0-----0---2~0---"];
+export const LINE_CHORUS = ["0-------0-----2~", "0-----1-2-----0-"];
+export const LINE_DROP = ["0--0----2~0---1-", "0--0--2~0---2-1-"];
+export const LINE_DROP2 = ["0-20--0-2~0-1-2-", "0--0-2-0-3~2-1-0"];
 
 const VOICED = (a: Part, b: Part, c2: Part, d: Part): SongSection["lines"] => [
   a,
@@ -192,9 +194,9 @@ const VOICED = (a: Part, b: Part, c2: Part, d: Part): SongSection["lines"] => [
   d,
   null,
 ];
-const CHORUS_LINES = VOICED("ch1", "ch2", "ch1", "ch3");
+export const CHORUS_LINES = VOICED("ch1", "ch2", "ch1", "ch3");
 
-const SECTIONS: readonly SongSection[] = [
+export const SECTIONS: readonly SongSection[] = [
   {
     // The hook heard first through the vocoder over a drumless bed, then
     // the half-step beat rolls in under the ostinato.
@@ -377,6 +379,148 @@ const SECTIONS: readonly SongSection[] = [
     bells: BELLS,
   },
 ];
+/**
+ * The vocoder: a voice (the recorded words, or any sung track) shapes a wide
+ * supersaw that plays the melody and two chord tones under it.
+ */
+export const vocoderTrack = (src = "vox"): TrackInput =>
+  voice("voc", "Vocoder stack", "vocoder", 0.5, {
+    vocoder: {
+      src,
+      preset: "classic",
+      follow: "notes",
+      carrier: "supersaw",
+      bands: 20,
+      spread: 0.2,
+      release: 0.07,
+      unvoiced: 0.35,
+    },
+    filter: { type: "hpf", cutoff: 240, resonance: 0 },
+    fx: {
+      chorus: { rate: 0.5, depth: 0.5, mix: 0.4 },
+      double: { time: 14, drift: 1.5, width: 0.9 },
+      eq: { mid: -2, midfreq: 500, high: 2, highfreq: 7000 },
+    },
+    delay: { beats: 0.75, feedback: 0.3, mix: 0.12, pingpong: true },
+    reverb: { mix: 0.22, size: 0.75, fade: 2.8, lowpass: 8000 },
+  });
+
+/** The kit's levels and patch changes for this song (bpm aside). */
+export const KIT: Omit<KitOptions, "bpm"> = {
+  hats: "syn909",
+  levels: {
+    kick: 0.5,
+    snare: 0.54,
+    hats: 0.13,
+    sub: 0.42,
+    saw: 0.19,
+    pad: 0.3,
+    stabs: 0.4,
+    arp: 0.24,
+    bells: 0.15,
+    lead: 0.2,
+    vox: 1,
+    sing: 0.22,
+    harm: 0.26,
+    dbl: 0.34,
+    chops: 1,
+    stut: 1,
+    vlead: 0.4,
+    vgrain: 0.28,
+  },
+  extra: {
+    // A clean sub: the reese carries the grit.
+    sub: {
+      synth: {
+        attack: 0.01,
+        decay: 0.4,
+        sustain: 0.95,
+        release: 0.1,
+        lpf: 700,
+      },
+      fx: {
+        orbit: { orbit: 2 },
+        distort: { type: "soft", drive: 2, mix: 0.3 },
+      },
+    },
+    saw: {
+      synth: {
+        attack: 0.004,
+        decay: 0.3,
+        sustain: 0.7,
+        release: 0.1,
+        unison: 5,
+        detune: 0.32,
+        spread: 0.6,
+        lpf: 700,
+        lpenv: 2,
+        lpdecay: 0.2,
+        lpsustain: 0.35,
+        lpq: 3,
+      },
+      humanize: { timing: 3, velocity: 5, seed: 41 },
+    },
+    // The kit's driven snare with its fizz shelved off: a crack, not a hiss.
+    snare: {
+      fx: {
+        distort: { type: "soft", drive: 2.6, tone: 5200, mix: 0.45 },
+        compressor: {
+          threshold: -16,
+          ratio: 3,
+          attack: 0.003,
+          release: 0.09,
+          makeup: 3,
+        },
+        eq: { high: -4, highfreq: 8000 },
+      },
+      reverb: { mix: 0.12, size: 0.35, fade: 0.8 },
+      humanize: { timing: 2, velocity: 4, seed: 31 },
+    },
+    // The words, close and bright, with a plate behind them.
+    vox: {
+      fx: {
+        eq: { mid: 3, midfreq: 3000, high: 5, highfreq: 8000 },
+        compressor: {
+          threshold: -24,
+          ratio: 4,
+          attack: 0.004,
+          release: 0.1,
+          makeup: 8,
+        },
+        // A deeper pocket than the kit's: the bed sits about 4 dB
+        // lower while a line sings.
+        duck: {
+          orbit: 2,
+          depth: 0.4,
+          attack: 0.5,
+          onset: 0.06,
+          hold: true,
+        },
+      },
+      reverb: { mix: 0.14, size: 0.55, fade: 1.8, lowpass: 12000 },
+    },
+    // The synth singer as a high, breathy sheen over the words.
+    sing: {
+      pan: -0.1,
+      sing: {
+        preset: "aah",
+        voice: "soprano",
+        formant: 3,
+        bright: 0.66,
+        articulate: 1,
+        breath: 0.14,
+        jitter: 0.2,
+        vib: 5.6,
+        vibmod: 0.12,
+        vibdelay: 0.3,
+        ring: 0.3,
+      },
+      reverb: { mix: 0.24, size: 0.7, fade: 2.6, lowpass: 9000 },
+    },
+    harm: { pan: 0.32 },
+  },
+};
+
 const BARS = SECTIONS.reduce((n, s) => n + s.bars, 0);
 const START = (name: string) => {
   let bar = 0;
@@ -431,145 +575,10 @@ export const redline: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    kitTracks(s, BOOK, {
-      bpm: BPM,
-      hats: "syn909",
-      levels: {
-        kick: 0.5,
-        snare: 0.54,
-        hats: 0.13,
-        sub: 0.42,
-        saw: 0.19,
-        pad: 0.3,
-        stabs: 0.4,
-        arp: 0.24,
-        bells: 0.15,
-        lead: 0.2,
-        vox: 1,
-        sing: 0.22,
-        harm: 0.26,
-        dbl: 0.34,
-        chops: 1,
-        stut: 1,
-        vlead: 0.4,
-        vgrain: 0.28,
-      },
-      extra: {
-        // A clean sub: the reese carries the grit.
-        sub: {
-          synth: {
-            attack: 0.01,
-            decay: 0.4,
-            sustain: 0.95,
-            release: 0.1,
-            lpf: 700,
-          },
-          fx: {
-            orbit: { orbit: 2 },
-            distort: { type: "soft", drive: 2, mix: 0.3 },
-          },
-        },
-        saw: {
-          synth: {
-            attack: 0.004,
-            decay: 0.3,
-            sustain: 0.7,
-            release: 0.1,
-            unison: 5,
-            detune: 0.32,
-            spread: 0.6,
-            lpf: 700,
-            lpenv: 2,
-            lpdecay: 0.2,
-            lpsustain: 0.35,
-            lpq: 3,
-          },
-          humanize: { timing: 3, velocity: 5, seed: 41 },
-        },
-        // The kit's driven snare with its fizz shelved off: a crack, not a hiss.
-        snare: {
-          fx: {
-            distort: { type: "soft", drive: 2.6, tone: 5200, mix: 0.45 },
-            compressor: {
-              threshold: -16,
-              ratio: 3,
-              attack: 0.003,
-              release: 0.09,
-              makeup: 3,
-            },
-            eq: { high: -4, highfreq: 8000 },
-          },
-          reverb: { mix: 0.12, size: 0.35, fade: 0.8 },
-          humanize: { timing: 2, velocity: 4, seed: 31 },
-        },
-        // The words, close and bright, with a plate behind them.
-        vox: {
-          fx: {
-            eq: { mid: 3, midfreq: 3000, high: 5, highfreq: 8000 },
-            compressor: {
-              threshold: -24,
-              ratio: 4,
-              attack: 0.004,
-              release: 0.1,
-              makeup: 8,
-            },
-            // A deeper pocket than the kit's: the bed sits about 4 dB
-            // lower while a line sings.
-            duck: {
-              orbit: 2,
-              depth: 0.4,
-              attack: 0.5,
-              onset: 0.06,
-              hold: true,
-            },
-          },
-          reverb: { mix: 0.14, size: 0.55, fade: 1.8, lowpass: 12000 },
-        },
-        // The synth singer as a high, breathy sheen over the words.
-        sing: {
-          pan: -0.1,
-          sing: {
-            preset: "aah",
-            voice: "soprano",
-            formant: 3,
-            bright: 0.66,
-            articulate: 1,
-            breath: 0.14,
-            jitter: 0.2,
-            vib: 5.6,
-            vibmod: 0.12,
-            vibdelay: 0.3,
-            ring: 0.3,
-          },
-          reverb: { mix: 0.24, size: 0.7, fade: 2.6, lowpass: 9000 },
-        },
-        harm: { pan: 0.32 },
-      },
-    });
+    kitTracks(s, BOOK, { bpm: BPM, ...KIT });
     // The vocoder: the recorded words shape a wide supersaw that plays the
     // melody and two chord tones under it.
-    s.track(
-      voice("voc", "Vocoder stack", "vocoder", 0.5, {
-        vocoder: {
-          src: "vox",
-          preset: "classic",
-          follow: "notes",
-          carrier: "supersaw",
-          bands: 20,
-          spread: 0.2,
-          release: 0.07,
-          unvoiced: 0.35,
-        },
-        filter: { type: "hpf", cutoff: 240, resonance: 0 },
-        fx: {
-          chorus: { rate: 0.5, depth: 0.5, mix: 0.4 },
-          double: { time: 14, drift: 1.5, width: 0.9 },
-          eq: { mid: -2, midfreq: 500, high: 2, highfreq: 7000 },
-        },
-        delay: { beats: 0.75, feedback: 0.3, mix: 0.12, pingpong: true },
-        reverb: { mix: 0.22, size: 0.75, fade: 2.8, lowpass: 8000 },
-      }),
-    );
+    s.track(vocoderTrack());
     const song = writeSong(s, { book: BOOK, scale: SCALE, sections: SECTIONS });
     const { at } = song;
 

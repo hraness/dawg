@@ -24,6 +24,7 @@ import {
 } from "./agent.ts";
 import {
   createGatewayClient,
+  createLocalApiClient,
   createOpenRouterClient,
   type ApiProvider,
   type GatewayClient,
@@ -37,6 +38,13 @@ import {
   FAST_MODEL_ALIAS,
 } from "./models.ts";
 import { runTextAgentTurn } from "./xcb-agent.ts";
+import {
+  ensureLocalServer,
+  findLocalModel,
+  isLocalModel,
+  LOCAL_MODEL_ID,
+  type LocalModel,
+} from "./local.ts";
 import { AGENT_TOOLS } from "./tools.ts";
 import { SUBAGENT_LIMITS } from "./subagent-tasks.ts";
 import type { SubagentHost } from "./agent.ts";
@@ -76,8 +84,17 @@ export type XcbSelection = Readonly<{
   /** xcb admits this account on its first call, which takes longer. */
   admissionPending?: boolean;
 }>;
+/** A GGUF on this machine served by llama.cpp; no key, no network. */
+export type LocalSelection = Readonly<{
+  kind: "local";
+  choice: ProviderChoice;
+  model: LocalModel;
+  /** `local/<alias>`, the id the agent loop sends. */
+  modelId: string;
+}>;
 export type ProviderSelection =
   | ApiSelection
+  | LocalSelection
   | XcbSelection
   | Readonly<{
       kind: "offline";
@@ -100,6 +117,30 @@ export const LOGIN_HINT = "run `dawg model key` to enable the agent";
 /** The small, cheap model used for one-line helpers such as session names. */
 export const GATEWAY_SMALL_MODEL = "anthropic/claude-haiku-4.5";
 export const OPENROUTER_SMALL_MODEL = "anthropic/claude-haiku-4.5";
+
+/** A streaming client for the local server, started on the first request. */
+export function localClient(selection: LocalSelection): GatewayClient {
+  return {
+    provider: "local",
+    modelId: () => selection.model.alias,
+    async *stream(request, signal) {
+      const baseUrl = await ensureLocalServer(selection.model, signal);
+      yield* createLocalApiClient({ baseUrl }).stream(
+        { ...request, model: selection.model.alias, modelId: undefined },
+        signal,
+      );
+    },
+  };
+}
+
+/** The client for any streaming selection: a key-based API or the local model. */
+export function streamClient(
+  selection: ApiSelection | LocalSelection,
+): GatewayClient {
+  return selection.kind === "local"
+    ? localClient(selection)
+    : apiClient(selection);
+}
 
 export function apiClient(selection: ApiSelection): GatewayClient {
   return selection.kind === "openrouter"
@@ -149,8 +190,9 @@ const FAMILY_NAMES: Readonly<Record<string, string>> = Object.freeze({
 
 /**
  * Resolve the provider: `DAWG_PROVIDER`, then the choice saved by `dawg
- * login` or `/model`, then `auto` (AI Gateway key, then OpenRouter key, then
- * a ready Codex or Claude subscription). A saved choice that stops working
+ * login` or `/model`, then `auto` (the local model when one is installed,
+ * then an AI Gateway key, then an OpenRouter key, then a ready Codex or
+ * Claude subscription). A saved choice that stops working
  * resolves to `offline` with `invalidSaved`; it never falls through to a
  * different provider.
  */
@@ -169,6 +211,12 @@ export async function selectProvider(
       ? { invalidSaved: true }
       : {}),
   });
+  if (choice === "local" || choice === "auto") {
+    const local = findLocalModel(auth.env);
+    if (isLocalModel(local))
+      return { kind: "local", choice, model: local, modelId: LOCAL_MODEL_ID };
+    if (choice === "local") return offline(local.reason);
+  }
   for (const service of ["gateway", "openrouter"] as const) {
     if (choice !== service && choice !== "auto") continue;
     const key =
@@ -305,7 +353,7 @@ export function providerFingerprint(
   // Presence only: a process's environment cannot change under it, and the
   // fingerprint must never carry secret material.
   parts.push(
-    `env:${env.DAWG_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}:${env.OPENROUTER_API_KEY ? 1 : 0}`,
+    `env:${env.DAWG_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}:${env.OPENROUTER_API_KEY ? 1 : 0}:${env.DAWG_LOCAL_MODEL ? 1 : 0}:${env.DAWG_LOCAL_BASE_URL ? 1 : 0}`,
   );
   return parts.join("|");
 }
@@ -314,6 +362,7 @@ export function providerFingerprint(
 export function providerLabel(selection: ProviderSelection): string {
   if (isApiSelection(selection))
     return `${modelAlias(selection.kind, selection.modelId)} · ${selection.kind}`;
+  if (selection.kind === "local") return `${selection.model.alias} · local`;
   if (selection.kind === "xcb")
     return `${shortModelLabel(selection.model)} · ${selection.family}`;
   return "offline";
@@ -325,6 +374,7 @@ export function selectionModel(
 ): string | undefined {
   if (isApiSelection(selection))
     return modelAlias(selection.kind, selection.modelId);
+  if (selection.kind === "local") return selection.model.alias;
   if (selection.kind === "xcb") return shortModelLabel(selection.model);
   return undefined;
 }
@@ -356,13 +406,21 @@ export function subagentHostFor(
   selection: ProviderSelection,
   inject: Pick<ProviderTurnOptions, "gatewayClient" | "runner"> = {},
 ): SubagentHost | undefined {
-  if (selection.kind !== "xcb" && !isApiSelection(selection)) return undefined;
+  if (
+    selection.kind !== "xcb" &&
+    selection.kind !== "local" &&
+    !isApiSelection(selection)
+  )
+    return undefined;
   const api = isApiSelection(selection) ? selection : undefined;
   return {
+    // One local server serves one request at a time.
     concurrency:
-      selection.kind === "xcb"
-        ? SUBAGENT_LIMITS.xcbConcurrency
-        : SUBAGENT_LIMITS.concurrency,
+      selection.kind === "local"
+        ? 1
+        : selection.kind === "xcb"
+          ? SUBAGENT_LIMITS.xcbConcurrency
+          : SUBAGENT_LIMITS.concurrency,
     ...(api ? { model: FAST_MODEL_ALIAS } : {}),
     runTurn: (input) => {
       const model =
@@ -405,22 +463,25 @@ export async function runProviderTurn(
         }
       : {}),
   };
-  if (isApiSelection(selection)) {
+  if (isApiSelection(selection) || selection.kind === "local") {
     const model = options.model ?? selection.modelId;
-    const fallback = fallbackModelId(selection.kind, model);
+    const fallback =
+      selection.kind === "local"
+        ? undefined
+        : fallbackModelId(selection.kind, model);
     if (options.host.commands && !options.model && !options.toolNames)
       return runCommandAgentTurn({
         ...common,
         model,
         ...(fallback ? { fallbackModel: fallback } : {}),
-        client: options.gatewayClient ?? apiClient(selection),
+        client: options.gatewayClient ?? streamClient(selection),
         commands: options.host.commands,
       });
     return runAgentTurn({
       ...common,
       model,
       ...(fallback ? { fallbackModel: fallback } : {}),
-      client: options.gatewayClient ?? apiClient(selection),
+      client: options.gatewayClient ?? streamClient(selection),
     });
   }
   if (selection.kind === "xcb") {
@@ -484,16 +545,18 @@ export async function generateText(
     ? AbortSignal.any([options.signal, timeout])
     : timeout;
   const input = prompt.slice(0, 16_000);
-  if (isApiSelection(selection)) {
-    const client = options.gatewayClient ?? apiClient(selection);
+  if (isApiSelection(selection) || selection.kind === "local") {
+    const client = options.gatewayClient ?? streamClient(selection);
     let text = "";
     for await (const event of client.stream(
       {
         model: "opus-5.5",
         modelId:
-          selection.kind === "openrouter"
-            ? OPENROUTER_SMALL_MODEL
-            : GATEWAY_SMALL_MODEL,
+          selection.kind === "local"
+            ? selection.modelId
+            : selection.kind === "openrouter"
+              ? OPENROUTER_SMALL_MODEL
+              : GATEWAY_SMALL_MODEL,
         maxTokens,
         messages: [{ role: "user", content: input }],
         maxResponseBytes: 16 * 1024,

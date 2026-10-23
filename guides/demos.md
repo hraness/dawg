@@ -5,9 +5,9 @@ parent: arrange
 order: 0
 ---
 
-Nine complete, editable songs with original patterns and sounds. Every
-part works offline. Open a song's notes to explore its production.
-Three are hyperpop:
+Three complete, editable hyperpop songs with original patterns and
+sounds. Every part works offline. Open a song's notes to explore its
+production. More styles will return to the shelf later.
 
 - Candy Fault · an abstract synth singer over glitch breaks
 - Redline · F minor drum-and-bass, words over a classic vocoder
@@ -17,8 +17,8 @@ Redline and Glass Garden blend a synth singer with recorded words
 and play the vocal as an instrument: syllable riffs that answer each
 line, stutters on chord tones, reversed swells, a looped vowel doubling
 the lead and a grain cloud. `guide hyperpop` explains the techniques.
-The other six span garage, jungle, acid techno, neo soul, synth pop and
-trip hop.
+`dawg make "<brief>"` writes a new song in this style with the local
+model.
 
 ## Ask
 
@@ -26,7 +26,7 @@ trip hop.
 
 ## Type it yourself
 
-- `demo` opens the song shelf · `demo search techno`
+- `demo` opens the song shelf · `demo search drop`
 - `demo info glass-garden` explains its arrangement and mix
 - `demo glass-garden` loads the song and opens TAPE, paused
 - `sample library` browses the bundled sounds
@@ -58,6 +58,8 @@ whole-song replacement. The same original offline songs are available
 through demo commands. The studio pack is preinstalled: search_sounds
 finds it, use_sound adds a hash-pinned voice, and audio slices it.
 Keep the distinction between a whole demo song and a short style groove.
+To write a new hyperpop song, call song_guide for the playbook, then
+write_song with a sheet; read the critic notes it returns and revise.
 Read the production notes and inspect the score before explaining a
 feature. Do not describe these original patterns as recordings or copies
 of commercial songs, or synthetic machine voices as human singers.

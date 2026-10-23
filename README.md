@@ -97,12 +97,15 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. Nine editable songs span garage,
-jungle, acid techno, neo soul, synth pop, trip hop and hyperpop. Two
-hyperpop songs share one kit with full original vocals played as an
-instrument: syllable riffs, glitch stutters, reversals, a looped-vowel
-lead and a grain cloud, over syncopated stabs and changing beats. Each has production notes, named scenes, instruments,
-effects and automation; `guide hyperpop` explains the techniques.
+For a complete song, type `demo`. The shelf holds three editable
+hyperpop songs for now: Candy Fault, Redline and Glass Garden. They share
+one kit and play the vocal as an instrument, with syllable riffs, glitch
+stutters, reversals, a looped-vowel lead and a grain cloud, over
+syncopated stabs and changing beats. Each has production notes, named
+scenes, instruments, effects and automation; `guide hyperpop` explains
+the techniques. To write a new song in the same style, run
+`dawg make "<brief>"`. The local model writes a song sheet and dawg
+produces it (see [Distilled styles](./docs/distill.md)).
 `demo redline` loads one and opens TAPE; Space plays, Tab changes
 tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
@@ -114,10 +117,12 @@ riser. Preview a sound with `sample preview hold-on`, add it with
 to the agent. See [Demo songs](./guides/demos.md) and
 [Sample library](./guides/sample-library.md).
 
-To ask the agent, give it a model once with `dawg model key`: a key for
-Vercel AI Gateway or OpenRouter, or a Claude or ChatGPT/Codex subscription
-through [xcb](https://xcb.sh). Agent turns are billed by that account;
-everything else works offline.
+The agent runs on a local model by default. When a Gemma 4 GGUF and
+`llama-server` (`brew install llama.cpp`) are installed, dawg uses them
+offline and with no account. Otherwise, give it a model once with
+`dawg model key`: a key for Vercel AI Gateway or OpenRouter, or a Claude
+or ChatGPT/Codex subscription through [xcb](https://xcb.sh). Agent turns
+on those are billed by that account; everything else works offline.
 
 ## Four ways to do anything
 
@@ -148,17 +153,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.30.0/hraness-dawg-0.30.0.tgz"
+bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.31.0/hraness-dawg-0.31.0.tgz"
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.30.0 --repo hraness/dawg
+gh release download v0.31.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.30.0.tgz --repo hraness/dawg
-bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.30.0.tgz"
+gh attestation verify hraness-dawg-0.31.0.tgz --repo hraness/dawg
+bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.31.0.tgz"
 ```
 
 To run from source instead:
@@ -284,14 +289,15 @@ Nodes run in signal order (`◆` per voice, `●` once). `a` adds a node, `w` wi
 
 Run `dawg model key` (or just `dawg` the first time) to give the agent a model; `dawg login` is an alias. dawg looks for what is already on the machine, in parallel and with a 4 s cap, then shows one picker: ↑/↓ or a number, Enter to choose, Esc to cancel. The first detected option is the default, and when exactly one is ready it just asks `Use <it>? [Y/n]`.
 
-| Option                     | Detected from                                                        | Setup                                                                                                                                                                                                                          |
-| -------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Vercel AI Gateway          | `AI_GATEWAY_API_KEY`, a stored dawg key, `vercel whoami`             | With the Vercel CLI: `vercel login` in the browser if needed, then a key named `dawg-<hostname>` is created (`--budget <dollars>` sets its limit). Without it: opens the keys page and takes a pasted key (hidden input).      |
-| OpenRouter                 | `OPENROUTER_API_KEY`, a stored dawg key                              | OpenRouter's OAuth PKCE flow: dawg opens the browser on a one-time `127.0.0.1` callback, checks the state, exchanges the code for a key and verifies it (5 min timeout; the URL is printed too). `--key` pastes a key instead. |
-| ChatGPT/Codex subscription | [xcb](https://github.com/hraness/xcb) accounts with provider `codex` | Lists ready accounts and their models; runs `xcb setup codex` (in the browser) when none is ready.                                                                                                                             |
-| Claude subscription        | xcb accounts with provider `claude`                                  | Same, with `xcb setup claude`.                                                                                                                                                                                                 |
+| Option                     | Detected from                                                                                                          | Setup                                                                                                                                                                                                                          |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Local model (default)      | a Gemma 4 GGUF in `~/.cache/dawg/models` (also `~/.cache/sponge-llm`, `~/.lmstudio/models`) and `llama-server` on PATH | Nothing to set up: dawg starts `llama-server` on a loopback port on the first prompt and stops it on exit. `auto` selection uses it ahead of any key.                                                                          |
+| Vercel AI Gateway          | `AI_GATEWAY_API_KEY`, a stored dawg key, `vercel whoami`                                                               | With the Vercel CLI: `vercel login` in the browser if needed, then a key named `dawg-<hostname>` is created (`--budget <dollars>` sets its limit). Without it: opens the keys page and takes a pasted key (hidden input).      |
+| OpenRouter                 | `OPENROUTER_API_KEY`, a stored dawg key                                                                                | OpenRouter's OAuth PKCE flow: dawg opens the browser on a one-time `127.0.0.1` callback, checks the state, exchanges the code for a key and verifies it (5 min timeout; the URL is printed too). `--key` pastes a key instead. |
+| ChatGPT/Codex subscription | [xcb](https://github.com/hraness/xcb) accounts with provider `codex`                                                   | Lists ready accounts and their models; runs `xcb setup codex` (in the browser) when none is ready.                                                                                                                             |
+| Claude subscription        | xcb accounts with provider `claude`                                                                                    | Same, with `xcb setup claude`.                                                                                                                                                                                                 |
 
-- Shortcuts: `dawg model key gateway|openrouter|codex|claude` (`--account <id> --model <id>` for subscriptions), `dawg model key --xcb` for any xcb account, `dawg model key --key` to paste a gateway key.
+- Shortcuts: `dawg model key local|gateway|openrouter|codex|claude` (`--account <id> --model <id>` for subscriptions), `dawg model key --xcb` for any xcb account, `dawg model key --key` to paste a gateway key.
 - The choice sticks. dawg saves the provider, model and account in `~/.config/dawg/config.json` (0600, written atomically, never a key) and reuses it on every start and `dawg model key` without asking. `dawg model key <provider>`, `/model` and `dawg logout [provider]` change or clear it. If the saved provider stops working (revoked key, account gone), dawg says so once and opens the picker; it never switches providers on its own.
 - `model key` in the TUI suspends the screen, runs the same flow (browser and `vercel login` included) and redraws when done.
 - `dawg model` (or `/model` in the TUI) picks a model for the active provider, grouped as frontier, fast and open weights, with type-to-filter and an estimated cost per prompt (`~$0.004/prompt`) from [models.dev](https://models.dev) pricing (OpenRouter's own `/models` prices on OpenRouter); subscriptions show `included`. On the gateway and OpenRouter only tool-calling models are listed; for subscriptions the list is what xcb reports for the account. `/model opus-5.5` sets one directly, and any `vendor/model` ID the provider serves works too.
@@ -313,24 +319,26 @@ The agent can download a YouTube reference, split stems, analyze tempo and key, 
 
 ## Environment variables
 
-| Variable                                                      | Effect                                                                                                                                  |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `DAWG_AUDIO=0`                                                | no sound; the transport still runs (the one audio kill switch)                                                                          |
-| `DAWG_AUDIO_BACKEND=native\|ffplay\|sox\|afplay`              | force a player (`none` is still accepted and means the same as `DAWG_AUDIO=0`)                                                          |
-| `DAWG_AUDIO_DEVICE`, `DAWG_AUDIO_BUFFER`, `DAWG_PLAY_LEAD_MS` | native sink output device name, device buffer frames (128) and play-mode lead (15 ms; 60 ms on stdin players)                           |
-| `DAWG_SINK_LIB`                                               | load this native sink library instead of the verified prebuilt (development; no sha256 check)                                           |
-| `DAWG_AUDIO_PLAYER="cmd {rate} {channels}"`                   | stream raw PCM to any stdin player                                                                                                      |
-| `DAWG_AI=0`                                                   | agent off; unrecognized requests are rejected locally and naming stays local                                                            |
-| `DAWG_PROVIDER=gateway\|openrouter\|codex\|claude\|xcb\|auto` | provider choice (default: the saved choice, else `auto`)                                                                                |
-| `DAWG_MODEL=<alias\|vendor/model>`                            | model for this run (unknown values are rejected)                                                                                        |
-| `AI_GATEWAY_API_KEY`, `OPENROUTER_API_KEY`                    | win over any stored key                                                                                                                 |
-| `XCB_BIN`                                                     | path to xcb for the subscription options                                                                                                |
-| `DAWG_CREDENTIAL_STORE=file`, `DAWG_CONFIG_DIR`               | skip the Keychain; move `~/.config/dawg`                                                                                                |
-| `DAWG_STEMDECK_URL`                                           | StemDeck for the media tools (default `http://127.0.0.1:8000`; else local yt-dlp, demucs, basic-pitch, whisper-cli)                     |
-| `DAWG_DAEMON=0`                                               | file-lock path, no dawgd                                                                                                                |
-| `DAWG_DEMO=1`                                                 | print one deterministic frame and exit (also `--demo`, or a non-TTY stdin); `DAWG_DEMO=1 bun run src/main.ts` is the development render |
-| `DAWG_THEME`, `DAWG_REDUCE_MOTION=1`                          | theme (`default\|high-contrast\|mono`) and static motion                                                                                |
-| `NO_COLOR`, `TERM=dumb`                                       | monochrome                                                                                                                              |
+| Variable                                                             | Effect                                                                                                                                  |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `DAWG_AUDIO=0`                                                       | no sound; the transport still runs (the one audio kill switch)                                                                          |
+| `DAWG_AUDIO_BACKEND=native\|ffplay\|sox\|afplay`                     | force a player (`none` is still accepted and means the same as `DAWG_AUDIO=0`)                                                          |
+| `DAWG_AUDIO_DEVICE`, `DAWG_AUDIO_BUFFER`, `DAWG_PLAY_LEAD_MS`        | native sink output device name, device buffer frames (128) and play-mode lead (15 ms; 60 ms on stdin players)                           |
+| `DAWG_SINK_LIB`                                                      | load this native sink library instead of the verified prebuilt (development; no sha256 check)                                           |
+| `DAWG_AUDIO_PLAYER="cmd {rate} {channels}"`                          | stream raw PCM to any stdin player                                                                                                      |
+| `DAWG_AI=0`                                                          | agent off; unrecognized requests are rejected locally and naming stays local                                                            |
+| `DAWG_PROVIDER=local\|gateway\|openrouter\|codex\|claude\|xcb\|auto` | provider choice (default: the saved choice, else `auto`, which prefers the local model)                                                 |
+| `DAWG_LOCAL_MODEL`, `DAWG_LLAMA_SERVER`                              | the GGUF and `llama-server` binary for the local model                                                                                  |
+| `DAWG_LOCAL_BASE_URL`, `DAWG_LOCAL_ALIAS`                            | use an already-running OpenAI-compatible local server and its model alias instead of starting one                                       |
+| `DAWG_MODEL=<alias\|vendor/model>`                                   | model for this run (unknown values are rejected)                                                                                        |
+| `AI_GATEWAY_API_KEY`, `OPENROUTER_API_KEY`                           | win over any stored key                                                                                                                 |
+| `XCB_BIN`                                                            | path to xcb for the subscription options                                                                                                |
+| `DAWG_CREDENTIAL_STORE=file`, `DAWG_CONFIG_DIR`                      | skip the Keychain; move `~/.config/dawg`                                                                                                |
+| `DAWG_STEMDECK_URL`                                                  | StemDeck for the media tools (default `http://127.0.0.1:8000`; else local yt-dlp, demucs, basic-pitch, whisper-cli)                     |
+| `DAWG_DAEMON=0`                                                      | file-lock path, no dawgd                                                                                                                |
+| `DAWG_DEMO=1`                                                        | print one deterministic frame and exit (also `--demo`, or a non-TTY stdin); `DAWG_DEMO=1 bun run src/main.ts` is the development render |
+| `DAWG_THEME`, `DAWG_REDUCE_MOTION=1`                                 | theme (`default\|high-contrast\|mono`) and static motion                                                                                |
+| `NO_COLOR`, `TERM=dumb`                                              | monochrome                                                                                                                              |
 
 ## Architecture
 

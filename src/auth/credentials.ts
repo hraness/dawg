@@ -57,6 +57,7 @@ const XCB_MODEL_PATTERN = /^[A-Za-z0-9._:/-]{1,200}$/;
  * account (Devin included), kept for `dawg login --xcb`.
  */
 export const PROVIDER_CHOICES = Object.freeze([
+  "local",
   "gateway",
   "openrouter",
   "codex",

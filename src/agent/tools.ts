@@ -123,6 +123,7 @@ import { MASTER_TOOLS } from "./master-tools.ts";
 import { PATCH_TOOLS } from "./patch-tools.ts";
 import { STYLE_TOOLS } from "./style-tools.ts";
 import { DEMO_TOOLS } from "./demo-tools.ts";
+import { SONG_TOOLS } from "./song-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
@@ -2242,6 +2243,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...PRESET_TOOLS,
   ...STYLE_TOOLS,
   ...DEMO_TOOLS,
+  ...SONG_TOOLS,
   ...GRANULAR_TOOLS,
   ...RESAMPLE_TOOLS,
   AUDIO_TOOL,

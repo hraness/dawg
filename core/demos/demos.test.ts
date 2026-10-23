@@ -24,13 +24,13 @@ const longestKickRest = (score: ReturnType<typeof createDemo>) => {
 const HYPER = ["redline", "glass-garden"];
 
 describe("complete demo songs", () => {
-  test("nine distinct entries expose truthful form and duration metadata", () => {
-    expect(DEMOS).toHaveLength(9);
-    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(9);
-    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(9);
+  test("three hyperpop entries expose truthful form and duration metadata", () => {
+    expect(DEMOS).toHaveLength(3);
+    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(3);
+    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(3);
     expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(2);
     for (const demo of DEMOS) {
-      if (HYPER.includes(demo.id)) expect(demo.style).toBe("Hyperpop");
+      expect(demo.style).toBe("Hyperpop");
       expect(demo.title.length).toBeLessThanOrEqual(16);
       const score = createDemo(demo.id);
       expect(score.tempoBpm).toBe(demo.tempoBpm);
@@ -251,15 +251,7 @@ describe("complete demo songs", () => {
       DEMOS.filter((demo) => !HYPER.includes(demo.id))
         .map((demo) => demo.style)
         .sort(),
-    ).toEqual([
-      "Acid techno",
-      "Hyperpop",
-      "Jungle",
-      "Neo soul",
-      "Synth pop",
-      "Trip hop",
-      "UK garage",
-    ]);
+    ).toEqual(["Hyperpop"]);
     const hyper = createDemo("candy-fault");
     expect(
       hyper.tracks.find((track) => track.id === "hook")?.fx?.distort,
@@ -281,48 +273,21 @@ describe("complete demo songs", () => {
     expect(longestKickRest(hyper)).toBeGreaterThanOrEqual(4);
   });
 
-  test("featured arrangement and synthesis moves survive score normalization", () => {
-    const acid = createDemo("coil-driver");
-    expect(
-      acid.tracks.find((track) => track.id === "acid")?.fxAutomation?.[
-        "synth-lpf"
-      ]?.length,
-    ).toBeGreaterThan(8);
-    expect(acid.notes.some((note) => note.glide !== undefined)).toBe(true);
-    expect(longestKickRest(acid)).toBeGreaterThanOrEqual(4);
-    const pop = createDemo("signal-bloom");
-    expect(pop.tracks.length).toBeGreaterThanOrEqual(10);
-    expect(pop.sections.length).toBeGreaterThanOrEqual(8);
-    expect(
-      pop.tracks.filter((track) => track.instrument === "kit").length,
-    ).toBeGreaterThanOrEqual(2);
-    expect(pop.tracks.some((track) => track.sampler)).toBe(true);
-    expect(pop.tracks.some((track) => track.wavetable)).toBe(true);
-    expect(pop.notes.filter((note) => note.lyric).length).toBeGreaterThan(20);
-    // The vocal double is a late-song lift, never there from the first verse.
-    const firstLyric = Math.min(
-      ...pop.notes.filter((note) => note.lyric).map((note) => note.startTick),
+  test("featured production moves survive score normalization", () => {
+    const red = createDemo("redline");
+    expect(red.tracks.find((track) => track.id === "voc")?.vocoder?.src).toBe(
+      "vox",
     );
+    expect(red.notes.some((note) => note.glide !== undefined)).toBe(true);
+    const glass = createDemo("glass-garden");
     expect(
-      pop.notes
-        .filter((note) => note.trackId === "double")
-        .every((note) => note.startTick >= firstLyric + 16 * 1920),
+      glass.notes.filter((note) => note.trackId === "harm" && note.lyric)
+        .length,
+    ).toBeGreaterThan(20);
+    expect(
+      glass.tracks
+        .find((track) => track.id === "sing")
+        ?.delayMixAutomation?.some((point) => point.value > 0.3),
     ).toBe(true);
-    const garage = createDemo("velvet-circuit");
-    expect(
-      garage.tracks.find((track) => track.id === "hold")?.sampler?.voices.hold
-        ?.begin,
-    ).toBe(0);
-    expect(
-      garage.tracks.find((track) => track.id === "on")?.sampler?.voices.on
-        ?.begin,
-    ).toBe(0.25);
-    expect(garage.notes.some((note) => note.startTick % 120 !== 0)).toBe(true);
-    const dub = createDemo("low-tide").tracks.find(
-      (track) => track.id === "vocal",
-    );
-    expect(dub?.delayMixAutomation?.some((point) => point.value > 0.3)).toBe(
-      true,
-    );
   });
 });

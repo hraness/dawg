@@ -61,6 +61,7 @@ import {
   type ModelRow,
 } from "../agent/models.ts";
 import type { ApiProvider } from "../agent/gateway.ts";
+import { findLocalModel, isLocalModel } from "../agent/local.ts";
 import type { ChoiceItem, ChooseOptions } from "./picker.ts";
 
 export const KEYS_URL =
@@ -104,7 +105,8 @@ export type LoginDeps = Readonly<{
  * `auto` is bare `dawg login`: reuse a working saved choice, else discover
  * and pick. `key` pastes an AI Gateway key; `xcb` is any xcb account.
  */
-export type LoginTarget = "auto" | "pick" | LoginOption | "key" | "xcb";
+export type LoginTarget =
+  "auto" | "pick" | LoginOption | "key" | "xcb" | "local";
 /** @deprecated kept for callers of the earlier API. */
 export type LoginMode = LoginTarget;
 export type KeyCheck = "valid" | "rejected" | "unverified";
@@ -124,6 +126,7 @@ export async function login(
   options: LoginOptions = {},
 ): Promise<number> {
   if (target === "xcb") return loginXcb(deps, options.xcb);
+  if (target === "local") return loginLocal(deps);
   if (target === "key") return loginWithPastedKey(deps, "gateway");
   if (target === "gateway") return loginGateway(deps, options);
   if (target === "openrouter") return loginOpenRouter(deps);
@@ -143,6 +146,20 @@ export async function login(
     }
   }
   return loginPick(deps, options);
+}
+
+/** Use the local model: saved only once a model file and llama-server are found. */
+async function loginLocal(deps: LoginDeps): Promise<number> {
+  const local = findLocalModel(deps.auth.env);
+  if (!isLocalModel(local)) {
+    deps.io.print(`No local model: ${local.reason}.`);
+    return 1;
+  }
+  await writeConfig(deps.auth, { provider: "local", setup: undefined });
+  deps.io.print(
+    `✓ Using the local model ${local.alias}${local.path ? ` (${local.path})` : ` at ${local.baseUrl}`}. It loads on the first prompt.`,
+  );
+  return 0;
 }
 
 /** Discover everything, then show the picker (or confirm the one ready option). */
@@ -915,6 +932,16 @@ export async function modelChoices(
       value: row.id,
     }));
   }
+  if (selection.kind === "local")
+    return [
+      {
+        label: selection.model.alias,
+        detail: "free  on this machine",
+        group: "Local",
+        current: true,
+        value: selection.modelId,
+      },
+    ];
   if (selection.kind === "xcb") {
     const capabilities = await readCapabilities(
       selection.bin,
@@ -958,6 +985,10 @@ export async function saveModelChoice(
       [slot]: { account: selection.account, model: value },
     });
     return `${shortModelLabel(value)} · ${selection.family}`;
+  }
+  if (selection.kind === "local") {
+    await writeConfig(auth, { provider: "local" });
+    return `${selection.model.alias} · local`;
   }
   throw new Error(selection.reason);
 }
