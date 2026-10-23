@@ -1,27 +1,16 @@
 /**
  * Complete, original demonstration songs, one file per song so each can be
- * developed on its own. Groove starters live in styles/. The three hyperpop
- * songs share the kit in hyperpop.ts.
+ * developed on its own. The shelf is hyperpop only for now: the three songs
+ * share the kit in hyperpop.ts, and core/distill/ turns them into the song
+ * sheets a small model learns the style from. Groove starters live in styles/.
  */
 import { TrackScore } from "../score.ts";
-import { coilDriver } from "./coil-driver.ts";
-import { velvetCircuit } from "./velvet-circuit.ts";
-import { signalBloom } from "./signal-bloom.ts";
-import { copperWire } from "./copper-wire.ts";
-import { lowTide } from "./low-tide.ts";
-import { amberRoom } from "./amber-room.ts";
 import { candyFault } from "./candy-fault.ts";
 import { redline } from "./redline.ts";
 import { glassGarden } from "./glass-garden.ts";
 export type { DemoInfo } from "./types.ts";
 
 const definitions = [
-  coilDriver,
-  velvetCircuit,
-  signalBloom,
-  copperWire,
-  lowTide,
-  amberRoom,
   candyFault,
   redline,
   glassGarden,
