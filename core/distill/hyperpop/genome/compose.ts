@@ -1441,7 +1441,12 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
   for (const [id, build] of Object.entries(make))
     if (used.has(id)) out.push(build());
   // Lanes land on the tracks; any track with a dj-filter lane gets the filter.
-  return out.map((t) => {
+  return out.map((track) => {
+    const thrown =
+      track.id === "vox"
+        ? throwLane(c.s.notes, track.delay?.mix ?? 0.08)
+        : undefined;
+    const t = thrown ? { ...track, delayMixAutomation: thrown } : track;
     const l = c.lanes.get(t.id);
     if (!l) return t;
     const fxAutomation: Record<string, AutomationPoint[]> = {
@@ -1464,6 +1469,37 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
       fxAutomation: fxAutomation as TrackInput["fxAutomation"],
     };
   });
+}
+
+/**
+ * Delay throws, as the demos do them: the echo opens on the held word that
+ * ends a line and closes before the next one starts, at most once in four bars.
+ */
+function throwLane(
+  notes: readonly NoteInput[],
+  base: number,
+): AutomationPoint[] | undefined {
+  const vox = notes
+    .filter((n) => n.trackId === "vox")
+    .sort((a, b) => on(a) - on(b));
+  const points: AutomationPoint[] = [{ tick: 0, value: base }];
+  let last = -Infinity;
+  vox.forEach((n, i) => {
+    const end = on(n) + dur(n);
+    const next = vox[i + 1];
+    if (dur(n) < TPB || on(n) - last < 4 * BAR) return;
+    // The word must be the line's last: the next one waits until it ends.
+    if (next && on(next) < end - TPB / 8) return;
+    last = on(n);
+    const close = Math.min(end + TPB, next ? on(next) : Infinity);
+    points.push(
+      { tick: on(n), value: base },
+      { tick: on(n) + Math.round(dur(n) / 2), value: 0.36 },
+      { tick: close - 1, value: 0.36 },
+      { tick: close, value: base },
+    );
+  });
+  return points.length > 1 ? merge(points) : undefined;
 }
 
 // ------------------------------------------------------------------ song
