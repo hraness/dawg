@@ -33,6 +33,7 @@ import {
   type PhrasePlan,
   type Range,
 } from "./melody.ts";
+import { readMusic, type Music } from "./music.ts";
 import { Rng } from "./rng.ts";
 import {
   ARP,
@@ -91,6 +92,8 @@ export type Content = Readonly<{
   hook?: readonly string[];
   /** Verse lines; each a string of syllables separated by spaces. */
   verses?: readonly string[];
+  /** Chords, motifs and arranging habits a model wrote; the seed draws the rest. */
+  music?: Music;
 }>;
 
 export type GenSong = Readonly<{
@@ -104,6 +107,11 @@ export type GenSong = Readonly<{
 
 const sameKind = (list: readonly { kind: Kind }[], kind: Kind) =>
   list.filter((s) => s.kind === kind).length;
+
+/** The sections a genome's song will have, as the composer lays them out. */
+export function songSections(g: Genome): Section[] {
+  return layout(new Rng(g.seed).fork("compose").fork("layout"), g);
+}
 
 /** The form archetype as a section list, its bar counts drawn per song. */
 function layout(rng: Rng, g: Genome): Section[] {
@@ -1515,16 +1523,44 @@ export function compileGenome(g: Genome, content: Content = {}): GenSong {
           ...line(w, theme, hookCount),
         ].slice(0, hookCount)
       : vocables(w, hookCount));
+  // What the model wrote replaces what the seed drew, part by part.
+  const music = content.music;
+  const read = readMusic(music, g.scale);
+  const drawn = drawStyle(rng.fork("style"), g);
+  const style: Style = {
+    ...drawn,
+    ...(music?.hookPlan ? { hookPlan: music.hookPlan } : {}),
+    ...(music?.versePlan ? { versePlan: music.versePlan } : {}),
+    ...(music?.dropLead && g.voice !== "instrumental"
+      ? { dropLead: music.dropLead }
+      : {}),
+    ...(music?.dropBass ? { dropBass: music.dropBass } : {}),
+    ...(music?.verseBass ? { verseBass: music.verseBass } : {}),
+    ...(music?.leadOctave !== undefined
+      ? { leadOctave: music.leadOctave ? 12 : 0 }
+      : {}),
+    ...(music?.stabsInDrop !== undefined
+      ? { stabsInDrop: music.stabsInDrop }
+      : {}),
+    ...(music?.harmonyThirds !== undefined
+      ? { harmonyThirds: music.harmonyThirds }
+      : {}),
+  };
   const c: Ctx = {
     s,
     g,
     rng,
     lanes: new Map(),
     grooves,
-    loops,
-    style: drawStyle(rng.fork("style"), g),
+    loops: {
+      main: read.loops.drop ?? loops.main,
+      verse: read.loops.verse ?? loops.verse,
+      bridge: read.loops.bridge ?? loops.bridge,
+      pre: read.loops.pre ?? loops.pre,
+    },
+    style,
     ranges,
-    motifs,
+    motifs: { ...motifs, ...read.motifs },
     words: { theme, hook, verses: content.verses ?? [] },
   };
   const devices = new Set<Device>(g.devices);
@@ -1549,8 +1585,13 @@ export function compileGenome(g: Genome, content: Content = {}): GenSong {
     ...describeGenome(g),
     `title: ${songTitle} (${theme})`,
     `form: ${sections.map((x) => `${x.name} ${x.bars}`).join(", ")}`,
-    `chords: drop ${loops.main.map((x) => x.name).join(" ")}; verse ${loops.verse.map((x) => x.name).join(" ")}; bridge ${loops.bridge.map((x) => x.name).join(" ")}`,
+    `chords: drop ${c.loops.main.map((x) => x.name).join(" ")}; verse ${c.loops.verse.map((x) => x.name).join(" ")}; bridge ${c.loops.bridge.map((x) => x.name).join(" ")}`,
     `hook carried by ${c.style.dropLead}; drop bass ${c.style.dropBass}; verse bass ${c.style.verseBass}`,
   ];
+  if (music)
+    notes.push(
+      `music: ${Object.keys(read.loops).length} chord loops and ${Object.keys(read.motifs).length} motifs from the card`,
+      ...read.warnings,
+    );
   return { title: songTitle, genome: g, sections, score: s.finish(), notes };
 }

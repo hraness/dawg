@@ -15,8 +15,8 @@ import {
   validateCard,
   type SongCard,
 } from "./card.ts";
-import { compileGenome, type GenSong } from "./compose.ts";
-import { sampleGenome } from "./genome.ts";
+import { compileGenome, songSections, type GenSong } from "./compose.ts";
+import { describeGenome, sampleGenome } from "./genome.ts";
 import { Rng } from "./rng.ts";
 
 export type GenomeGenerated = GenSong &
@@ -44,15 +44,32 @@ export type GenomeOptions = Readonly<{
 
 export const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
+/** `seed` mixed with `text`. */
+function mix(text: string, seed: number): number {
+  let h = 0x811c9dc5;
+  for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return ((h ^ seed) >>> 0) % 2 ** 31;
+}
+
 /**
- * The seed a card's song is drawn from: the seed mixed with the card's words,
- * so two briefs on one seed are two songs, and a saved card replays exactly.
+ * The seed a card's song is drawn from: the seed mixed with the card's brief
+ * (or, for a card written without one, its words), so two briefs on one seed
+ * are two songs, and a saved card replays exactly.
  */
 export function cardSeed(card: SongCard, seed: number): number {
-  let h = 0x811c9dc5;
-  for (const ch of `${card.title}\n${card.hook}`)
-    h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
-  return ((h ^ seed) >>> 0) % 2 ** 31;
+  return mix(card.brief ?? `${card.title}\n${card.hook}`, seed);
+}
+
+/**
+ * What the model writes for: the constraints the seed draws for `brief`,
+ * before any card exists. A card that pins nothing gets exactly these.
+ */
+export function briefConstraints(brief: string, seed: number): string[] {
+  const g = sampleGenome(mix(brief, seed));
+  const kinds = songSections(g).map((x) =>
+    x.name.replace(/ \d+$/, "").toLowerCase(),
+  );
+  return [...describeGenome(g), `sections: ${kinds.join(", ")}`];
 }
 
 /** A song from a card and a seed, no model involved. */
@@ -72,11 +89,15 @@ export async function generateGenomeSong(
   const seed = options.seed ?? randomSeed();
   const rounds = Math.max(1, options.rounds ?? 3);
   const schema = cardSchema();
+  const constraints = briefConstraints(brief, seed);
   let retry: { reply: string; notes: readonly string[] } | undefined;
   let last: readonly string[] = [];
   for (let round = 1; round <= rounds; round++) {
     const started = Date.now();
-    const reply = await model(cardMessages(brief, seed, retry), schema);
+    const reply = await model(
+      cardMessages(brief, seed, retry, constraints),
+      schema,
+    );
     let notes: readonly string[];
     try {
       const checked = validateCard(parseReply(reply));
@@ -87,7 +108,7 @@ export async function generateGenomeSong(
           notes: checked.warnings,
           ms: Date.now() - started,
         });
-        const card = briefPins(checked.card, brief);
+        const card = { ...briefPins(checked.card, brief), brief };
         return {
           ...songFromCard(card, seed),
           card,
