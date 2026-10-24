@@ -22,6 +22,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Changed
 
+- **Generated songs lean on the demos' synth core.** A supersaw bed is now the usual draw, as in every demo. Felt piano, Rhodes, organ, choir and string beds are rare colors. Two synth voices carry every fugue, and only the third may be acoustic.
 - **The seed is mixed with the brief**, not the card's title and hook, so the constraints are known before the model writes. Saved cards keep their brief and replay exactly.
 
 ## 0.33.1
