@@ -72,7 +72,7 @@ copy.
 - `dawg make "an icy song about a phone dying at a party"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same card and seed give the same song (the seed is mixed with the brief, so two briefs on one seed are two songs). `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
 - `dawg make --from s.json` composes a saved card with no model, or compiles a classic sheet.
 - `dawg make --classic "<brief>"` writes a classic sheet instead. `--rounds 1-6` sets how many rounds to try.
-- In the TUI the agent has `compose_song`, which takes a card and an optional seed and loads the song in one undoable edit. `song_guide` returns the card guide and the classic playbook, and `write_song` loads a classic sheet. Any model can use these, local or remote.
+- In the TUI the agent has `compose_song`, which takes a card and an optional seed and loads the song in one undoable edit. `song_guide` returns the card guide and the classic playbook, and with a brief and a seed the constraints that seed draws, and `write_song` loads a classic sheet. Any model can use these, local or remote.
 
 ## The local model
 

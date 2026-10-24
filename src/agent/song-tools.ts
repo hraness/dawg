@@ -7,6 +7,7 @@ import {
   validateSheet,
 } from "../../core/distill/hyperpop/index.ts";
 import {
+  briefConstraints,
   CARD_GUIDE,
   cardSchema,
   compileGenome,
@@ -27,13 +28,34 @@ export const SONG_TOOLS = Object.freeze([
   {
     name: "song_guide",
     description:
-      "Read-only. The hyperpop song-sheet playbook (form, harmony, melody, patterns) and a worked example sheet. Read it before write_song.",
-    parameters: { type: "object", properties: {}, additionalProperties: false },
+      "Read-only. The song card guide, the hyperpop sheet playbook and a worked example sheet. Pass a brief and a seed to also get the constraints that seed draws for that brief, so the card's music can be written for them. Read it before compose_song or write_song.",
+    parameters: {
+      type: "object",
+      properties: {
+        brief: { type: "string", maxLength: 400 },
+        seed: { type: "integer", minimum: 0, maximum: 2147483647 },
+      },
+      additionalProperties: false,
+    },
     plan(args) {
-      if (Object.keys(args).length > 0)
-        invalid("song_guide takes no arguments");
+      if (Object.keys(args).some((key) => key !== "brief" && key !== "seed"))
+        invalid("song_guide accepts only brief and seed");
+      if ((args.brief === undefined) !== (args.seed === undefined))
+        invalid("pass brief and seed together, or neither");
+      const seed = Number(args.seed);
+      if (
+        args.seed !== undefined &&
+        (!Number.isInteger(seed) || seed < 0 || seed >= 2 ** 31)
+      )
+        invalid("seed must be a whole number from 0 to 2147483647");
       const summary = "song guide · hyperpop sheet";
       const content = JSON.stringify({
+        ...(typeof args.brief === "string"
+          ? {
+              constraints: briefConstraints(args.brief, seed),
+              constraints_usage: `Write the card's music for these constraints, put "brief": the same brief in the card, and pass the same seed to compose_song.`,
+            }
+          : {}),
         playbook: PLAYBOOK,
         example: exampleSheets()[0],
         usage:
