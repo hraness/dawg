@@ -244,14 +244,14 @@ const sixthBelow = (pitch: number): number =>
   E_MAJOR.has((pitch - 8 + 120) % 12) ? pitch - 8 : pitch - 9;
 
 /** Scoop into a note from below, the hard-tune snap of a pitched vocal. */
-const scoop = (cents = -90, at = 0.12): Extra => ({
+export const scoop = (cents = -90, at = 0.12): Extra => ({
   bend: [
     { at: 0, cents },
     { at, cents: 0 },
   ],
 });
 /** Fall off the end of a held note. */
-const fall = (cents = -250, from = 0.7): Extra => ({
+export const fall = (cents = -250, from = 0.7): Extra => ({
   bend: [
     { at: from, cents: 0 },
     { at: 1, cents },
@@ -259,7 +259,7 @@ const fall = (cents = -250, from = 0.7): Extra => ({
 });
 
 // ── kick patterns (one per bar, cycled) ─────────────────────────────────
-const KICK: Readonly<Record<string, readonly string[]>> = {
+export const KICK: Readonly<Record<string, readonly string[]>> = {
   verse: [
     "9.....7.........",
     "9.........7...6.",
@@ -287,20 +287,20 @@ const KICK: Readonly<Record<string, readonly string[]>> = {
   last: ["9.........7.....", "9.....7.........", "", ""],
 };
 
-const HATS_HALF = [
+export const HATS_HALF = [
   "7.4.6.4.7.4.6.45",
   "7.4.6.4.7.4.6.4.",
   "7.4.6.4.7.4.6.4.",
   "7.4.6.4.7.4.6...",
 ];
-const HATS_DRIVE = [
+export const HATS_DRIVE = [
   "8465846584658466",
   "8465846584658...",
   "8465846584658466",
   "84658465846.....",
 ];
 /** Chorus backbeat with a ghost that moves each bar. */
-const SNAP_CHORUS = [
+export const SNAP_CHORUS = [
   "....9.......9...",
   "....9.....3.9...",
   "....9.......9..3",
@@ -308,7 +308,7 @@ const SNAP_CHORUS = [
 ];
 
 // ── hook motifs (the plastic pulse lead) ─────────────────────────────────
-const MOTIF: Phrase = [
+export const MOTIF: Phrase = [
   [0, 76, 0.32, 0.78],
   [0.75, 75, 0.2, 0.63],
   [1, 76, 0.22, 0.66],
@@ -381,7 +381,7 @@ const COUNTER: Readonly<Record<string, Phrase>> = {
  * Chorus hocket: where the singer rests, the chip pluck plays the next
  * syllables of the tune an octave up, so voice and chip add up to one line.
  */
-const CHIP: Readonly<Record<string, Phrase>> = {
+export const CHIP: Readonly<Record<string, Phrase>> = {
   // After "oh" resolves on B: the tune continues B G# F# B.
   B: [
     [2, 83, 0.2, 0.74],
@@ -401,7 +401,7 @@ const CHIP: Readonly<Record<string, Phrase>> = {
 };
 
 // ── topline (all lyrics original) ────────────────────────────────────────
-type Line = readonly (readonly [bar: number, phrase: Phrase])[];
+export type Line = readonly (readonly [bar: number, phrase: Phrase])[];
 type Slot = readonly [
   bar: number,
   beat: number,
@@ -411,14 +411,14 @@ type Slot = readonly [
 ];
 
 /** Split lyrics into syllables; a trailing `-` tells the voice the word goes on. */
-const syllables = (text: string): string[] =>
+export const syllables = (text: string): string[] =>
   text.split(" ").flatMap((word) => {
     const parts = word.split("-");
     return parts.map((part, i) => (i < parts.length - 1 ? `${part}-` : part));
   });
 
 /** Put syllables on a melody template, one per slot, in time order. */
-const withWords = (
+export const withWords = (
   start: number,
   slots: readonly Slot[],
   words: readonly string[],
@@ -437,7 +437,7 @@ const withWords = (
 };
 
 /** The verse melody: vi vi IV IV I I V V, a four-line stanza of 7 6 7 7. */
-const VERSE_SLOTS: readonly Slot[] = [
+export const VERSE_SLOTS: readonly Slot[] = [
   [0, 0.5, 68, 0.42, 0.62],
   [0, 1, 68, 0.7, 0.68],
   [0, 2, 66, 0.42, 0.56],
@@ -460,7 +460,7 @@ const VERSE_SLOTS: readonly Slot[] = [
   [5, 0, 71, 1.8, 0.7],
 ];
 /** Last two bars over V (verse one) or over the borrowed bVII (verse two). */
-const VERSE_END_V: readonly Slot[] = [
+export const VERSE_END_V: readonly Slot[] = [
   [6, 0.5, 71, 0.4, 0.64],
   [6, 1, 73, 0.4, 0.64],
   [6, 1.5, 75, 0.9, 0.74],
@@ -478,7 +478,9 @@ const VERSE_END_VII: readonly Slot[] = [
   [6, 3.5, 71, 0.45, 0.66],
   [7, 0, 74, 1.5, 0.76],
 ];
-const VERSE_ONE = withWords(
+export const VERSE_TWO_WORDS =
+  "Blue screen in the morn-ing light you're buf-fer-ing my heart Can-dy coat-ed er-ror code I don't want it to re-start";
+export const VERSE_ONE = withWords(
   4,
   [...VERSE_SLOTS, ...VERSE_END_V],
   syllables(
@@ -494,7 +496,7 @@ const VERSE_TWO = withWords(
 );
 
 /** Pre-chorus: a rising line that ends on the 7th of V, unresolved. */
-const lift = (bar: number): Line => [
+export const lift = (bar: number): Line => [
   [
     bar,
     [
@@ -635,7 +637,7 @@ function lineC(
  * a 7th over the new bass note, then steps down to the 6th: a 7-6 chain
  * over E D# C# B A G#, then the borrowed ii half-diminished and a 4-3 on V.
  */
-const BRIDGE: Line = [
+export const BRIDGE: Line = [
   [
     48,
     [
@@ -725,7 +727,7 @@ const BRIDGE_HARM: Line = [
   [53, [[1, 59, 2.5, 0.48, "_"]]],
 ];
 
-const LAST: Line = [
+export const LAST: Line = [
   [
     64,
     [
@@ -761,8 +763,8 @@ const chorusLines = (c: number, second: boolean, stutter: boolean): Line => [
     78,
   ),
 ];
-const CHORUS_ONE = chorusLines(16, false, false);
-const CHORUS_TWO = chorusLines(40, true, false);
+export const CHORUS_ONE = chorusLines(16, false, false);
+export const CHORUS_TWO = chorusLines(40, true, false);
 /**
  * The final chorus lands: its last bar turns to the tonic at the half bar,
  * so her held F# becomes a 9th over E and steps down to the root.
@@ -781,7 +783,7 @@ const OVERLOAD: Line = chorusLines(56, false, true).map(
 );
 
 /** Step automation: each value holds until the next listed bar, then jumps. */
-const steps = (
+export const steps = (
   ...points: readonly (readonly [bar: number, value: number])[]
 ): AutomationPoint[] =>
   points.flatMap(([bar, value], i) =>
@@ -794,7 +796,7 @@ const steps = (
   );
 
 /** Short dub throws on the last word of each line (dotted-eighth delay). */
-function throws(bars: readonly number[], base: number, peak: number) {
+export function throws(bars: readonly number[], base: number, peak: number) {
   const points: AutomationPoint[] = [{ tick: 0, value: base }];
   for (const bar of bars)
     points.push(
@@ -810,7 +812,7 @@ function throws(bars: readonly number[], base: number, peak: number) {
  * A lane that rests at `base` and sweeps to `peak` over each listed bar
  * (`from` to `to` within it), snapping back to `base` at the next bar.
  */
-function sweeps(
+export function sweeps(
   base: number,
   peak: number,
   bars: readonly number[],

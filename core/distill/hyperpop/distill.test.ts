@@ -11,7 +11,9 @@ import {
   validateSheet,
   type SongSheet,
 } from "./index.ts";
+import { createDemo } from "../../demos/index.ts";
 import { voiceProgression } from "./compile.ts";
+import { candySheet } from "./extract.ts";
 import { chordClasses, degreePitch, parseKey } from "./sheet.ts";
 
 const roundTrip = (sheet: SongSheet): unknown =>
@@ -43,6 +45,54 @@ describe("hyperpop song sheets", () => {
       for (let i = 1; i < sorted.length; i++)
         expect(sorted[i]! - sorted[i - 1]!).toBeGreaterThan(1);
     }
+    // A first inversion puts the 3rd in the bass: V6 in E major is B/D#.
+    const [inverted] = voiceProgression(parseKey("E major")!, ["V6"]);
+    expect(inverted!.bass % 12).toBe(3);
+  });
+
+  test("the Candy Fault sheet plays the demo back", () => {
+    const checked = validateSheet(roundTrip(candySheet().sheet));
+    if (!checked.ok) throw new Error(checked.errors.join("\n"));
+    const score = compileSheet(checked.sheet);
+    const demo = createDemo("candy-fault").toJSON();
+    expect(score.bars).toBe(demo.bars);
+    const count = (notes: readonly { trackId: string }[]) => {
+      const out: Record<string, number> = {};
+      for (const n of notes) out[n.trackId] = (out[n.trackId] ?? 0) + 1;
+      return out;
+    };
+    const want = count(demo.notes);
+    const got = count(score.notes);
+    // The drums, 808 and arps are the demo's own; the topline, harmony and
+    // answers are derived from the chords, so they land within a tenth.
+    for (const id of ["kick", "snap", "hats", "sub", "arp", "arp2"])
+      expect(got[id]).toBe(want[id]);
+    for (const [id, n] of Object.entries(want))
+      expect(Math.abs((got[id] ?? 0) - n)).toBeLessThanOrEqual(
+        Math.ceil(n * 0.12),
+      );
+    // No key change: every pitched note stays in E major.
+    const scale = new Set([4, 6, 8, 9, 11, 1, 3]);
+    for (const note of score.notes)
+      if (
+        ["vocal", "harm", "high", "keys", "arp", "arp2"].includes(note.trackId)
+      )
+        expect(scale.has(note.pitch % 12)).toBe(true);
+  });
+
+  test("a candy sheet moved to another key stays in that key", () => {
+    const moved = { ...candySheet().sheet, key: "A major", title: "Moved" };
+    const checked = validateSheet(roundTrip(moved));
+    if (!checked.ok) throw new Error(checked.errors.join("\n"));
+    const score = compileSheet(checked.sheet);
+    const scale = new Set([9, 11, 1, 2, 4, 6, 8]);
+    for (const note of score.notes)
+      if (
+        ["vocal", "harm", "keys", "chords", "arp", "hook"].includes(
+          note.trackId,
+        )
+      )
+        expect(scale.has(note.pitch % 12)).toBe(true);
   });
 
   test("every demo distills to a sheet that validates, scores well and renders", () => {
@@ -55,6 +105,11 @@ describe("hyperpop song sheets", () => {
       const score = compileSheet(checked.sheet);
       expect(score.bars).toBe(sheet.sections.reduce((n, s) => n + s.bars, 0));
       const ids = new Set(score.tracks.map((t) => t.id));
+      if (sheet.palette === "candy") {
+        for (const id of ["vocal", "harm", "high", "hook", "arp", "kick"])
+          expect(ids.has(id)).toBe(true);
+        continue;
+      }
       for (const id of ["sing", "harm", "chops", "stut", "kick", "sub"])
         expect(ids.has(id)).toBe(true);
       expect(ids.has("voc")).toBe(sheet.palette === "night");

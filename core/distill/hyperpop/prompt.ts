@@ -12,7 +12,14 @@ export const PLAYBOOK = `You write hyperpop songs as JSON song sheets. A rendere
 # The style
 Bright, hard-driving hyperpop in the DJ_Dave lane: club-length form, glossy chords, a synth singer, and voice chops looping as an instrument. The drops are the best part: chopped syllables riding 3-3-2 rhythms over breakbeats and stabs, with everything else out of the way. Words are sung by a synth voice and drenched in vocoder and delay, so they read as texture; keep them short, vowel-rich and singable.
 
-# Form (72 to 112 bars)
+# Palettes
+${PALETTES.join(", ")}.
+- candy: sugar-rush pop, 150 to 160 bpm, a major key. A pitched-up singer, chip arpeggios, a Rhodes and an 808. A pop song form with a glitch break and a bridge. The renderer plays all of its drums, chords and textures, so you write only the chords, the sung lines and two hooks (see "The candy palette" below).
+- night: dark minor, 160 to 176 bpm, half-time and dnb drums, a vocoder singing every line back, reese bass.
+- glass: bright major, 124 to 136 bpm, FM bells, offbeat octave bass, tresillo and house drums.
+The rules from here to "The candy palette" are for night and glass.
+
+# Form for night and glass (72 to 112 bars)
 intro 8 -> verse 8 -> pre 4 -> chorus 8 -> post 8 (drop) -> verse 8 -> pre 4 -> chorus 8 -> post 8 -> break 4 (drums none) -> build 4 -> chorus 8 -> post 8 -> outro 4.
 - Drops (kind post) have no sung lines; they play riff, stabs, sub and growl. Make the later drops busier (drop2, scatter, roll2, a lead hook).
 - The intro starts thin (drums ["none", ...]) and lets a riff or bells in; a sub can enter late with enter {"sub": 4}.
@@ -36,14 +43,13 @@ intro 8 -> verse 8 -> pre 4 -> chorus 8 -> post 8 (drop) -> verse 8 -> pre 4 -> 
 - Chorus parts (ch1, ch2, ch3) last two bars; verse and pre parts one bar. In a section's lines, put a part on the bar it starts and null on the bars it is still singing: a chorus reads ["ch1", null, "ch2", null, "ch1", null, "ch3", null].
 - Repeat the hook: ch1 returns in every chorus.
 - A line is a list of notes [beat, degree, beats, "syllable"]: one syllable per note, beats counted from the start of the part (0 to 3.75 for verse and pre parts, 0 to 7.75 for chorus parts). Split words into syllables ("neon" -> "ne-", "on"). Verse parts: 4 to 7 notes in eighths and quarters, ending on a held note by beat 3. Chorus parts: 5 to 8 notes, a held note to finish each two-bar phrase.
+- Sing like a person, not a sequencer. Mix quick syllables (0.25 to 0.5 beats) with words held 1 to 2 beats. Start lines off the beat (0.5) or on a pickup. Leave a beat or more of rest between lines. Give each line its own rhythm, and end each phrase on a long note.
+- A short note (0.5 beats or less) on a beat may be a neighbour of the chord tone it steps to next. That is the only way to sing a non-chord tone on a beat.
 - Write original words. Never quote an existing song.
 
 # Hooks (the lead in drops)
 Always write at least one hook named "hook" and use it in the last drop or two.
 A hook is up to 4 bars of [beat, degree, beats] notes, beat 0 to 3.75, degrees 8 to 15 (above the singer). 3-3-2 rhythms: notes at 0, 0.75, 1.5, then 2 to 3.5. Chord tones on beats 0 and 2. Play it in a later drop with "lead": ["hook"] and "voiceLead": true.
-
-# Palettes
-${PALETTES.join(", ")}. night: dark minor, 160 to 176 bpm, half-time and dnb drums, a vocoder singing every line back, reese bass. glass: bright major, 124 to 136 bpm, FM bells, offbeat octave bass, tresillo and house drums.
 
 # Layers
 play lists layers: pad, stabs, arp, bells, lead, sub, growl, riff, cloud. A layer only sounds when its pattern is set (riff, arp, bells, stabs; line drives sub and growl). Thin verses (sub, riff or arp), fuller pre-choruses (pad, arp), full choruses (pad, stabs, riff, sub), drops (sub, growl, stabs, riff, maybe lead).
@@ -57,6 +63,17 @@ ${PATTERN_SLOTS.map(
 ).join("\n")}
 
 Drum families: ${DRUMS.join(", ")}.
+
+# The candy palette (Candy Fault's production)
+The renderer plays every drum, chord, bass and texture from the chords. For each section set drums [] and play [], and set no patterns.
+- Form, in this order and at these lengths (68 bars): intro 4, verse 8, pre 4, chorus 8, break 4, verse 8, pre 4, chorus 8, bridge 8, chorus 8, outro 4. The break is a kick-less glitch break that stutters the chorus's highest word, so give it no lines. The renderer adds a silent beat before the last chorus. That chorus doubles the singer an octave up and turns to the tonic in its last bar.
+- Progressions: verse vi vi IV IV I I V V; pre IV V vi V; chorus I V vi IV; intro and break I I IV V; outro I V IV I. The bridge walks the bass down by step with first inversions (6 = the 3rd in the bass): I V6 vi V IV I6 ii V.
+- Every candy part lasts two bars: v1..v8, pre1 to pre4, ch1..ch6, br1..br4, end1 and end2. The lines are: verse ["v1", null, "v2", null, "v3", null, "v4", null], pre ["pre1", null, "pre2", null], chorus ["ch1", null, "ch2", null, "ch3", null, "ch4", null], bridge ["br1", null, "br2", null, "br3", null, "br4", null], outro ["end1", null, "end2", null].
+- Beats in a part run from -1 to 7.75. A note at -0.5 is a pickup, sung on the last half-beat before the part. Notes hold up to 6 beats.
+- Verse two may sing verse one's tune to new words. The second chorus keeps ch1 and ch3 and swaps in new words for the second and fourth lines (ch5, ch6). The other choruses repeat the first.
+- The chorus title line (ch1) returns as ch3 with a different ending. The last chorus line holds the song's highest note.
+- The bridge is lower and quieter. Hold each word across the bar line, starting it at beat 3.5 and holding it 1.5 beats, and step down the scale.
+- Hooks: "hook" is one bar of the synth motif the intro plays, degrees 8 to 12, a 3-3-2 rhythm. "chip" is one or two bars of short answers the pluck plays between chorus lines, degrees 11 to 15, on beats 1.75 to 3.5 where the singer rests. Give the intro lead ["hook"] and every chorus lead ["chip"].
 
 Reply with the JSON sheet only.`;
 
@@ -82,6 +99,7 @@ export function messages(
   const briefs = [
     "a dark, driving night drive at 172 bpm in F minor",
     "a bright, blooming garden song at 128 bpm in A major",
+    "a sugar-rush pop song about a crush that glitches, at 156 bpm in E major",
   ];
   examples.forEach((sheet, i) => {
     out.push({

@@ -6,12 +6,16 @@
  */
 import { PARTS } from "../../demos/hyperpop.ts";
 import { LIBRARY, PATTERN_SLOTS } from "./library.ts";
-import { DRUMS, KINDS, LAYERS, PALETTES } from "./sheet.ts";
+import { CANDY_PARTS, DRUMS, KINDS, LAYERS, PALETTES } from "./sheet.ts";
 
+// Each numeral, and its first inversion (`V6`, the 3rd in the bass).
 const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII"].flatMap((n) => [
   n,
   n.toLowerCase(),
+  `${n}6`,
+  `${n.toLowerCase()}6`,
 ]);
+const SHEET_PARTS = [...PARTS, ...CANDY_PARTS];
 
 export function sheetSchema(): Record<string, unknown> {
   // [beat, degree, beats, syllable]
@@ -28,7 +32,7 @@ export function sheetSchema(): Record<string, unknown> {
       minItems: 4,
       maxItems: 4,
     },
-    minItems: 2,
+    minItems: 1,
     maxItems: 16,
   };
   const note = {
@@ -47,10 +51,11 @@ export function sheetSchema(): Record<string, unknown> {
       name: { type: "string" },
       bars: { type: "integer" },
       chords: { type: "string" },
-      drums: { type: "array", items: { enum: DRUMS }, minItems: 1 },
+      // The candy palette plays its own drums and layers: [] there.
+      drums: { type: "array", items: { enum: DRUMS } },
       energy: { type: "number" },
       play: { type: "array", items: { enum: LAYERS } },
-      lines: { type: "array", items: { enum: [...PARTS, null] } },
+      lines: { type: "array", items: { enum: [...SHEET_PARTS, null] } },
       ...patterns,
       lead: { type: "array", items: { type: "string" } },
       voiceLead: { type: "boolean" },
@@ -84,7 +89,7 @@ export function sheetSchema(): Record<string, unknown> {
       },
       lines: {
         type: "object",
-        properties: Object.fromEntries(PARTS.map((p) => [p, line])),
+        properties: Object.fromEntries(SHEET_PARTS.map((p) => [p, line])),
         additionalProperties: false,
       },
       hooks: {

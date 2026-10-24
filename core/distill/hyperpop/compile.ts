@@ -43,10 +43,12 @@ import {
   type Sung,
 } from "../../demos/hyperpop.ts";
 import { demoInfo } from "../../demos/types.ts";
+import { compileCandy } from "./candy.ts";
 import { LIBRARY } from "./library.ts";
 import {
   chordClasses,
   degreePitch,
+  isInversion,
   numeralDegree,
   parseKey,
   scaleOf,
@@ -74,7 +76,7 @@ const leadDuck = {
   duck: { orbit: 2, depth: 0.3, attack: 0.5, onset: 0.06, hold: true },
 };
 
-const PALETTE_KITS: Readonly<Record<Palette, PaletteKit>> = {
+const PALETTE_KITS: Readonly<Record<Exclude<Palette, "candy">, PaletteKit>> = {
   night: {
     book: nightDemo.BOOK,
     kit: {
@@ -172,7 +174,8 @@ export function voiceProgression(
       })
       .sort((a, b) => a - b);
     center = tones.reduce((a, b) => a + b, 0) / tones.length;
-    const root = pcs[0]!;
+    // A first inversion (V6) puts the chord's 3rd in the bass.
+    const root = pcs[isInversion(numeral) ? 2 : 0]!;
     const bass = 36 + ((root - 36 + 120) % 12);
     return { bass, tones };
   });
@@ -227,7 +230,10 @@ export function planSections(sheet: SongSheet, key: Key): SongSection[] {
       voiceProgression(key, list),
     ]),
   );
+  // Only the night and glass palettes reach the engine, so every kind and
+  // part here is one it knows.
   return sheet.sections.map((section) => {
+    const kind = section.kind as SongSection["kind"];
     const enter = section.enter ?? {};
     const pick = (slot: keyof typeof LIBRARY, layer: keyof typeof enter) => {
       const name = section[slot];
@@ -244,16 +250,18 @@ export function planSections(sheet: SongSheet, key: Key): SongSection[] {
     );
     const line = pick("line", "sub");
     return {
-      kind: section.kind,
+      kind,
       name: section.name,
       bars: section.bars,
       chords: voiced[section.chords]!,
       drums: section.drums,
-      ...((section.energy ?? USUAL_ENERGY[section.kind]) !== undefined
-        ? { energy: section.energy ?? USUAL_ENERGY[section.kind] }
+      ...((section.energy ?? USUAL_ENERGY[kind]) !== undefined
+        ? { energy: section.energy ?? USUAL_ENERGY[kind] }
         : {}),
       play: section.play,
-      ...(section.lines ? { lines: section.lines } : {}),
+      ...(section.lines
+        ? { lines: section.lines as SongSection["lines"] }
+        : {}),
       ...(pick("riff", "riff") ? { riff: pick("riff", "riff") } : {}),
       ...(pick("arp", "arp") ? { arp: pick("arp", "arp") } : {}),
       ...(pick("bells", "bells") ? { bells: pick("bells", "bells") } : {}),
@@ -272,6 +280,7 @@ export function planSections(sheet: SongSheet, key: Key): SongSection[] {
 export function compileSheet(sheet: SongSheet): TrackScore {
   const key = parseKey(sheet.key);
   if (!key) throw new Error(`hyperpop sheet: bad key "${sheet.key}"`);
+  if (sheet.palette === "candy") return compileCandy(sheet, key);
   const palette = PALETTE_KITS[sheet.palette];
   const melody = Object.fromEntries(
     Object.keys(sheet.lines).map((part) => [
