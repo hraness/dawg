@@ -8,7 +8,7 @@ import { compileSheet } from "./compile.ts";
 import { critique } from "./critic.ts";
 import { messages, type ChatMessage } from "./prompt.ts";
 import { sheetSchema } from "./schema.ts";
-import { validateSheet, type SongSheet } from "./sheet.ts";
+import { settleSheet, validateSheet, type SongSheet } from "./sheet.ts";
 
 /** One completion: the chat in, the reply text out (JSON, schema-constrained when the model can). */
 export type SheetModel = (
@@ -77,13 +77,15 @@ export async function generateSong(
       const checked = validateSheet(raw);
       if (checked.ok) {
         ok = true;
-        const review = critique(checked.sheet);
+        // Settle clashes here so the retries spend themselves on rhythm and shape.
+        const sheet = settleSheet(checked.sheet);
+        const review = critique(sheet);
         // Every repair the validator made costs a little, so retries fix them.
         score = Math.max(0, review.score - 2 * checked.warnings.length);
         clean = review.rubs <= maxRubs;
         notes = [...review.notes, ...checked.warnings];
         if (!best || score > best.critic)
-          best = { sheet: checked.sheet, critic: score, notes };
+          best = { sheet, critic: score, notes };
       } else notes = checked.errors;
     } catch (error) {
       notes = [

@@ -725,3 +725,43 @@ export function validateSheet(raw: unknown): Validated {
 
 export const isPatternSlot = (slot: string): slot is PatternSlot =>
   (PATTERN_SLOTS as string[]).includes(slot);
+
+/**
+ * Write a sung note that clashes on a beat as the chord tone the compiler
+ * moves it to, so the sheet says what is heard. A short note stepping
+ * straight on to its neighbour leans on the beat and stays.
+ */
+export function settleSheet(sheet: SongSheet): SongSheet {
+  const key = parseKey(sheet.key);
+  if (!key) return sheet;
+  const lines = { ...sheet.lines };
+  for (const section of sheet.sections) {
+    const list = sheet.progressions[section.chords] ?? [];
+    (section.lines ?? []).forEach((part, bar) => {
+      const line = part ? lines[part] : undefined;
+      if (!part || !line) return;
+      lines[part] = line.map((note, k): SheetNote => {
+        const [beat, degree, beats, lyric] = note;
+        const next = line[k + 1];
+        const leans =
+          beats <= 0.5 &&
+          next !== undefined &&
+          next[0] - beat <= 0.5 &&
+          Math.abs(next[1] - degree) === 1;
+        if (beat % 1 !== 0 || leans) return note;
+        const numeral = list[(bar + Math.floor(beat / 4)) % list.length] ?? "I";
+        const tones = new Set(chordClasses(key, numeralDegree(numeral) ?? 1));
+        const pc = degreePitch(key, degree) % 12;
+        const rubs =
+          !tones.has(pc) &&
+          (tones.has((pc + 1) % 12) || tones.has((pc + 11) % 12));
+        if (!rubs) return note;
+        for (const d of [degree - 1, degree + 1])
+          if (tones.has(degreePitch(key, d) % 12))
+            return [beat, d, beats, lyric];
+        return note;
+      });
+    });
+  }
+  return { ...sheet, lines };
+}
