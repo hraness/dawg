@@ -1431,13 +1431,11 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
   const rng = c.rng.fork("tracks");
   const s = SINGERS[g.voice] ?? SINGERS.sung!;
   // Synths carry the fugue, as in A. G. Cook's breaks; the third voice may be acoustic.
-  const synths = rng
-    .shuffle(["chip", "square", "glass", "fmbells"])
+  const order = rng.shuffle(Object.keys(BAROQUE));
+  const synths = order
+    .filter((k) => ["chip", "square", "glass", "fmbells"].includes(k))
     .slice(0, 2);
-  const baroque = [
-    ...synths,
-    rng.pick(Object.keys(BAROQUE).filter((k) => !synths.includes(k))),
-  ];
+  const baroque = [...synths, order.find((k) => !synths.includes(k))!];
   const counterSound = rng.pick(
     Object.keys(ARP).filter((k) => k !== g.sounds.arp),
   );
