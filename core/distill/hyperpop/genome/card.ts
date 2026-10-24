@@ -5,11 +5,21 @@
  * brings everything else, so the same brief gives a new song every seed
  * and no two songs share a template.
  */
-import { MODES, type Mode } from "./theory.ts";
+import { MODES, scaleOf, type Mode } from "./theory.ts";
 import { FORMS, GRAMMARS, VOICES, type GenomePins } from "./genome.ts";
 import type { Content } from "./compose.ts";
 import type { Rng } from "./rng.ts";
 import type { ChatMessage } from "../prompt.ts";
+import {
+  DROP_BASSES,
+  DROP_LEADS,
+  PLANS,
+  VERSE_BASSES,
+  musicSchema,
+  readMusic,
+  validateMusic,
+  type Music,
+} from "./music.ts";
 
 export type SongCard = Readonly<{
   title: string;
@@ -36,6 +46,10 @@ export type SongCard = Readonly<{
     form?: (typeof FORMS)[number];
     fugue?: boolean;
   }>;
+  /** Chords, motifs and arranging habits, written for the constraints shown. */
+  music?: Music;
+  /** The brief the card was written for; it seeds the song with the seed. */
+  brief?: string;
 }>;
 
 const NOTE: Readonly<Record<string, number>> = {
@@ -70,6 +84,23 @@ export function syllables(text: string): string[] {
     .replace(/[^a-z0-9'\- ]+/g, " ")
     .split(/[\s-]+/)
     .filter(Boolean)
+    .slice(0, 32);
+}
+
+/**
+ * Syllables as the singer takes them: a trailing `-` tells the voice the
+ * word goes on ("dash-", "board"), as the demos write them.
+ */
+export function sungSyllables(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9'\- ]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => {
+      const parts = word.split("-").filter(Boolean);
+      return parts.map((x, i) => (i < parts.length - 1 ? `${x}-` : x));
+    })
     .slice(0, 32);
 }
 
@@ -142,6 +173,9 @@ export function validateCard(raw: unknown): CardCheck {
   if (typeof p.fugue === "boolean") pins.fugue = p.fugue;
   const theme =
     typeof r.theme === "string" ? r.theme.trim().slice(0, 40) : undefined;
+  const music = validateMusic(r.music);
+  warnings.push(...music.warnings);
+  const brief = typeof r.brief === "string" ? r.brief : undefined;
   return {
     ok: true,
     card: {
@@ -151,6 +185,8 @@ export function validateCard(raw: unknown): CardCheck {
       verses,
       mood,
       pins: pins as SongCard["pins"],
+      ...(music.music ? { music: music.music } : {}),
+      ...(brief ? { brief } : {}),
     },
     warnings,
   };
@@ -182,7 +218,11 @@ export function briefPins(card: SongCard, brief: string): SongCard {
   return { ...card, pins: pins as SongCard["pins"] };
 }
 
-/** The genome pins a card asks for. Mood steers the axes it touches. */
+/**
+ * The genome pins a card asks for. Mood steers the axes it touches, unless
+ * the card wrote music: then the model saw the drawn mode and beats and wrote
+ * for them, so mood only shapes the sound.
+ */
 export function cardPins(card: SongCard, rng: Rng): GenomePins {
   const p = card.pins ?? {};
   const m = card.mood ?? {};
@@ -198,8 +238,9 @@ export function cardPins(card: SongCard, rng: Rng): GenomePins {
           ? "major"
           : undefined))
     : undefined;
+  const steer = !card.music;
   let mode = p.mode ?? keyMode;
-  if (!mode && m.brightness !== undefined) {
+  if (!mode && steer && m.brightness !== undefined) {
     // Light leans major, lydian and mixolydian; dark leans minor, dorian and phrygian.
     const b = m.brightness;
     mode = rng.weighted<Mode>({
@@ -212,7 +253,7 @@ export function cardPins(card: SongCard, rng: Rng): GenomePins {
     });
   }
   let drums = p.drums;
-  if (!drums && m.energy !== undefined) {
+  if (!drums && steer && m.energy !== undefined) {
     const e = m.energy;
     drums = rng.weighted({
       four: 2,
@@ -251,8 +292,9 @@ export function cardContent(card: SongCard): Content {
   return {
     title: card.title,
     ...(card.theme ? { theme: card.theme } : {}),
-    hook: syllables(card.hook),
-    verses: card.verses,
+    hook: sungSyllables(card.hook),
+    verses: card.verses.map((v) => sungSyllables(v).join(" ")),
+    ...(card.music ? { music: card.music } : {}),
   };
 }
 
@@ -288,13 +330,14 @@ export function cardSchema(): Record<string, unknown> {
         },
         additionalProperties: false,
       },
+      music: musicSchema(),
     },
     required: ["title", "hook", "verses", "mood"],
     additionalProperties: false,
   };
 }
 
-export const CARD_GUIDE = `You write the words and the taste for a hyperpop song; a composer writes the music. Reply with one JSON song card.
+export const CARD_GUIDE = `You write a hyperpop song: the words, the taste and the music. A composer has already drawn the constraints (tempo, mode, beats, sections, sounds); you write for them, and an arranger performs what you write. Reply with one JSON song card.
 
 - title: two or three words, original.
 - theme: a word or two for what it is about.
@@ -302,63 +345,208 @@ export const CARD_GUIDE = `You write the words and the taste for a hyperpop song
 - verses: 4 to 8 lines, 5 to 10 syllables each, hyphenated the same way. Concrete images, not clichés; each line answers the one before.
 - mood: 0 to 1 each. energy (calm to frantic), brightness (dark to sugary), grit (clean to distorted), space (dry to cavernous).
 - pins: only what the brief names. bpm 80 to 200; key like "F minor"; mode ${Object.keys(MODES).join(", ")}; voice ${VOICES.join(", ")} (chopped and abstract read as texture; instrumental has no singer); drums ${GRAMMARS.join(", ")}; form ${FORMS.join(", ")}; fugue true for a baroque counterpoint break. Pin only what the brief says in words; most briefs name no pins, so most cards have none. A pin the brief does not name is dropped.
+- music: the composition, written for the constraints you are given.
+  - chords: Roman numerals in the song's mode, 2 to 8 per loop, for drop, verse, pre and bridge. The mode decides each chord's quality, so just write the degree: "vi", "IV", "I", "V". Add 7, 9 or add9 for color; "V/3" puts the chord's 3rd in the bass for a smooth bass line. Only chords of the mode: no borrowed chords, no key change. Let the drop loop be the strongest and simplest; give the verse a darker or more open loop and the bridge one that is fresh but shares a chord with the drop. The pre should lean toward the drop's first chord.
+  - motifs: the cells every melody grows from. rhythm is a grid of 16ths, 16 per bar: x starts a note, - holds it, . is a rest. steps are scale steps from each note to the next (one fewer than the x's), -4 to 4, 0 repeats the note. The hook may be 1, 2 or 4 bars (16, 32 or 64 long) with about one note per hook syllable; verse, pre, bridge and switch motifs are 1 bar. Strong notes land on chord tones for you. A good hook: a short cell that repeats, notes on the off 16ths, mostly steps with one leap, a held last note. Give the verse fewer notes and more rests than the hook, and the bridge longer notes.
+  - hookPlan and versePlan: how a 1-bar motif fills 4 bars: A is the motif, A' changes its ending, B and C contrast. ${PLANS.join(", ")}.
+  - dropLead (${DROP_LEADS.join(", ")}), dropBass (${DROP_BASSES.join(", ")}), verseBass (${VERSE_BASSES.join(", ")}), leadOctave (the lead doubles the hook an octave up), stabsInDrop (chord stabs on the beat instead of an arp), harmonyThirds (a harmony a third under held words). Leave out what you have no opinion on.
 
-Write original words. Never quote an existing song. One key for the whole song: the composer never changes key.`;
+Write original words and music. Never quote an existing song. One key for the whole song: never change key.`;
 
-const EXAMPLES: readonly SongCard[] = [
+/**
+ * What a card's music gets wrong that the model can fix in another round:
+ * a hook rhythm with far fewer notes than the hook has syllables, a grid
+ * that is not whole bars, chords outside the mode. The arranger copes with
+ * each, so a card that still has them on its last round is used as it is.
+ */
+export function musicNotes(
+  card: SongCard,
+  scale = scaleOf(0, card.pins?.mode ?? "major"),
+): string[] {
+  const music = card.music;
+  if (!music) return [];
+  const out: string[] = [];
+  const hook = music.motifs?.hook;
+  const words = sungSyllables(card.hook).length;
+  if (hook) {
+    const xs = (hook.rhythm.match(/x/gi) ?? []).length;
+    if (xs < Math.ceil(words * 0.75))
+      out.push(
+        `the hook has ${words} syllables but its rhythm has only ${xs} x's; give it about one x per syllable (a 32-long rhythm has room)`,
+      );
+  }
+  for (const [role, m] of Object.entries(music.motifs ?? {})) {
+    const len = m.rhythm.replace(/\s+/g, "").length;
+    // A short rhythm pads out with rests; a long one loses its tail.
+    const longest = role === "hook" ? 64 : 16;
+    if (len > longest)
+      out.push(
+        `the ${role} rhythm is ${len} long but only the first ${longest} play; keep it to ${longest}`,
+      );
+    const xs = (m.rhythm.match(/x/gi) ?? []).length;
+    if (m.steps.length !== Math.max(0, xs - 1))
+      out.push(
+        `the ${role} motif has ${xs} x's, so it needs ${Math.max(0, xs - 1)} steps, not ${m.steps.length}`,
+      );
+  }
+  out.push(
+    ...readMusic({ chords: music.chords }, scale).warnings.filter((w) =>
+      /borrowed|not a numeral/.test(w),
+    ),
+  );
+  return out;
+}
+
+/** A worked card and the constraints it was written for. */
+type Example = Readonly<{ constraints: readonly string[]; card: SongCard }>;
+
+const EXAMPLES: readonly Example[] = [
   {
-    title: "Static Bloom",
-    theme: "a radio left on all night",
-    hook: "sta-tic bloom, sta-tic bloom, ope-ning up",
-    verses: [
-      "tuned be-tween the sta-tions",
-      "a voice I al-most know",
-      "an-ten-na on the win-dow",
-      "catch-ing what you throw",
+    constraints: [
+      "164 BPM, A minor, no key change",
+      "drops: breakbeat; verses: trap",
+      "sections: intro, verse, build, drop, break, build, drop, outro",
     ],
-    mood: { energy: 0.6, brightness: 0.4, grit: 0.5, space: 0.8 },
-    pins: {},
+    card: {
+      title: "Static Bloom",
+      theme: "a radio left on all night",
+      hook: "sta-tic bloom, sta-tic bloom, ope-ning up",
+      verses: [
+        "tuned be-tween the sta-tions",
+        "a voice I al-most know",
+        "an-ten-na on the win-dow",
+        "catch-ing what you throw",
+      ],
+      mood: { energy: 0.6, brightness: 0.4, grit: 0.5, space: 0.8 },
+      pins: {},
+      music: {
+        chords: {
+          drop: ["i", "VI", "III", "VII"],
+          verse: ["i9", "iv7"],
+          pre: ["VI", "VII"],
+          bridge: ["iv", "VI", "i/3", "VII"],
+        },
+        motifs: {
+          hook: {
+            rhythm: "x.x.x-..x.x.x-..x..x..x.x---....",
+            steps: [1, 1, -2, 1, 1, -2, 3, -1, -1],
+          },
+          verse: { rhythm: "..x.x.x-....x-..", steps: [0, 1, -2] },
+          pre: { rhythm: "x-x-x-x-x.x.x.x.", steps: [1, 1, 1, -1, 1, 1, 1] },
+          bridge: { rhythm: "x-------x---x---", steps: [-1, -1] },
+        },
+        versePlan: "AA'AB",
+        dropLead: "vox+lead",
+        dropBass: "rolling",
+        verseBass: "sustain",
+        leadOctave: true,
+        harmonyThirds: true,
+      },
+    },
   },
   {
-    title: "Gum Wrapper",
-    theme: "a sugar high at the arcade",
-    hook: "pop it, pop it, sil-ver wrap-per",
-    verses: [
-      "tick-ets spill-ing on the floor",
-      "high score blink-ing just for us",
-      "pink-er than the last time",
-      "chew the sky and blow it up",
+    constraints: [
+      "142 BPM, D major, no key change",
+      "drops: Jersey club; verses: hyper bounce",
+      "sections: drop, verse, build, drop, bridge, build, drop, outro",
     ],
-    mood: { energy: 0.85, brightness: 0.95, grit: 0.2, space: 0.3 },
-    pins: { voice: "chipmunk" },
+    card: {
+      title: "Gum Wrapper",
+      theme: "a sugar high at the arcade",
+      hook: "pop it, pop it, sil-ver wrap-per",
+      verses: [
+        "tick-ets spill-ing on the floor",
+        "high score blink-ing just for us",
+        "pink-er than the last time",
+        "chew the sky and blow it up",
+      ],
+      mood: { energy: 0.85, brightness: 0.95, grit: 0.2, space: 0.3 },
+      pins: { voice: "chipmunk" },
+      music: {
+        chords: {
+          drop: ["IV", "V", "vi", "I/3"],
+          verse: ["I", "IVadd9"],
+          pre: ["ii7", "V"],
+          bridge: ["vi", "iii", "IV", "V"],
+        },
+        motifs: {
+          hook: {
+            rhythm: "x.x.....x.x.....x.x.x.x-........",
+            steps: [2, -2, 2, -3, 1, 1, -2],
+          },
+          verse: { rhythm: "x.x.x...x.x.....", steps: [1, 1, -1, -1] },
+          switch: { rhythm: "x..x..x.x..x..x.", steps: [2, -2, 2, -2, 2] },
+        },
+        hookPlan: "AAAB",
+        versePlan: "ABAB",
+        dropLead: "chops+vox",
+        dropBass: "syncop",
+        stabsInDrop: true,
+      },
+    },
   },
   {
-    title: "Undertow Choir",
-    theme: "slow drowning, calm",
-    hook: "un-der, un-der, hold me un-der",
-    verses: [
-      "salt is in the wir-ing",
-      "lights go soft and green",
-      "count the bub-bles ris-ing",
-      "qui-et in be-tween",
+    constraints: [
+      "92 BPM, E dorian, no key change",
+      "drops: dembow; verses: dembow",
+      "sections: intro, verse, verse, build, drop, fugue, drop, outro",
     ],
-    mood: { energy: 0.35, brightness: 0.2, grit: 0.1, space: 1 },
-    pins: { fugue: true },
+    card: {
+      title: "Undertow Choir",
+      theme: "slow drowning, calm",
+      hook: "un-der, un-der, hold me un-der",
+      verses: [
+        "salt is in the wir-ing",
+        "lights go soft and green",
+        "count the bub-bles ris-ing",
+        "qui-et in be-tween",
+      ],
+      mood: { energy: 0.35, brightness: 0.2, grit: 0.1, space: 1 },
+      pins: { fugue: true },
+      music: {
+        chords: {
+          drop: ["i7", "IV"],
+          verse: ["i", "VII", "IV/3", "i"],
+          pre: ["iv", "v", "VII"],
+          bridge: ["III", "IV", "i"],
+        },
+        motifs: {
+          hook: {
+            rhythm: "x-.x-.x.x---....x-.x-.x.x-------",
+            steps: [-1, 0, -1, 3, -1, 0, -1],
+          },
+          verse: { rhythm: "x---..x.x---....", steps: [2, -1] },
+          bridge: { rhythm: "x-----x-x-------", steps: [1, -3] },
+        },
+        versePlan: "AABA",
+        dropLead: "vox",
+        dropBass: "kick",
+        verseBass: "pulse",
+        harmonyThirds: true,
+      },
+    },
   },
 ];
 
-/** The chat for a card: the guide, one rotating example, the brief. */
+/**
+ * The chat for a card: the guide, one rotating worked example, the
+ * constraints the seed drew and the brief.
+ */
 export function cardMessages(
   brief: string,
   seed: number,
   retry?: Readonly<{ reply: string; notes: readonly string[] }>,
+  constraints?: readonly string[],
 ): ChatMessage[] {
   const example = EXAMPLES[seed % EXAMPLES.length]!;
+  const shown = constraints
+    ? `Constraints for your song (write the music for these; pin only what the brief names):\n- ${constraints.join("\n- ")}\n\n`
+    : "";
   const chat: ChatMessage[] = [
     { role: "system" as const, content: CARD_GUIDE },
     {
       role: "user" as const,
-      content: `A card for another brief, to show the shape (do not reuse its words):\n${JSON.stringify(example)}\n\nBrief: ${brief}`,
+      content: `A card for another brief and other constraints, to show the shape (do not reuse its words or music):\nconstraints: ${example.constraints.join("; ")}\n${JSON.stringify(example.card)}\n\n${shown}Brief: ${brief}`,
     },
   ];
   if (retry)
@@ -371,3 +559,6 @@ export function cardMessages(
     );
   return chat;
 }
+
+/** The worked example cards, for tests and evaluation. */
+export const EXAMPLE_CARDS: readonly SongCard[] = EXAMPLES.map((e) => e.card);

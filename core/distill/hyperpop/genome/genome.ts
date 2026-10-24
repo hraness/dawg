@@ -235,7 +235,7 @@ const VERSE_OF: Readonly<Record<Grammar, Partial<Record<Grammar, number>>>> = {
   glitch: { glitch: 2, trap: 1, bounce: 1 },
 };
 
-const KITS = [
+export const KITS = [
   "syn808",
   "syn909",
   "acoustic",
@@ -364,18 +364,19 @@ export function sampleGenome(seed: number, pins: GenomePins = {}): Genome {
       }),
     pad:
       pins.sounds?.pad ??
+      // The bed is a synth, as in every demo; acoustic beds are a rare color.
       s.weighted<PadSound>({
-        supersaw: 2.5,
+        supersaw: 6,
         glass: 1.5,
         bloom: 1.5,
-        pwm: 1.2,
-        vowel: 1.2,
-        choir: 1.5,
-        strings: 1,
-        ep: 1,
-        rhodes: 1,
-        organ: 0.6,
-        felt: 0.8,
+        pwm: 1.5,
+        vowel: 1,
+        choir: 0.4,
+        strings: 0.3,
+        ep: 0.3,
+        rhodes: 0.3,
+        organ: 0.15,
+        felt: 0.15,
       }),
     stab:
       pins.sounds?.stab ??

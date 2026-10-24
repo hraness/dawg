@@ -31,6 +31,26 @@ describe("agent song sheets", () => {
     expect(guide.playbook).toContain("song sheets");
     expect(guide.example.sections.length).toBeGreaterThan(8);
     expect(() => tool("song_guide").plan({ x: 1 }, context())).toThrow();
+    expect(() => tool("song_guide").plan({ brief: "x" }, context())).toThrow();
+  });
+
+  test("the guide shows the constraints a brief and seed draw, and the song keeps them", async () => {
+    const brief = "a cold song about a frozen lake";
+    const plan = tool("song_guide").plan({ brief, seed: 5 }, context());
+    if (plan.kind !== "action") throw new Error("expected a read-only guide");
+    const guide = JSON.parse((await plan.run({} as ActionContext)).content);
+    expect(guide.constraints[0]).toMatch(/BPM/);
+    const card = {
+      title: "Thin Ice",
+      hook: "thin ice, thin ice, hold me",
+      verses: ["blue be-neath the boots"],
+      mood: { energy: 0.5 },
+      brief,
+      music: { chords: { drop: ["vi", "IV", "I", "V"] } },
+    };
+    const song = tool("compose_song").plan({ card, seed: 5 }, context());
+    if (song.kind !== "replace") throw new Error("expected one replacement");
+    expect(song.summary).toContain(guide.constraints[0]);
   });
 
   test("write_song replaces the song with the compiled sheet and reports the critic", () => {

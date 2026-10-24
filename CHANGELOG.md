@@ -2,6 +2,29 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.34.0
+
+### Added
+
+- **The model writes the music, inside constraints the seed draws.**
+  - **Before:** the model wrote only words and a mood; dice chose every chord, motif and arranging habit. The songs varied but did not sound composed.
+  - **Now:** the seed and brief draw the constraints first (tempo, mode, beats, form, sounds, voice), and the prompt shows them. The card adds `music`: chord loops for the drop, verse, pre and bridge as Roman numerals in the song's mode; motifs for the hook, verse, pre, bridge and switch as a 16th-note grid and scale steps; phrase plans; and what carries the hook, the bass patterns, stabs, the lead octave and harmony thirds. The seed draws whatever the card leaves out.
+  - **One key:** numerals are read in the song's mode. A flat or sharp is kept only when it names the mode's own note (`bVII` in mixolydian), so nothing a card writes can change key or borrow a chord.
+  - **Another round for fixable music:** a hook rhythm with far fewer notes than syllables, a motif longer than its bars (its tail would be lost), a wrong step count or a borrowed chord goes back to the model before the card is used. A short motif just pads out with rests.
+- **Generated vocals phrase like the demos.** Words are set one syllable per note, a verse line every two bars, and a repeat starts where the motif does, with rests after a line instead of wrapping into the next. The echo opens on the held word that ends a line, and the singer stutters the hook's first word into the last drop.
+
+### Fixed
+
+- **Generated songs are mixed like the demos.**
+  - **Before:** sounds sharing a role differed in loudness by up to 25 dB at the current engine calibration. A felt-piano pad sat 5 dB over the kick and buried whole songs, so breaks played as loud as drops. Across the ten drum kits, hats varied by 24 dB and snares sat 8–17 dB under the kick.
+  - **Now:** a generated trim table (`bun scripts/genome-levels.ts --write`) sets every palette sound to the mean loudness of its role's hand-built demo voices, and fugue voices to the lead's level. It also balances each kit's kick, snare and hats to Redline's 909 kit. Breaks now sit 7 dB under the drops, and fugues come up 3 dB.
+  - **No clipped presets:** a preset's cut goes into its level stage, ahead of its peak guard. The felt piano had been clipping that guard down to a 10 dB crest; it now keeps its full 28 dB crest. The table is measured with the cuts in place.
+
+### Changed
+
+- **Generated songs lean on the demos' synth core.** A supersaw bed is now the usual draw, as in every demo. Felt piano, Rhodes, organ, choir and string beds are rare colors. Two synth voices carry every fugue, and only the third may be acoustic.
+- **The seed is mixed with the brief**, not the card's title and hook, so the constraints are known before the model writes. Saved cards keep their brief and replay exactly.
+
 ## 0.33.1
 
 ### Fixed

@@ -60,7 +60,7 @@ export type Chord = Readonly<{
   bass: number;
   /** Root, third, fifth (pitch classes). */
   triad: readonly number[];
-  /** Colour tones a pad may add (7th, 9th); melodies never land on them. */
+  /** Color tones a pad may add (7th, 9th); melodies never land on them. */
   color: readonly number[];
 }>;
 
@@ -168,7 +168,7 @@ const MOVES: Readonly<Record<number, readonly (readonly [number, number])[]>> =
     ],
   };
 
-/** Loops in these modes like to start on their colour chord too. */
+/** Loops in these modes like to start on their color chord too. */
 const COLOR: Readonly<Record<Mode, number>> = {
   major: 5,
   minor: 5,

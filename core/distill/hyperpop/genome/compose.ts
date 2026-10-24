@@ -33,6 +33,8 @@ import {
   type PhrasePlan,
   type Range,
 } from "./melody.ts";
+import { DRUM_TRIMS, SOUND_TRIMS } from "./levels.ts";
+import { readMusic, type Music } from "./music.ts";
 import { Rng } from "./rng.ts";
 import {
   ARP,
@@ -50,6 +52,7 @@ import {
   singer,
   sparkTrack,
   subTrack,
+  withGain,
 } from "./sounds.ts";
 import {
   bassPitch,
@@ -91,6 +94,8 @@ export type Content = Readonly<{
   hook?: readonly string[];
   /** Verse lines; each a string of syllables separated by spaces. */
   verses?: readonly string[];
+  /** Chords, motifs and arranging habits a model wrote; the seed draws the rest. */
+  music?: Music;
 }>;
 
 export type GenSong = Readonly<{
@@ -104,6 +109,11 @@ export type GenSong = Readonly<{
 
 const sameKind = (list: readonly { kind: Kind }[], kind: Kind) =>
   list.filter((s) => s.kind === kind).length;
+
+/** The sections a genome's song will have, as the composer lays them out. */
+export function songSections(g: Genome): Section[] {
+  return layout(new Rng(g.seed).fork("compose").fork("layout"), g);
+}
 
 /** The form archetype as a section list, its bar counts drawn per song. */
 function layout(rng: Rng, g: Genome): Section[] {
@@ -283,6 +293,8 @@ type Ctx = Readonly<{
     hook: readonly string[];
     verses: readonly string[];
   }>;
+  /** The next verse line to sing; verses carry on where the last one stopped. */
+  cursor: { line: number };
 }>;
 
 /** Per-song habits drawn once, so the song is consistent with itself. */
@@ -391,6 +403,32 @@ function sung(notes: readonly MNote[], syllables: readonly string[]): MNote[] {
     ...n,
     lyric: syllables[i % Math.max(1, syllables.length)] ?? "ah",
   }));
+}
+
+/**
+ * Words set the way a singer phrases them: one syllable per note in order,
+ * starting the line again only at a unit boundary, so a repeat begins where
+ * the motif does; notes past the line's end become rests.
+ */
+function fit(
+  notes: readonly MNote[],
+  syllables: readonly string[],
+  unit: number,
+  from = 0,
+): MNote[] {
+  if (!syllables.length) return [...notes];
+  const out: MNote[] = [];
+  let j = 0;
+  let at = -1;
+  for (const n of notes) {
+    const u = Math.floor((n.beat - from + 1e-6) / unit);
+    if (u !== at) {
+      at = u;
+      if (j >= syllables.length) j = 0;
+    }
+    if (j < syllables.length) out.push({ ...n, lyric: syllables[j++]! });
+  }
+  return out;
 }
 
 function wordsFor(
@@ -674,7 +712,7 @@ function writeDrop(c: Ctx, sec: Section, devices: ReadonlySet<Device>): void {
     const bar = sec.start + p * 4;
     const leadHook = hookNotes(c, chordAt, c.ranges.lead);
     if (lead.includes("vox")) {
-      voxLine(c, bar, sung(hook, wordsFor(c, rng, hook.length, "hook")), {
+      voxLine(c, bar, fit(hook, c.words.hook, c.motifs.hook.beats), {
         harmony: c.style.harmonyThirds && p % 2 === 1,
         high: octave > 0,
       });
@@ -770,7 +808,26 @@ function writeVerse(c: Ctx, sec: Section): void {
         bar,
         notes.map((n) => ({ ...n, vel: n.vel * 0.8 })),
       );
-    else
+    else if (c.words.verses.length) {
+      // Two lines a phrase, a line every two bars, as the demos sing them.
+      const lines = c.words.verses;
+      const next = () => lines[c.cursor.line++ % lines.length]!.split(/\s+/);
+      const first = next();
+      const second = next();
+      voxLine(c, bar, [
+        ...fit(
+          notes.filter((n) => n.beat < 8),
+          first,
+          8,
+        ),
+        ...fit(
+          notes.filter((n) => n.beat >= 8),
+          second,
+          8,
+          8,
+        ),
+      ]);
+    } else
       voxLine(
         c,
         bar,
@@ -1109,7 +1166,7 @@ function writeOutro(c: Ctx, sec: Section): void {
       sec.start,
       hook.map((n) => ({ ...n, vel: n.vel * 0.6 })),
     );
-  else voxLine(c, sec.start, sung(hook, wordsFor(c, rng, hook.length, "hook")));
+  else voxLine(c, sec.start, fit(hook, c.words.hook, c.motifs.hook.beats));
   if (sec.bars >= 4)
     drumSection(c, { ...sec, bars: 2 }, c.grooves.main, { energy: 0.5 });
   lane(
@@ -1252,6 +1309,37 @@ function seams(
       stutter(c, end, timeline(c.loops.main, c.g.harmony.rate));
     else if (move === "dive")
       dive(c.s, c.g.voice === "instrumental" ? "lead" : "vox", tickOf(end));
+    // Into the last drop the singer stutters the hook's first word, the
+    // peak-word move the demos make, unless the seam is silence.
+    const lastDrop = !sections.slice(i + 2).some((x) => x.kind === "drop");
+    if (
+      next.kind === "drop" &&
+      lastDrop &&
+      c.g.voice !== "instrumental" &&
+      move !== "gap" &&
+      move !== "tapestop"
+    ) {
+      const word = (c.words.hook[0] ?? "ah").replace(/-$/, "");
+      const tones = ladder(
+        c.loops.main[0]!.triad,
+        c.ranges.vox.low + 5,
+        c.ranges.vox.high,
+      );
+      const pitch = tones[Math.floor(tones.length / 2)] ?? c.ranges.vox.high;
+      const shift = SINGERS[c.g.voice]?.shift ?? 0;
+      for (let k = 0; k < 6; k++)
+        c.s.note(
+          "high",
+          end - 1,
+          2.5 + k * 0.25,
+          pitch + shift,
+          0.18,
+          0.5 + 0.07 * k,
+          {
+            lyric: word,
+          },
+        );
+    }
     if (devices.has("riser") && sec.kind !== "pre")
       c.s.note("fx", Math.max(sec.start, end - 2), 0, 48, 8, 0.6);
   });
@@ -1329,17 +1417,25 @@ const LEVELS: Readonly<Record<string, number>> = {
   cloud: 0.24,
   fx: 0.24,
   spark: 0.16,
-  fg1: 0.42,
-  fg2: 0.4,
-  fg3: 0.44,
+  fg1: 0.6,
+  fg2: 0.56,
+  fg3: 0.62,
 };
+
+/** The palette trim that puts `sound` at its role's loudness. */
+const trim = (role: string, sound: string) => SOUND_TRIMS[role]?.[sound] ?? 1;
 
 function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
   const g = c.g;
   const d = g.design;
   const rng = c.rng.fork("tracks");
   const s = SINGERS[g.voice] ?? SINGERS.sung!;
-  const baroque = rng.shuffle(Object.keys(BAROQUE));
+  // Synths carry the fugue, as in A. G. Cook's breaks; the third voice may be acoustic.
+  const order = rng.shuffle(Object.keys(BAROQUE));
+  const synths = order
+    .filter((k) => ["chip", "square", "glass", "fmbells"].includes(k))
+    .slice(0, 2);
+  const baroque = [...synths, order.find((k) => !synths.includes(k))!];
   const counterSound = rng.pick(
     Object.keys(ARP).filter((k) => k !== g.sounds.arp),
   );
@@ -1380,13 +1476,41 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
     }),
     fg3: () => BAROQUE[baroque[2]!]!("fg3", "Fugue III", LEVELS.fg3!, d),
   };
-  const out: TrackInput[] = drumTracks(g.bpm, g.drums, d).filter((t) =>
-    used.has(t.id),
-  );
+  // Each palette sound sits at its role's loudness.
+  const trims: Record<string, number> = {
+    bass: trim("bass", g.sounds.bass),
+    pad: trim("pad", g.sounds.pad),
+    stabs: trim("stab", g.sounds.stab),
+    arp: trim("arp", g.sounds.arp),
+    lead: trim("lead", g.sounds.lead),
+    counter: trim("arp", counterSound),
+    fg1: trim("baroque", baroque[0]!),
+    fg2: trim("baroque", baroque[1]!),
+    fg3: trim("baroque", baroque[2]!),
+  };
+  // Each kit's kick, snare and hats sit at Redline's balance; perc plays the snare kit.
+  const kitOf: Record<string, string> = {
+    kick: g.drums.kick,
+    snare: g.drums.snare,
+    hats: g.drums.hats,
+    perc: g.drums.snare,
+  };
+  const out: TrackInput[] = drumTracks(g.bpm, g.drums, d)
+    .filter((t) => used.has(t.id))
+    .map((t) => {
+      const part = t.id === "perc" ? "snare" : t.id;
+      const gain = DRUM_TRIMS[part]?.[kitOf[t.id] ?? ""] ?? 1;
+      return withGain(t, gain);
+    });
   for (const [id, build] of Object.entries(make))
-    if (used.has(id)) out.push(build());
+    if (used.has(id)) out.push(withGain(build(), trims[id] ?? 1));
   // Lanes land on the tracks; any track with a dj-filter lane gets the filter.
-  return out.map((t) => {
+  return out.map((track) => {
+    const thrown =
+      track.id === "vox"
+        ? throwLane(c.s.notes, track.delay?.mix ?? 0.08)
+        : undefined;
+    const t = thrown ? { ...track, delayMixAutomation: thrown } : track;
     const l = c.lanes.get(t.id);
     if (!l) return t;
     const fxAutomation: Record<string, AutomationPoint[]> = {
@@ -1409,6 +1533,37 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
       fxAutomation: fxAutomation as TrackInput["fxAutomation"],
     };
   });
+}
+
+/**
+ * Delay throws, as the demos do them: the echo opens on the held word that
+ * ends a line and closes before the next one starts, at most once in four bars.
+ */
+function throwLane(
+  notes: readonly NoteInput[],
+  base: number,
+): AutomationPoint[] | undefined {
+  const vox = notes
+    .filter((n) => n.trackId === "vox")
+    .sort((a, b) => on(a) - on(b));
+  const points: AutomationPoint[] = [{ tick: 0, value: base }];
+  let last = -Infinity;
+  vox.forEach((n, i) => {
+    const end = on(n) + dur(n);
+    const next = vox[i + 1];
+    if (dur(n) < TPB || on(n) - last < 4 * BAR) return;
+    // The word must be the line's last: the next one waits until it ends.
+    if (next && on(next) < end - TPB / 8) return;
+    last = on(n);
+    const close = Math.min(end + TPB, next ? on(next) : Infinity);
+    points.push(
+      { tick: on(n), value: base },
+      { tick: on(n) + Math.round(dur(n) / 2), value: 0.36 },
+      { tick: close - 1, value: 0.36 },
+      { tick: close, value: base },
+    );
+  });
+  return points.length > 1 ? merge(points) : undefined;
 }
 
 // ------------------------------------------------------------------ song
@@ -1515,17 +1670,46 @@ export function compileGenome(g: Genome, content: Content = {}): GenSong {
           ...line(w, theme, hookCount),
         ].slice(0, hookCount)
       : vocables(w, hookCount));
+  // What the model wrote replaces what the seed drew, part by part.
+  const music = content.music;
+  const read = readMusic(music, g.scale);
+  const drawn = drawStyle(rng.fork("style"), g);
+  const style: Style = {
+    ...drawn,
+    ...(music?.hookPlan ? { hookPlan: music.hookPlan } : {}),
+    ...(music?.versePlan ? { versePlan: music.versePlan } : {}),
+    ...(music?.dropLead && g.voice !== "instrumental"
+      ? { dropLead: music.dropLead }
+      : {}),
+    ...(music?.dropBass ? { dropBass: music.dropBass } : {}),
+    ...(music?.verseBass ? { verseBass: music.verseBass } : {}),
+    ...(music?.leadOctave !== undefined
+      ? { leadOctave: music.leadOctave ? 12 : 0 }
+      : {}),
+    ...(music?.stabsInDrop !== undefined
+      ? { stabsInDrop: music.stabsInDrop }
+      : {}),
+    ...(music?.harmonyThirds !== undefined
+      ? { harmonyThirds: music.harmonyThirds }
+      : {}),
+  };
   const c: Ctx = {
     s,
     g,
     rng,
     lanes: new Map(),
     grooves,
-    loops,
-    style: drawStyle(rng.fork("style"), g),
+    loops: {
+      main: read.loops.drop ?? loops.main,
+      verse: read.loops.verse ?? loops.verse,
+      bridge: read.loops.bridge ?? loops.bridge,
+      pre: read.loops.pre ?? loops.pre,
+    },
+    style,
     ranges,
-    motifs,
+    motifs: { ...motifs, ...read.motifs },
     words: { theme, hook, verses: content.verses ?? [] },
+    cursor: { line: 0 },
   };
   const devices = new Set<Device>(g.devices);
   for (const sec of sections) {
@@ -1549,8 +1733,13 @@ export function compileGenome(g: Genome, content: Content = {}): GenSong {
     ...describeGenome(g),
     `title: ${songTitle} (${theme})`,
     `form: ${sections.map((x) => `${x.name} ${x.bars}`).join(", ")}`,
-    `chords: drop ${loops.main.map((x) => x.name).join(" ")}; verse ${loops.verse.map((x) => x.name).join(" ")}; bridge ${loops.bridge.map((x) => x.name).join(" ")}`,
+    `chords: drop ${c.loops.main.map((x) => x.name).join(" ")}; verse ${c.loops.verse.map((x) => x.name).join(" ")}; bridge ${c.loops.bridge.map((x) => x.name).join(" ")}`,
     `hook carried by ${c.style.dropLead}; drop bass ${c.style.dropBass}; verse bass ${c.style.verseBass}`,
   ];
+  if (music)
+    notes.push(
+      `music: ${Object.keys(read.loops).length} chord loops and ${Object.keys(read.motifs).length} motifs from the card`,
+      ...read.warnings,
+    );
   return { title: songTitle, genome: g, sections, score: s.finish(), notes };
 }
