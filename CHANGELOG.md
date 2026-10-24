@@ -18,6 +18,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Generated songs are mixed like the demos.**
   - **Before:** sounds sharing a role differed in loudness by up to 25 dB at the current engine calibration. A felt-piano pad sat 5 dB over the kick and buried whole songs, so breaks played as loud as drops. Across the ten drum kits, hats varied by 24 dB and snares sat 8–17 dB under the kick.
   - **Now:** a generated trim table (`bun scripts/genome-levels.ts --write`) sets every palette sound to the mean loudness of its role's hand-built demo voices, and fugue voices to the lead's level. It also balances each kit's kick, snare and hats to Redline's 909 kit. Breaks now sit 7 dB under the drops, and fugues come up 3 dB.
+  - **No clipped presets:** a preset's cut goes into its level stage, ahead of its peak guard. The felt piano had been clipping that guard down to a 10 dB crest; it now keeps its full 28 dB crest. The table is measured with the cuts in place.
 
 ### Changed
 

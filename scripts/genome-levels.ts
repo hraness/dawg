@@ -27,6 +27,7 @@ import {
   LEAD,
   PAD,
   STAB,
+  withGain,
 } from "../core/distill/hyperpop/genome/sounds.ts";
 import { renderArrangedPcm } from "../src/audio/arrange.ts";
 import { measureLoudness, pcmChannels } from "../src/audio/loudness.ts";
@@ -135,14 +136,26 @@ const mean = (xs: readonly number[]) =>
 const target = (role: string) =>
   mean(handBuilt[role === "baroque" ? "lead" : role]!);
 
+// A preset cut lands ahead of its peak guard, so a clipping preset gets
+// quieter by less than its cut; measure again through the trim and correct.
+const dbOf = (gain: number) => 20 * Math.log10(gain);
+const gainOf = (db: number) => Math.round(10 ** (db / 20) * 1000) / 1000;
 const trims: Record<string, Record<string, number>> = {};
-for (const [role] of ROLES) {
+for (const [role, table] of ROLES) {
   trims[role] = {};
   const goal = target(role);
   console.log(`${role} target ${goal.toFixed(1)} LUFS`);
-  for (const [key, lufs] of Object.entries(measured[role]!)) {
-    const db = Math.max(-30, Math.min(12, goal - lufs));
-    trims[role]![key] = Math.round(10 ** (db / 20) * 1000) / 1000;
+  for (const [key, make] of Object.entries(table)) {
+    const lufs = measured[role]![key]!;
+    let db = Math.max(-30, Math.min(12, goal - lufs));
+    for (let pass = 0; pass < 2; pass++) {
+      const now = await loudness(
+        withGain({ ...make("t", "T", 0.3, design), id: "t" }, gainOf(db)),
+        PARTS[role]!,
+      );
+      db = Math.max(-30, Math.min(12, db + goal - now));
+    }
+    trims[role]![key] = gainOf(db);
     console.log(
       `  ${key.padEnd(11)} ${lufs.toFixed(1).padStart(6)}  ${db >= 0 ? "+" : ""}${db.toFixed(1)} dB`,
     );
@@ -156,12 +169,18 @@ const DRUM_PARTS: Readonly<Record<string, readonly Note[]>> = {
   snare: range(8).map((i) => [i * 2 + 1, 0.25, 38, 0.85]),
   hats: range(32).map((i) => [i / 2, 0.25, 42, 0.5]),
 };
-const drumLoudness = async (kit: string) => {
+const drumLoudness = async (
+  kit: string,
+  gains: Record<string, number> = {},
+) => {
   const tracks = drumTracks(BPM, { kick: kit, snare: kit, hats: kit }, design);
   const out: Record<string, number> = {};
   for (const [id, part] of Object.entries(DRUM_PARTS))
     out[id] = await loudness(
-      tracks.find((t) => t.id === id)!,
+      withGain(
+        tracks.find((t) => t.id === id)!,
+        gains[id] ?? 1,
+      ),
       part,
     );
   return out;
@@ -172,24 +191,31 @@ const genome = Object.fromEntries(
     .filter((t) => t.id in DRUM_PARTS)
     .map((t) => [t.id, t.volume ?? 1]),
 );
-const db = (x: number) => 20 * Math.log10(x);
 // Redline's kit levels: kick 0.5, snare 0.54, hats 0.13.
 const drumGoal: Record<string, number> = {
   kick: ref.kick!,
-  snare: ref.snare! + db(0.54 / 0.5 / (genome.snare! / genome.kick!)) - 2,
-  hats: ref.hats! + db(0.13 / 0.5 / (genome.hats! / genome.kick!)),
+  snare: ref.snare! + dbOf(0.54 / 0.5 / (genome.snare! / genome.kick!)) - 2,
+  hats: ref.hats! + dbOf(0.13 / 0.5 / (genome.hats! / genome.kick!)),
 };
 const drumTrims: Record<string, Record<string, number>> = {
   kick: {},
   snare: {},
   hats: {},
 };
+const clampDrum = (db: number) => Math.max(-18, Math.min(16, db));
 for (const kit of KITS) {
   const m = await drumLoudness(kit);
+  const db: Record<string, number> = {};
+  for (const id of Object.keys(DRUM_PARTS))
+    db[id] = clampDrum(drumGoal[id]! - m[id]!);
+  const now = await drumLoudness(
+    kit,
+    Object.fromEntries(Object.entries(db).map(([id, d]) => [id, gainOf(d)])),
+  );
   const row = [kit.padEnd(9)];
   for (const id of Object.keys(DRUM_PARTS)) {
-    const gain = Math.max(-18, Math.min(16, drumGoal[id]! - m[id]!));
-    drumTrims[id]![kit] = Math.round(10 ** (gain / 20) * 1000) / 1000;
+    const gain = clampDrum(db[id]! + drumGoal[id]! - now[id]!);
+    drumTrims[id]![kit] = gainOf(gain);
     row.push(
       `${id} ${m[id]!.toFixed(1)} ${gain >= 0 ? "+" : ""}${gain.toFixed(1)}`,
     );

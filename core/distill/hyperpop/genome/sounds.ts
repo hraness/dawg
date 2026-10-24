@@ -20,6 +20,46 @@ export type Design = Readonly<{
 
 type Make = (id: string, name: string, level: number, d: Design) => TrackInput;
 
+/**
+ * `track` louder or quieter by `gain`. A preset's cut goes into its level
+ * stage, ahead of its peak guard, so a hot preset is turned down instead of
+ * clipped. Volume tops out at 1, so a boost past it goes to a post gain.
+ */
+export function withGain(track: TrackInput, gain: number): TrackInput {
+  const patch = track.patch;
+  if (gain < 1 && patch && "nodes" in patch) {
+    const level = patch.nodes.find(
+      (n) => n.id === "level" && n.type === "fx.postgain",
+    );
+    if (level)
+      return {
+        ...track,
+        patch: {
+          ...patch,
+          nodes: patch.nodes.map((n) =>
+            n === level
+              ? {
+                  ...n,
+                  params: {
+                    ...n.params,
+                    gain: Number(n.params?.gain ?? 1) * gain,
+                  },
+                }
+              : n,
+          ),
+        },
+      };
+  }
+  const volume = (track.volume ?? 1) * gain;
+  if (volume <= 1) return { ...track, volume };
+  const post = Number(track.fx?.postgain?.gain ?? 1) * volume;
+  return {
+    ...track,
+    volume: 1,
+    fx: { ...track.fx, postgain: { gain: Math.min(4, post) } },
+  };
+}
+
 const space = (d: Design, base = 0.14) => ({
   mix: base * (0.5 + d.space),
   size: 0.35 + 0.5 * d.space,

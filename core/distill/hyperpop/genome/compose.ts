@@ -52,6 +52,7 @@ import {
   singer,
   sparkTrack,
   subTrack,
+  withGain,
 } from "./sounds.ts";
 import {
   bassPitch,
@@ -1421,21 +1422,6 @@ const LEVELS: Readonly<Record<string, number>> = {
   fg3: 0.62,
 };
 
-/**
- * `track` louder or quieter by `gain`. Volume tops out at 1, so the rest goes
- * to a post gain after the inserts.
- */
-function withGain(track: TrackInput, gain: number): TrackInput {
-  const volume = (track.volume ?? 1) * gain;
-  if (volume <= 1) return { ...track, volume };
-  const post = Number(track.fx?.postgain?.gain ?? 1) * volume;
-  return {
-    ...track,
-    volume: 1,
-    fx: { ...track.fx, postgain: { gain: Math.min(4, post) } },
-  };
-}
-
 /** The palette trim that puts `sound` at its role's loudness. */
 const trim = (role: string, sound: string) => SOUND_TRIMS[role]?.[sound] ?? 1;
 
@@ -1449,49 +1435,14 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
     Object.keys(ARP).filter((k) => k !== g.sounds.arp),
   );
   const make: Record<string, () => TrackInput> = {
-    bass: () =>
-      BASS[g.sounds.bass]!(
-        "bass",
-        "Bass",
-        LEVELS.bass! * trim("bass", g.sounds.bass),
-        d,
-      ),
+    bass: () => BASS[g.sounds.bass]!("bass", "Bass", LEVELS.bass!, d),
     sub: () => subTrack(LEVELS.sub!),
-    pad: () =>
-      PAD[g.sounds.pad]!(
-        "pad",
-        "Pad",
-        LEVELS.pad! * trim("pad", g.sounds.pad),
-        d,
-      ),
-    stabs: () =>
-      STAB[g.sounds.stab]!(
-        "stabs",
-        "Stabs",
-        LEVELS.stabs! * trim("stab", g.sounds.stab),
-        d,
-      ),
-    arp: () =>
-      ARP[g.sounds.arp]!(
-        "arp",
-        "Arp",
-        LEVELS.arp! * trim("arp", g.sounds.arp),
-        d,
-      ),
-    lead: () =>
-      LEAD[g.sounds.lead]!(
-        "lead",
-        "Lead",
-        LEVELS.lead! * trim("lead", g.sounds.lead),
-        d,
-      ),
+    pad: () => PAD[g.sounds.pad]!("pad", "Pad", LEVELS.pad!, d),
+    stabs: () => STAB[g.sounds.stab]!("stabs", "Stabs", LEVELS.stabs!, d),
+    arp: () => ARP[g.sounds.arp]!("arp", "Arp", LEVELS.arp!, d),
+    lead: () => LEAD[g.sounds.lead]!("lead", "Lead", LEVELS.lead!, d),
     counter: () => ({
-      ...ARP[counterSound]!(
-        "counter",
-        "Counter line",
-        LEVELS.counter! * trim("arp", counterSound),
-        d,
-      ),
+      ...ARP[counterSound]!("counter", "Counter line", LEVELS.counter!, d),
       pan: 0.28,
     }),
     vox: () => singer("vox", "Singer", LEVELS.vox!, s, d),
@@ -1511,30 +1462,26 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
     fx: () => fxTrack("fx", LEVELS.fx!),
     spark: () => sparkTrack("spark", LEVELS.spark!, d),
     fg1: () => ({
-      ...BAROQUE[baroque[0]!]!(
-        "fg1",
-        "Fugue I",
-        LEVELS.fg1! * trim("baroque", baroque[0]!),
-        d,
-      ),
+      ...BAROQUE[baroque[0]!]!("fg1", "Fugue I", LEVELS.fg1!, d),
       pan: 0.3,
     }),
     fg2: () => ({
-      ...BAROQUE[baroque[1]!]!(
-        "fg2",
-        "Fugue II",
-        LEVELS.fg2! * trim("baroque", baroque[1]!),
-        d,
-      ),
+      ...BAROQUE[baroque[1]!]!("fg2", "Fugue II", LEVELS.fg2!, d),
       pan: -0.3,
     }),
-    fg3: () =>
-      BAROQUE[baroque[2]!]!(
-        "fg3",
-        "Fugue III",
-        LEVELS.fg3! * trim("baroque", baroque[2]!),
-        d,
-      ),
+    fg3: () => BAROQUE[baroque[2]!]!("fg3", "Fugue III", LEVELS.fg3!, d),
+  };
+  // Each palette sound sits at its role's loudness.
+  const trims: Record<string, number> = {
+    bass: trim("bass", g.sounds.bass),
+    pad: trim("pad", g.sounds.pad),
+    stabs: trim("stab", g.sounds.stab),
+    arp: trim("arp", g.sounds.arp),
+    lead: trim("lead", g.sounds.lead),
+    counter: trim("arp", counterSound),
+    fg1: trim("baroque", baroque[0]!),
+    fg2: trim("baroque", baroque[1]!),
+    fg3: trim("baroque", baroque[2]!),
   };
   // Each kit's kick, snare and hats sit at Redline's balance; perc plays the snare kit.
   const kitOf: Record<string, string> = {
@@ -1551,7 +1498,7 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
       return withGain(t, gain);
     });
   for (const [id, build] of Object.entries(make))
-    if (used.has(id)) out.push(withGain(build(), 1));
+    if (used.has(id)) out.push(withGain(build(), trims[id] ?? 1));
   // Lanes land on the tracks; any track with a dj-filter lane gets the filter.
   return out.map((track) => {
     const thrown =

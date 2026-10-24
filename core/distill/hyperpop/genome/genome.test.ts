@@ -12,7 +12,7 @@ import {
 import { SOUND_TRIMS } from "./levels.ts";
 import { fugue, type MNote } from "./melody.ts";
 import { Rng } from "./rng.ts";
-import { ARP, BAROQUE, BASS, LEAD, PAD, STAB } from "./sounds.ts";
+import { ARP, BAROQUE, BASS, LEAD, PAD, STAB, withGain } from "./sounds.ts";
 import { consonant } from "./theory.ts";
 
 const UNPITCHED = new Set([
@@ -219,4 +219,24 @@ test("every palette sound has a measured trim to its role's loudness", () => {
     expect(Object.keys(SOUND_TRIMS[role] ?? {}).sort()).toEqual(
       Object.keys(table).sort(),
     );
+});
+
+test("a preset is cut ahead of its peak guard, not after it", () => {
+  const design = {
+    brightness: 0.5,
+    grit: 0.5,
+    space: 0.5,
+    width: 0.5,
+    echo: 0.5,
+  };
+  const felt = PAD.felt!("pad", "Pad", 0.5, design);
+  const level = (t: typeof felt) =>
+    t.patch && "nodes" in t.patch
+      ? Number(t.patch.nodes.find((n) => n.id === "level")?.params?.gain)
+      : NaN;
+  const cut = withGain(felt, 0.1);
+  expect(cut.volume).toBe(0.5);
+  expect(level(cut)).toBeCloseTo(level(felt) * 0.1, 3);
+  // A boost still goes on the track, past the guard.
+  expect(withGain(felt, 1.5).volume).toBe(0.75);
 });
