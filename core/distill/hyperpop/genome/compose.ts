@@ -1307,6 +1307,37 @@ function seams(
       stutter(c, end, timeline(c.loops.main, c.g.harmony.rate));
     else if (move === "dive")
       dive(c.s, c.g.voice === "instrumental" ? "lead" : "vox", tickOf(end));
+    // Into the last drop the singer stutters the hook's first word, the
+    // peak-word move the demos make, unless the seam is silence.
+    const lastDrop = !sections.slice(i + 2).some((x) => x.kind === "drop");
+    if (
+      next.kind === "drop" &&
+      lastDrop &&
+      c.g.voice !== "instrumental" &&
+      move !== "gap" &&
+      move !== "tapestop"
+    ) {
+      const word = (c.words.hook[0] ?? "ah").replace(/-$/, "");
+      const tones = ladder(
+        c.loops.main[0]!.triad,
+        c.ranges.vox.low + 5,
+        c.ranges.vox.high,
+      );
+      const pitch = tones[Math.floor(tones.length / 2)] ?? c.ranges.vox.high;
+      const shift = SINGERS[c.g.voice]?.shift ?? 0;
+      for (let k = 0; k < 6; k++)
+        c.s.note(
+          "high",
+          end - 1,
+          2.5 + k * 0.25,
+          pitch + shift,
+          0.18,
+          0.5 + 0.07 * k,
+          {
+            lyric: word,
+          },
+        );
+    }
     if (devices.has("riser") && sec.kind !== "pre")
       c.s.note("fx", Math.max(sec.start, end - 2), 0, 48, 8, 0.6);
   });
