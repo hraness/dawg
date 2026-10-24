@@ -231,6 +231,21 @@ describe("hyperpop song sheets", () => {
     const filled = validateSheet(bare);
     if (!filled.ok) throw new Error(filled.errors.join("\n"));
     expect(filled.sheet.sections[1]!.arp).toBe("skip");
+    // A small model's slips: a spaced lyric and a bridge outside candy.
+    const slips = roundTrip(sheet) as Record<string, any>;
+    slips.lines.v1[0][3] = "oh no";
+    slips.sections[4].kind = "bridge";
+    const mended = validateSheet(slips);
+    if (!mended.ok) throw new Error(mended.errors.join("\n"));
+    expect(mended.sheet.lines.v1![0]![3]).toBe("ohno");
+    expect(mended.sheet.sections[4]!.kind).toBe("break");
+    expect(() => compileSheet(mended.sheet)).not.toThrow();
+    const spaced = roundTrip(candySheet().sheet) as Record<string, any>;
+    for (const line of Object.values(spaced.lines) as any[][])
+      for (const note of line) note[3] = "la la";
+    const candy = validateSheet(spaced);
+    if (!candy.ok) throw new Error(candy.errors.join("\n"));
+    expect(() => compileSheet(candy.sheet)).not.toThrow();
   });
 
   test("the critic flags what the owner disliked", () => {

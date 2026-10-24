@@ -450,7 +450,7 @@ export function validateSheet(raw: unknown): Validated {
           Math.round(beat * 4) / 4,
           Math.max(-3, Math.min(15, Math.round(degree))),
           Math.max(0, Math.min(longest(palette as Palette), beats)),
-          syllable.trim().slice(0, 12) || "ah",
+          syllable.replace(/\s+/g, "").slice(0, 12) || "ah",
         ]);
       }
       if (skipped > 0)
@@ -532,7 +532,13 @@ export function validateSheet(raw: unknown): Validated {
         errors.push(`${where}: a section object`);
         return;
       }
-      const kind = value.kind as SheetKind;
+      let kind = value.kind as SheetKind;
+      if (!candy && kind === "bridge") {
+        warnings.push(
+          `${where}.kind: night and glass have no bridge, so it became a break`,
+        );
+        kind = "break";
+      }
       const kinds = candy
         ? KINDS.filter((k) => CANDY_BARS[k])
         : KINDS.filter((k) => k !== "bridge");
