@@ -54,7 +54,10 @@ describe("hyperpop song sheets", () => {
     const checked = validateSheet(roundTrip(candySheet().sheet));
     if (!checked.ok) throw new Error(checked.errors.join("\n"));
     const score = compileSheet(checked.sheet);
-    const demo = createDemo("candy-fault").toJSON();
+    const demo = createDemo("candy-fault").toJSON() as unknown as Readonly<{
+      bars: number;
+      notes: readonly { trackId: string }[];
+    }>;
     expect(score.bars).toBe(demo.bars);
     const count = (notes: readonly { trackId: string }[]) => {
       const out: Record<string, number> = {};

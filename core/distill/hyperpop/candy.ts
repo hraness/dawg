@@ -287,7 +287,7 @@ export function compileCandy(sheet: SongSheet, key: Key): TrackScore {
       trackId: "chops",
       features: [
         "a pitched-up singer with chord-aware harmony under the held words",
-        "a chip pluck that finishes the singer's lines where the singer rests",
+        "a chip pluck that finishes each line where the singer rests",
         "two interlocking chip arpeggios on complementary sixteenths",
         "an 808 that slides, pops an octave and walks by step",
         "a kick-less glitch break and a silent beat before the last chorus",
