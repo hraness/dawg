@@ -141,6 +141,41 @@ describe("hyperpop song sheets", () => {
       expect(Math.abs(note.cents ?? 0)).toBeLessThanOrEqual(1200);
   });
 
+  test("a candy sheet missing parts of the form still compiles", () => {
+    const base = candySheet().sheet;
+    const variants: SongSheet[] = [
+      { ...base, hooks: {} },
+      {
+        ...base,
+        sections: base.sections.filter(
+          (s) => s.kind !== "bridge" && s.kind !== "break",
+        ),
+      },
+      {
+        ...base,
+        sections: base.sections.filter(
+          (s, i) => s.kind !== "chorus" || i === 3,
+        ),
+      },
+      {
+        ...base,
+        key: "D minor",
+        progressions: {
+          ...base.progressions,
+          verse: ["i", "VI", "III", "VII"],
+          chorus: ["i", "VI", "III", "VII"],
+          bridge: ["i", "v6", "VI", "III"],
+        },
+      },
+    ];
+    for (const variant of variants) {
+      const checked = validateSheet(roundTrip(variant));
+      if (!checked.ok) throw new Error(checked.errors.join("\n"));
+      const score = compileSheet(checked.sheet);
+      expect(score.notes.length).toBeGreaterThan(1000);
+    }
+  });
+
   test("validation answers with fixes, and repairs what it can", () => {
     expect(validateSheet(null).ok).toBe(false);
     const bad = validateSheet({
