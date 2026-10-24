@@ -97,7 +97,8 @@ export const SONG_TOOLS = Object.freeze([
       if (args.card === undefined) song = compileGenome(sampleGenome(seed));
       else {
         const checked = validateCard(args.card);
-        if (!checked.ok) invalid(`the card needs fixes: ${checked.errors.join("; ")}`);
+        if (!checked.ok)
+          invalid(`the card needs fixes: ${checked.errors.join("; ")}`);
         warnings = checked.warnings;
         song = songFromCard(checked.card, seed);
       }

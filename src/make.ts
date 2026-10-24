@@ -40,7 +40,14 @@ export const MAKE_USAGE =
 
 type Output = { write(text: string): unknown };
 
-const VALUE = new Set(["--out", "--wav", "--sheet", "--rounds", "--from", "--seed"]);
+const VALUE = new Set([
+  "--out",
+  "--wav",
+  "--sheet",
+  "--rounds",
+  "--from",
+  "--seed",
+]);
 const FLAGS = new Set(["--classic"]);
 
 const slug = (title: string) =>
@@ -85,8 +92,13 @@ export async function runMakeCommand(
   const from = options.get("--from");
   const seedArg = options.get("--seed");
   const seed = seedArg === undefined ? undefined : Number(seedArg);
-  if (seed !== undefined && (!Number.isInteger(seed) || seed < 0 || seed >= 2 ** 31)) {
-    stderr.write("dawg make: --seed takes a whole number from 0 to 2147483647\n");
+  if (
+    seed !== undefined &&
+    (!Number.isInteger(seed) || seed < 0 || seed >= 2 ** 31)
+  ) {
+    stderr.write(
+      "dawg make: --seed takes a whole number from 0 to 2147483647\n",
+    );
     return 2;
   }
   if (!from && !brief && seed === undefined) {
@@ -100,11 +112,23 @@ export async function runMakeCommand(
   }
 
   if (options.has("--classic") && !from && !brief) {
-    stderr.write(`dawg make: --classic needs a brief or --from · ${MAKE_USAGE}\n`);
+    stderr.write(
+      `dawg make: --classic needs a brief or --from · ${MAKE_USAGE}\n`,
+    );
     return 2;
   }
   if (!options.has("--classic"))
-    return makeGenome({ brief, from, seed, rounds, options, workspace, stdout, stderr, signal });
+    return makeGenome({
+      brief,
+      from,
+      seed,
+      rounds,
+      options,
+      workspace,
+      stdout,
+      stderr,
+      signal,
+    });
 
   let sheet: SongSheet;
   let score: TrackScore;
@@ -217,28 +241,42 @@ type GenomeRun = Readonly<{
 
 /** The genome path: a card from the model (or a file), a seed, a song. */
 async function makeGenome(run: GenomeRun): Promise<number> {
-  const { brief, from, rounds, options, workspace, stdout, stderr, signal } = run;
+  const { brief, from, rounds, options, workspace, stdout, stderr, signal } =
+    run;
   let seed = run.seed ?? randomSeed();
   let card: SongCard | undefined;
   let song: ReturnType<typeof compileGenome>;
   if (from) {
     let raw: Record<string, unknown>;
     try {
-      raw = JSON.parse(await readFile(resolve(workspace, from), "utf8")) as Record<string, unknown>;
+      raw = JSON.parse(
+        await readFile(resolve(workspace, from), "utf8"),
+      ) as Record<string, unknown>;
     } catch (error) {
-      stderr.write(`dawg make: cannot read ${from} · ${(error as Error).message.slice(0, 160)}\n`);
+      stderr.write(
+        `dawg make: cannot read ${from} · ${(error as Error).message.slice(0, 160)}\n`,
+      );
       return 1;
     }
     // A saved card is {seed, card}; a bare card works too. Anything else is a classic sheet.
     const inner = raw.card && typeof raw.card === "object" ? raw.card : raw;
     if (typeof (inner as Record<string, unknown>).hook !== "string")
-      return runMakeCommand(["make", "--classic", "--from", from, ...forward(options)], workspace, stdout, stderr, signal);
+      return runMakeCommand(
+        ["make", "--classic", "--from", from, ...forward(options)],
+        workspace,
+        stdout,
+        stderr,
+        signal,
+      );
     const checked = validateCard(inner);
     if (!checked.ok) {
-      stderr.write(`dawg make: ${from} is not a valid card\n  - ${checked.errors.join("\n  - ")}\n`);
+      stderr.write(
+        `dawg make: ${from} is not a valid card\n  - ${checked.errors.join("\n  - ")}\n`,
+      );
       return 1;
     }
-    for (const warning of checked.warnings) stderr.write(`  note: ${warning}\n`);
+    for (const warning of checked.warnings)
+      stderr.write(`  note: ${warning}\n`);
     if (run.seed === undefined && typeof raw.seed === "number") seed = raw.seed;
     card = checked.card;
     song = songFromCard(card, seed);
@@ -250,7 +288,9 @@ async function makeGenome(run: GenomeRun): Promise<number> {
       stderr.write(`dawg make: ${model.reason}\n`);
       return 1;
     }
-    stdout.write(`writing "${brief}" with ${model.alias} (local; the first run loads the model) · seed ${seed}\n`);
+    stdout.write(
+      `writing "${brief}" with ${model.alias} (local; the first run loads the model) · seed ${seed}\n`,
+    );
     try {
       const made = await generateGenomeSong(
         brief,
@@ -266,7 +306,9 @@ async function makeGenome(run: GenomeRun): Promise<number> {
           seed,
           rounds,
           onRound: (r) =>
-            stdout.write(`  card ${r.round}: ${r.ok ? "ok" : `invalid (${r.notes.slice(0, 2).join("; ")})`} · ${(r.ms / 1000).toFixed(0)} s\n`),
+            stdout.write(
+              `  card ${r.round}: ${r.ok ? "ok" : `invalid (${r.notes.slice(0, 2).join("; ")})`} · ${(r.ms / 1000).toFixed(0)} s\n`,
+            ),
         },
       );
       card = made.card;
@@ -278,20 +320,39 @@ async function makeGenome(run: GenomeRun): Promise<number> {
       stopLocalServers();
     }
   }
-  const out = resolve(workspace, options.get("--out") ?? `${slug(song.title)}.track.json`);
+  const out = resolve(
+    workspace,
+    options.get("--out") ?? `${slug(song.title)}.track.json`,
+  );
   await writeFile(out, encodeLoop(song.score), "utf8");
-  stdout.write(`"${song.title}" · seed ${seed} · ${song.score.bars} bars → ${out}\n  ${describeGenome(song.genome).join("\n  ")}\n`);
+  stdout.write(
+    `"${song.title}" · seed ${seed} · ${song.score.bars} bars → ${out}\n  ${describeGenome(song.genome).join("\n  ")}\n`,
+  );
   const sheetOut = options.get("--sheet");
   if (sheetOut && card) {
-    await writeFile(resolve(workspace, sheetOut), `${JSON.stringify({ seed, card }, null, 2)}\n`, "utf8");
-    stdout.write(`card → ${resolve(workspace, sheetOut)} (replay with --from)\n`);
+    await writeFile(
+      resolve(workspace, sheetOut),
+      `${JSON.stringify({ seed, card }, null, 2)}\n`,
+      "utf8",
+    );
+    stdout.write(
+      `card → ${resolve(workspace, sheetOut)} (replay with --from)\n`,
+    );
   }
   const wav = options.get("--wav");
-  if (wav) return runRenderCommand(["render", wav, "--import", out], workspace, stdout, stderr);
+  if (wav)
+    return runRenderCommand(
+      ["render", wav, "--import", out],
+      workspace,
+      stdout,
+      stderr,
+    );
   return 0;
 }
 
 /** Options passed through when a --from file turns out to be a classic sheet. */
 function forward(options: ReadonlyMap<string, string>): string[] {
-  return ["--out", "--wav"].flatMap((k) => (options.has(k) ? [k, options.get(k)!] : []));
+  return ["--out", "--wav"].flatMap((k) =>
+    options.has(k) ? [k, options.get(k)!] : [],
+  );
 }
