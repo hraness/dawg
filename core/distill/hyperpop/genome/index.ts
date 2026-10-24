@@ -4,6 +4,7 @@
  * a modular arranger, with a model writing only the words and the taste.
  */
 export {
+  briefPins,
   cardContent,
   cardMessages,
   cardPins,
@@ -20,6 +21,7 @@ export {
   type Section,
 } from "./compose.ts";
 export {
+  cardSeed,
   generateGenomeSong,
   randomSeed,
   songFromCard,

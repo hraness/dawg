@@ -2,6 +2,14 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.33.1
+
+### Fixed
+
+- **Generated songs vary for every brief, not only every seed.**
+  - **Before:** with no pins, the seed alone drew the music, so two briefs on one seed gave the same song. A small model also pinned tempos, keys and modes the brief never named: three of four Gemma cards landed at 165 BPM.
+  - **Now:** the seed is mixed with the card's title and hook, and a card keeps only the pins its brief names in words. Six Gemma cards over two briefs and three seeds gave six tempos, six modes and five drop grammars, with a spread of 0.42; the demos sit 0.445 apart. A saved card still replays exactly.
+
 ## 0.33.0
 
 ### Added
@@ -19,7 +27,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
   - **One key:** nothing in the genome can change key.
   - **Spread:** generated songs average about 0.4 apart, about as far as the demos are from each other, and every one sits more than 0.25 from every demo.
 - **Counterpoint.** Bridges carry a countermelody. About one song in four has a fugue break: a short subject enters in two or three synth or vox voices in turn, settled beat by beat so they agree.
-- **`dawg make --seed N`.** The same brief and seed give the same song. With no brief, `--seed` composes without a model. `--from` replays a saved card.
+- **`dawg make --seed N`.** The same card and seed give the same song; the seed is mixed with the card's words, so two briefs on one seed are two songs. With no brief, `--seed` composes without a model. `--from` replays a saved card.
 - **`compose_song` agent tool.** It takes a card and an optional seed and loads the song in one undoable edit. `song_guide` now includes the card guide.
 - **`scripts/genome-eval.ts`** prints each seed's genome, its nearest demo and the spread.
 

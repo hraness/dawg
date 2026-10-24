@@ -156,6 +156,32 @@ export function validateCard(raw: unknown): CardCheck {
   };
 }
 
+/**
+ * What the brief asks for in so many words. A model tends to pin a tempo, a
+ * key or a beat the brief never named, and every pin it adds is an axis the
+ * seed no longer varies, so a card keeps only the pins its brief supports.
+ */
+const ASKS: Readonly<Record<string, RegExp>> = {
+  bpm: /\b\d{2,3}\s*(bpm|beats)|\btempo\b|\bbpm\b/,
+  key: /\b[a-g](#|b|♯|♭|-sharp|-flat| sharp| flat)?\s*(major|minor|maj|min|m)\b|\bkey of\b|\bin the key\b/,
+  mode: /\b(major|minor|dorian|mixolydian|lydian|phrygian)\b/,
+  voice:
+    /chipmunk|robot|vocoder|whisper|instrumental|no vocals?|chopped|abstract|pitched[- ]up|sung|singer|vocals?\b/,
+  drums:
+    /jersey|gabber|footwork|trap|two[- ]?step|2[- ]?step|dembow|reggaeton|bounce|glitch|breakbeat|\bbreaks?\b|four[- ]on[- ]the[- ]floor|4[- ]on[- ]the[- ]floor|house|techno/,
+  form: /\b(form|structure|drop first|starts? with (a|the) drop|beat switch|slow burn|false ending|miniature|through-composed)\b/,
+  fugue: /fugue|counterpoint|baroque|canon/,
+};
+
+/** The card with only the pins its brief names. */
+export function briefPins(card: SongCard, brief: string): SongCard {
+  const text = brief.toLowerCase();
+  const pins = Object.fromEntries(
+    Object.entries(card.pins ?? {}).filter(([name]) => ASKS[name]?.test(text)),
+  );
+  return { ...card, pins: pins as SongCard["pins"] };
+}
+
 /** The genome pins a card asks for. Mood steers the axes it touches. */
 export function cardPins(card: SongCard, rng: Rng): GenomePins {
   const p = card.pins ?? {};
@@ -275,7 +301,7 @@ export const CARD_GUIDE = `You write the words and the taste for a hyperpop song
 - hook: the chorus words, 6 to 12 syllables, sung again in every drop. Short, vowel-rich, repeatable. Split words into syllables with hyphens ("e-lec-tric").
 - verses: 4 to 8 lines, 5 to 10 syllables each, hyphenated the same way. Concrete images, not clichés; each line answers the one before.
 - mood: 0 to 1 each. energy (calm to frantic), brightness (dark to sugary), grit (clean to distorted), space (dry to cavernous).
-- pins: only what the brief names. bpm 80 to 200; key like "F minor"; mode ${Object.keys(MODES).join(", ")}; voice ${VOICES.join(", ")} (chopped and abstract read as texture; instrumental has no singer); drums ${GRAMMARS.join(", ")}; form ${FORMS.join(", ")}; fugue true for a baroque counterpoint break. Leave a pin out and the composer chooses, which is usually better.
+- pins: only what the brief names. bpm 80 to 200; key like "F minor"; mode ${Object.keys(MODES).join(", ")}; voice ${VOICES.join(", ")} (chopped and abstract read as texture; instrumental has no singer); drums ${GRAMMARS.join(", ")}; form ${FORMS.join(", ")}; fugue true for a baroque counterpoint break. Pin only what the brief says in words; most briefs name no pins, so most cards have none. A pin the brief does not name is dropped.
 
 Write original words. Never quote an existing song. One key for the whole song: the composer never changes key.`;
 
