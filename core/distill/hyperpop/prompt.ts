@@ -44,6 +44,18 @@ intro 8 -> verse 8 -> pre 4 -> chorus 8 -> post 8 (drop) -> verse 8 -> pre 4 -> 
 - Repeat the hook: ch1 returns in every chorus.
 - A line is a list of notes [beat, degree, beats, "syllable"]: one syllable per note, beats counted from the start of the part (0 to 3.75 for verse and pre parts, 0 to 7.75 for chorus parts). Split words into syllables ("neon" -> "ne-", "on"). Verse parts: 4 to 7 notes in eighths and quarters, ending on a held note by beat 3. Chorus parts: 5 to 8 notes, a held note to finish each two-bar phrase.
 - Sing like a person, not a sequencer. Mix quick syllables (0.25 to 0.5 beats) with words held 1 to 2 beats. Start lines off the beat (0.5) or on a pickup. Leave a beat or more of rest between lines. Give each line its own rhythm, and end each phrase on a long note.
+- Rhythm cells to build lines from, as [beat, beats] pairs. Use a different cell for each line of a verse, so v1 and v2 differ and v2 answers v1 (v3 may echo v1). Vary a cell by splitting a note in two or tying two together.
+  - Verse and pre (one bar):
+    - run then hold: [0,0.5] [0.5,0.5] [1,0.5] [1.5,0.5] [2,1.5]
+    - pickup: [0.5,0.5] [1,0.5] [1.5,1] [2.5,0.5] [3,1]
+    - 3-3-2: [0,0.75] [0.75,0.75] [1.5,0.5] [2,2]
+    - late start: [1,0.5] [1.5,0.5] [2,0.5] [2.5,1.5]
+    - quick in: [0,0.25] [0.25,0.25] [0.5,0.5] [1,1] [2,0.5] [2.5,1.5]
+    - hold in the middle: [0,0.5] [0.5,0.5] [1,2] [3,0.5] [3.5,0.5]
+  - Chorus (two bars):
+    - [0,0.5] [0.5,0.5] [1,1] [2,0.5] [2.5,1.5] [4,0.5] [4.5,0.5] [5,3]
+    - [0,1] [1,0.5] [1.5,0.5] [2,0.5] [2.5,1.5] [4.5,0.5] [5,0.5] [5.5,2.5]
+    - [0,0.5] [0.5,0.5] [1,0.5] [1.5,0.5] [2,0.5] [2.5,0.5] [3,1] [4,3.5]
 - A short note (0.5 beats or less) on a beat may be a neighbour of the chord tone it steps to next. That is the only way to sing a non-chord tone on a beat.
 - Write original words. Never quote an existing song.
 

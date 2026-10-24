@@ -727,41 +727,101 @@ export const isPatternSlot = (slot: string): slot is PatternSlot =>
   (PATTERN_SLOTS as string[]).includes(slot);
 
 /**
- * Write a sung note that clashes on a beat as the chord tone the compiler
- * moves it to, so the sheet says what is heard. A short note stepping
- * straight on to its neighbour leans on the beat and stays.
+ * Write each on-beat note that clashes a semitone with its chord as the
+ * neighbouring degree that clashes least wherever the note plays (a line in
+ * every section that sings it, a hook in every bar it repeats over), so the
+ * sheet says what is heard. A short note stepping straight on to its
+ * neighbour leans on the beat and stays.
  */
 export function settleSheet(sheet: SongSheet): SongSheet {
   const key = parseKey(sheet.key);
   if (!key) return sheet;
-  const lines = { ...sheet.lines };
-  for (const section of sheet.sections) {
-    const list = sheet.progressions[section.chords] ?? [];
+  const chordAt = (name: string, bar: number) => {
+    const list = sheet.progressions[name] ?? [];
+    const numeral = list[bar % Math.max(1, list.length)] ?? "I";
+    return new Set(chordClasses(key, numeralDegree(numeral) ?? 1));
+  };
+  const rubs = (chords: readonly Set<number>[], degree: number) => {
+    const pc = degreePitch(key, degree) % 12;
+    return chords.filter(
+      (c) => !c.has(pc) && (c.has((pc + 1) % 12) || c.has((pc + 11) % 12)),
+    ).length;
+  };
+  // The neighbour with the fewest clashes, kept only when it clashes less.
+  const best = (
+    chords: readonly Set<number>[],
+    degree: number,
+    low: number,
+    high: number,
+  ) => {
+    let pick = degree;
+    let least = rubs(chords, degree);
+    for (const d of [degree - 1, degree + 1])
+      if (d >= low && d <= high && rubs(chords, d) < least) {
+        pick = d;
+        least = rubs(chords, d);
+      }
+    return pick;
+  };
+  const leans = (
+    notes: readonly (readonly [number, number, number, ...unknown[]])[],
+    k: number,
+  ) => {
+    const [beat, degree, beats] = notes[k]!;
+    const next = notes[k + 1];
+    return (
+      beats <= 0.5 &&
+      next !== undefined &&
+      next[0] - beat <= 0.5 &&
+      Math.abs(next[1] - degree) === 1
+    );
+  };
+
+  const heard = new Map<SheetPart, Set<number>[][]>();
+  for (const section of sheet.sections)
     (section.lines ?? []).forEach((part, bar) => {
-      const line = part ? lines[part] : undefined;
+      const line = part ? sheet.lines[part] : undefined;
       if (!part || !line) return;
-      lines[part] = line.map((note, k): SheetNote => {
-        const [beat, degree, beats, lyric] = note;
-        const next = line[k + 1];
-        const leans =
-          beats <= 0.5 &&
-          next !== undefined &&
-          next[0] - beat <= 0.5 &&
-          Math.abs(next[1] - degree) === 1;
-        if (beat % 1 !== 0 || leans) return note;
-        const numeral = list[(bar + Math.floor(beat / 4)) % list.length] ?? "I";
-        const tones = new Set(chordClasses(key, numeralDegree(numeral) ?? 1));
-        const pc = degreePitch(key, degree) % 12;
-        const rubs =
-          !tones.has(pc) &&
-          (tones.has((pc + 1) % 12) || tones.has((pc + 11) % 12));
-        if (!rubs) return note;
-        for (const d of [degree - 1, degree + 1])
-          if (tones.has(degreePitch(key, d) % 12))
-            return [beat, d, beats, lyric];
-        return note;
-      });
+      const slots = heard.get(part) ?? line.map(() => []);
+      line.forEach(([beat], k) =>
+        slots[k]!.push(chordAt(section.chords, bar + Math.floor(beat / 4))),
+      );
+      heard.set(part, slots);
+    });
+  const lines = { ...sheet.lines };
+  for (const [part, slots] of heard) {
+    const line = lines[part]!;
+    lines[part] = line.map((note, k): SheetNote => {
+      const [beat, degree, beats, lyric] = note;
+      if (beat % 1 !== 0 || leans(line, k)) return note;
+      return [beat, best(slots[k]!, degree, -3, 15), beats, lyric];
     });
   }
-  return { ...sheet, lines };
+
+  // The candy palette fits its hooks to the chords itself.
+  if (sheet.palette === "candy" || !sheet.hooks) return { ...sheet, lines };
+  const plays = new Map<string, Set<number>[][]>();
+  for (const section of sheet.sections) {
+    const bars = (section.lead ?? []).flatMap((name) =>
+      (sheet.hooks?.[name] ?? []).map((_, b) => [name, b] as const),
+    );
+    for (let at = 0; bars.length > 0 && at < section.bars; at++) {
+      const [name, b] = bars[at % bars.length]!;
+      const slots =
+        plays.get(name) ?? sheet.hooks[name]!.map(() => [] as Set<number>[]);
+      slots[b]!.push(chordAt(section.chords, at));
+      plays.set(name, slots);
+    }
+  }
+  const hooks = { ...sheet.hooks };
+  for (const [name, slots] of plays)
+    hooks[name] = hooks[name]!.map((notes, b) =>
+      notes.map((note, k) => {
+        const [beat, degree, beats] = note;
+        if (beat % 1 !== 0 || leans(notes, k) || slots[b]!.length === 0)
+          return note;
+        return [beat, best(slots[b]!, degree, 1, 16), beats] as const;
+      }),
+    );
+  return { ...sheet, lines, hooks };
 }
