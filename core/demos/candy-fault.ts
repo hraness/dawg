@@ -244,14 +244,14 @@ const sixthBelow = (pitch: number): number =>
   E_MAJOR.has((pitch - 8 + 120) % 12) ? pitch - 8 : pitch - 9;
 
 /** Scoop into a note from below, the hard-tune snap of a pitched vocal. */
-const scoop = (cents = -90, at = 0.12): Extra => ({
+export const scoop = (cents = -90, at = 0.12): Extra => ({
   bend: [
     { at: 0, cents },
     { at, cents: 0 },
   ],
 });
 /** Fall off the end of a held note. */
-const fall = (cents = -250, from = 0.7): Extra => ({
+export const fall = (cents = -250, from = 0.7): Extra => ({
   bend: [
     { at: from, cents: 0 },
     { at: 1, cents },
@@ -259,7 +259,7 @@ const fall = (cents = -250, from = 0.7): Extra => ({
 });
 
 // ── kick patterns (one per bar, cycled) ─────────────────────────────────
-const KICK: Readonly<Record<string, readonly string[]>> = {
+export const KICK: Readonly<Record<string, readonly string[]>> = {
   verse: [
     "9.....7.........",
     "9.........7...6.",
@@ -287,20 +287,20 @@ const KICK: Readonly<Record<string, readonly string[]>> = {
   last: ["9.........7.....", "9.....7.........", "", ""],
 };
 
-const HATS_HALF = [
+export const HATS_HALF = [
   "7.4.6.4.7.4.6.45",
   "7.4.6.4.7.4.6.4.",
   "7.4.6.4.7.4.6.4.",
   "7.4.6.4.7.4.6...",
 ];
-const HATS_DRIVE = [
+export const HATS_DRIVE = [
   "8465846584658466",
   "8465846584658...",
   "8465846584658466",
   "84658465846.....",
 ];
 /** Chorus backbeat with a ghost that moves each bar. */
-const SNAP_CHORUS = [
+export const SNAP_CHORUS = [
   "....9.......9...",
   "....9.....3.9...",
   "....9.......9..3",
@@ -308,7 +308,7 @@ const SNAP_CHORUS = [
 ];
 
 // ── hook motifs (the plastic pulse lead) ─────────────────────────────────
-const MOTIF: Phrase = [
+export const MOTIF: Phrase = [
   [0, 76, 0.32, 0.78],
   [0.75, 75, 0.2, 0.63],
   [1, 76, 0.22, 0.66],
@@ -381,7 +381,7 @@ const COUNTER: Readonly<Record<string, Phrase>> = {
  * Chorus hocket: where the singer rests, the chip pluck plays the next
  * syllables of the tune an octave up, so voice and chip add up to one line.
  */
-const CHIP: Readonly<Record<string, Phrase>> = {
+export const CHIP: Readonly<Record<string, Phrase>> = {
   // After "oh" resolves on B: the tune continues B G# F# B.
   B: [
     [2, 83, 0.2, 0.74],
@@ -401,7 +401,7 @@ const CHIP: Readonly<Record<string, Phrase>> = {
 };
 
 // ── topline (all lyrics original) ────────────────────────────────────────
-type Line = readonly (readonly [bar: number, phrase: Phrase])[];
+export type Line = readonly (readonly [bar: number, phrase: Phrase])[];
 type Slot = readonly [
   bar: number,
   beat: number,
@@ -411,14 +411,14 @@ type Slot = readonly [
 ];
 
 /** Split lyrics into syllables; a trailing `-` tells the voice the word goes on. */
-const syllables = (text: string): string[] =>
+export const syllables = (text: string): string[] =>
   text.split(" ").flatMap((word) => {
     const parts = word.split("-");
     return parts.map((part, i) => (i < parts.length - 1 ? `${part}-` : part));
   });
 
 /** Put syllables on a melody template, one per slot, in time order. */
-const withWords = (
+export const withWords = (
   start: number,
   slots: readonly Slot[],
   words: readonly string[],
@@ -437,7 +437,7 @@ const withWords = (
 };
 
 /** The verse melody: vi vi IV IV I I V V, a four-line stanza of 7 6 7 7. */
-const VERSE_SLOTS: readonly Slot[] = [
+export const VERSE_SLOTS: readonly Slot[] = [
   [0, 0.5, 68, 0.42, 0.62],
   [0, 1, 68, 0.7, 0.68],
   [0, 2, 66, 0.42, 0.56],
@@ -460,7 +460,7 @@ const VERSE_SLOTS: readonly Slot[] = [
   [5, 0, 71, 1.8, 0.7],
 ];
 /** Last two bars over V (verse one) or over the borrowed bVII (verse two). */
-const VERSE_END_V: readonly Slot[] = [
+export const VERSE_END_V: readonly Slot[] = [
   [6, 0.5, 71, 0.4, 0.64],
   [6, 1, 73, 0.4, 0.64],
   [6, 1.5, 75, 0.9, 0.74],
@@ -478,7 +478,9 @@ const VERSE_END_VII: readonly Slot[] = [
   [6, 3.5, 71, 0.45, 0.66],
   [7, 0, 74, 1.5, 0.76],
 ];
-const VERSE_ONE = withWords(
+export const VERSE_TWO_WORDS =
+  "Blue screen in the morn-ing light you're buf-fer-ing my heart Can-dy coat-ed er-ror code I don't want it to re-start";
+export const VERSE_ONE = withWords(
   4,
   [...VERSE_SLOTS, ...VERSE_END_V],
   syllables(
@@ -494,7 +496,7 @@ const VERSE_TWO = withWords(
 );
 
 /** Pre-chorus: a rising line that ends on the 7th of V, unresolved. */
-const lift = (bar: number): Line => [
+export const lift = (bar: number): Line => [
   [
     bar,
     [
@@ -635,7 +637,7 @@ function lineC(
  * a 7th over the new bass note, then steps down to the 6th: a 7-6 chain
  * over E D# C# B A G#, then the borrowed ii half-diminished and a 4-3 on V.
  */
-const BRIDGE: Line = [
+export const BRIDGE: Line = [
   [
     48,
     [
@@ -725,7 +727,7 @@ const BRIDGE_HARM: Line = [
   [53, [[1, 59, 2.5, 0.48, "_"]]],
 ];
 
-const LAST: Line = [
+export const LAST: Line = [
   [
     64,
     [
@@ -761,8 +763,8 @@ const chorusLines = (c: number, second: boolean, stutter: boolean): Line => [
     78,
   ),
 ];
-const CHORUS_ONE = chorusLines(16, false, false);
-const CHORUS_TWO = chorusLines(40, true, false);
+export const CHORUS_ONE = chorusLines(16, false, false);
+export const CHORUS_TWO = chorusLines(40, true, false);
 /**
  * The final chorus lands: its last bar turns to the tonic at the half bar,
  * so her held F# becomes a 9th over E and steps down to the root.
@@ -781,7 +783,7 @@ const OVERLOAD: Line = chorusLines(56, false, true).map(
 );
 
 /** Step automation: each value holds until the next listed bar, then jumps. */
-const steps = (
+export const steps = (
   ...points: readonly (readonly [bar: number, value: number])[]
 ): AutomationPoint[] =>
   points.flatMap(([bar, value], i) =>
@@ -794,7 +796,7 @@ const steps = (
   );
 
 /** Short dub throws on the last word of each line (dotted-eighth delay). */
-function throws(bars: readonly number[], base: number, peak: number) {
+export function throws(bars: readonly number[], base: number, peak: number) {
   const points: AutomationPoint[] = [{ tick: 0, value: base }];
   for (const bar of bars)
     points.push(
@@ -810,7 +812,7 @@ function throws(bars: readonly number[], base: number, peak: number) {
  * A lane that rests at `base` and sweeps to `peak` over each listed bar
  * (`from` to `to` within it), snapping back to `base` at the next bar.
  */
-function sweeps(
+export function sweeps(
   base: number,
   peak: number,
   bars: readonly number[],
@@ -827,6 +829,363 @@ function sweeps(
   return points;
 }
 
+/** Automation that follows where a song's sections fall. */
+export type CandyLanes = Readonly<{
+  hatsVolume: AutomationPoint[];
+  hookPw: AutomationPoint[];
+  chordsVolume: AutomationPoint[];
+  chordsLpf: AutomationPoint[];
+  chordsDetune: AutomationPoint[];
+  chordsCrushBits: AutomationPoint[];
+  chordsCrushMix: AutomationPoint[];
+  arpVolume: AutomationPoint[];
+  arpCrushBits: AutomationPoint[];
+  arpCrushMix: AutomationPoint[];
+  arp2Volume: AutomationPoint[];
+  vocalThrows: AutomationPoint[];
+  vocalFormant: AutomationPoint[];
+  vocalCrushMix: AutomationPoint[];
+  vocalCrushBits: AutomationPoint[];
+}>;
+
+/** The candy instruments; `a` holds the lanes that follow a song's layout. */
+export function candyTracks(s: Composer, a: CandyLanes): void {
+  s.track(
+    // A short clicky kick; the 808 track owns everything under 60 Hz.
+    voice("kick", "Rubber kick", "kit", 0.55, {
+      kit: "syn707",
+      fx: { duck: { orbit: 2, depth: 0.55, attack: 0.1 } },
+    }),
+  );
+  s.track(
+    voice("snap", "Snap & clap", "kit", 0.3, {
+      kit: "synlinn",
+      reverb: { mix: 0.08, size: 0.25, fade: 0.5 },
+      humanize: { timing: 2, velocity: 4, seed: 11 },
+    }),
+  );
+  s.track(
+    voice("hats", "Needle hats", "kit", 0.72, {
+      kit: "syn909",
+      pan: 0.14,
+      // Each chorus pass is a little bigger than the last.
+      volumeAutomation: a.hatsVolume,
+      humanize: { timing: 3, velocity: 6, seed: 12 },
+    }),
+  );
+  s.track(
+    voice("sub", "Bending sub", "sine", 0.58, {
+      synth: {
+        attack: 0.003,
+        decay: 0.45,
+        sustain: 0.7,
+        release: 0.07,
+        lpf: 950,
+      },
+      fx: {
+        ...orbit,
+        distort: { type: "soft", drive: 2.2, tone: 1900, mix: 0.42 },
+      },
+    }),
+  );
+  s.track(
+    voice("hook", "Plastic hook", "pulse", 0.45, {
+      pan: 0.08,
+      synth: {
+        attack: 0.003,
+        decay: 0.1,
+        sustain: 0.32,
+        release: 0.08,
+        pw: 0.22,
+        lpf: 6500,
+      },
+      filter: { type: "hpf", cutoff: 200, resonance: 0 },
+      fx: {
+        ...orbit,
+        distort: { type: "fold", drive: 1.2, mix: 0.28, tone: 6200 },
+      },
+      delay: { beats: 0.75, feedback: 0.24, mix: 0.14, pingpong: true },
+      reverb: room,
+      humanize: { timing: 3, velocity: 5, seed: 13 },
+      fxAutomation: {
+        "synth-pw": a.hookPw,
+      },
+    }),
+  );
+  s.track(
+    voice("keys", "Soft reset keys", "rhodes", 0.4, {
+      pan: -0.18,
+      reverb: hall,
+      humanize: { timing: 8, velocity: 6, length: 6, seed: 14 },
+    }),
+  );
+  s.track(
+    voice("chords", "Sugar stack", "supersaw", 0.5, {
+      synth: {
+        attack: 0.012,
+        decay: 0.35,
+        sustain: 0.55,
+        release: 0.14,
+        unison: 7,
+        detune: 0.28,
+        spread: 0.9,
+        lpf: 5200,
+      },
+      filter: { type: "hpf", cutoff: 160, resonance: 0 },
+      reverb: room,
+      fx: { ...orbit, crush: { bits: 16, coarse: 1, mix: 0 } },
+      // The Overload stack sits a touch under her.
+      volumeAutomation: a.chordsVolume,
+      fxAutomation: {
+        "synth-lpf": a.chordsLpf,
+        // A. G. Cook's move: one layer drifts from pretty to harsh.
+        "synth-detune": a.chordsDetune,
+        // The crush sweeps in over the last pre-chorus bar, clean on the drop.
+        "crush-bits": a.chordsCrushBits,
+        "crush-mix": a.chordsCrushMix,
+      },
+    }),
+  );
+  s.track(
+    voice("arp", "Chip arp", "square", 0.5, {
+      pan: -0.24,
+      synth: {
+        attack: 0.002,
+        decay: 0.09,
+        sustain: 0.12,
+        release: 0.05,
+        lpf: 7500,
+      },
+      filter: { type: "hpf", cutoff: 600, resonance: 0 },
+      // Dotted-eighth pingpong plus a slow chorus: the arp cascades side to side.
+      delay: { beats: 0.75, feedback: 0.3, mix: 0.22, pingpong: true },
+      fx: {
+        ...orbit,
+        chorus: { rate: 0.45, depth: 0.35, mix: 0.45 },
+        crush: { bits: 16, coarse: 1, mix: 0 },
+      },
+      volumeAutomation: a.arpVolume,
+      fxAutomation: {
+        // The glitch break bit-crushes the arp deeper bar by bar.
+        "crush-bits": a.arpCrushBits,
+        "crush-mix": a.arpCrushMix,
+      },
+      humanize: { timing: 2, velocity: 6, seed: 18 },
+    }),
+  );
+  s.track(
+    voice("arp2", "Pulse arp", "pulse", 0.42, {
+      pan: 0.3,
+      synth: {
+        attack: 0.002,
+        decay: 0.08,
+        sustain: 0.1,
+        release: 0.05,
+        pw: 0.33,
+        lpf: 7000,
+      },
+      filter: { type: "hpf", cutoff: 700, resonance: 0 },
+      delay: { beats: 0.5, feedback: 0.22, mix: 0.16, pingpong: true },
+      fx: orbit,
+      volumeAutomation: a.arp2Volume,
+      humanize: { timing: 2, velocity: 6, seed: 19 },
+    }),
+  );
+  s.track(
+    voice("vocal", "Candy singer", "sing", 0.76, {
+      sing: {
+        preset: "aah",
+        voice: "soprano",
+        formant: 2.5,
+        bright: 0.72,
+        articulate: 1,
+        breath: 0.06,
+        jitter: 0.25,
+        vib: 5.6,
+        vibmod: 0.14,
+        vibdelay: 0.3,
+        ring: 0.38,
+      },
+      filter: { type: "hpf", cutoff: 230, resonance: 0 },
+      // Close and present: a presence lift, a little air and a gentle
+      // compressor hold her level steady over the stack.
+      fx: {
+        crush: { bits: 16, coarse: 1, mix: 0 },
+        eq: { mid: 2, midfreq: 3000, high: 2, highfreq: 9000 },
+        compressor: {
+          threshold: -20,
+          ratio: 3,
+          attack: 0.006,
+          release: 0.12,
+          makeup: 4,
+        },
+      },
+      delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
+      delayMixAutomation: a.vocalThrows,
+      fxAutomation: {
+        // Formant lifts through the pre-chorus peak; wobbles through the break.
+        "sing-formant": a.vocalFormant,
+        "crush-mix": a.vocalCrushMix,
+        "crush-bits": a.vocalCrushBits,
+      },
+      reverb: room,
+      humanize: { timing: 6, velocity: 5, length: 4, seed: 16 },
+    }),
+  );
+  s.track(
+    voice("harm", "Candy double", "sing", 0.55, {
+      pan: 0.32,
+      sing: {
+        preset: "aah",
+        voice: "alto",
+        formant: 2,
+        bright: 0.55,
+        articulate: 1,
+        breath: 0.12,
+        voices: 3,
+        spread: 14,
+        vib: 5.2,
+        vibmod: 0.1,
+        vibdelay: 0.35,
+      },
+      filter: { type: "hpf", cutoff: 300, resonance: 0 },
+      reverb: hall,
+      humanize: { timing: 9, velocity: 6, seed: 17 },
+    }),
+  );
+  s.track(
+    // The octave-up double for the final chorus: thin, bright, tucked under.
+    voice("high", "Pixel double", "sing", 0.36, {
+      pan: -0.28,
+      sing: {
+        preset: "glass",
+        voice: "soprano",
+        formant: 4.5,
+        bright: 0.6,
+        articulate: 1,
+        breath: 0.1,
+        vib: 6,
+        vibmod: 0.08,
+        vibdelay: 0.2,
+      },
+      filter: { type: "hpf", cutoff: 500, resonance: 0 },
+      reverb: hall,
+      humanize: { timing: 5, velocity: 5, seed: 21 },
+    }),
+  );
+  s.track(
+    voice("chops", "Up pixels", "sampler", 0.3, {
+      sampler: {
+        mode: "keyed",
+        voices: {
+          up: {
+            ...bundledSampleRef("stay-up"),
+            begin: 0.25,
+            end: 0.5,
+            fit: true,
+            fadeTime: 0.007,
+            fadeInTime: 0.002,
+          },
+        },
+      },
+      pan: 0.22,
+      filter: { type: "hpf", cutoff: 650, resonance: 0 },
+      fx: { crush: { bits: 10, coarse: 2, mix: 0.19 } },
+      delay: { beats: 0.75, feedback: 0.2, mix: 0.12, pingpong: true },
+    }),
+  );
+  s.track(
+    voice("spark", "Glass pixels", "sampler", 0.18, {
+      sampler: {
+        mode: "keyed",
+        voices: {
+          glass: { ...bundledSampleRef("glass-hit"), fadeTime: 0.012 },
+        },
+      },
+      pan: -0.31,
+      reverb: hall,
+      fx: { crush: { bits: 7, coarse: 2, mix: 0.24 } },
+    }),
+  );
+  s.track(
+    voice("tear", "Tape tears", "sampler", 0.26, {
+      sampler: {
+        mode: "keyed",
+        voices: {
+          // Notes from 48 play the riser, from 60 the tape hit.
+          rise: { ...bundledSampleRef("riser"), root: 48, fadeTime: 0.05 },
+          tape: { ...bundledSampleRef("tape-hit"), fadeTime: 0.006 },
+        },
+      },
+      filter: { type: "hpf", cutoff: 190, resonance: 0 },
+    }),
+  );
+}
+
+/** Candy Fault's own lanes. */
+const DEMO_LANES: CandyLanes = {
+  hatsVolume: steps(
+    [0, 0.86],
+    [16, 0.88],
+    [24, 0.7],
+    [28, 0.86],
+    [40, 1],
+    [56, 1],
+    [64, 0.86],
+  ),
+  hookPw: lanes(
+    [0, 0.22],
+    [16, 0.37],
+    [23, 0.18],
+    [28, 0.3],
+    [40, 0.28],
+    [56, 0.42],
+    [63, 0.12],
+    [68, 0.3],
+  ),
+  chordsVolume: steps([0, 0.8], [40, 0.9], [56, 0.8]),
+  chordsLpf: lanes(
+    [0, 5200],
+    [12, 900],
+    [15.9, 5200],
+    [36, 900],
+    [39.9, 5600],
+    [56, 6400],
+    [68, 6400],
+  ),
+  chordsDetune: lanes(
+    [0, 0.26],
+    [40, 0.32],
+    [56, 0.4],
+    [63.5, 0.85],
+    [64, 0.3],
+  ),
+  chordsCrushBits: sweeps(16, 3, [15, 39], 0.25, 1),
+  chordsCrushMix: sweeps(0, 0.85, [15, 39], 0.25, 1),
+  arpVolume: steps([0, 0.82], [40, 0.9], [56, 1]),
+  arpCrushBits: lanes([0, 16], [24, 12], [27.9, 4], [28, 16], [68, 16]),
+  arpCrushMix: lanes([0, 0], [24, 0.5], [27.9, 0.9], [28, 0], [68, 0]),
+  arp2Volume: steps([0, 0.85], [56, 1]),
+  vocalThrows: throws(
+    [13, 17, 19, 21, 23, 37, 41, 43, 45, 47, 49, 51, 57, 59, 61, 63],
+    0.07,
+    0.34,
+  ),
+  vocalFormant: [
+    ...lanes([0, 2.5], [15.5, 2.5], [15.95, 7], [16, 2.5]),
+    ...lanes([24, 2.5], [25, -2], [26, 6], [27, -1], [27.9, 5], [28, 2.5]),
+    ...lanes(
+      [39.5, 2.5],
+      [39.95, 7],
+      [40, 2.5],
+      [55, 2.5],
+      [55.6, 5.5],
+      [56, 2.5],
+    ),
+  ],
+  vocalCrushMix: lanes([0, 0], [24, 0.2], [26, 0.6], [27.9, 0.7], [28, 0]),
+  vocalCrushBits: lanes([0, 16], [24, 10], [27.9, 5], [28, 16]),
+};
 export const candyFault: DemoDefinition = {
   info: demoInfo({
     id: "candy-fault",
@@ -888,336 +1247,7 @@ export const candyFault: DemoDefinition = {
       ["Last pixel", 64, 4],
     ] as const)
       s.section(name, start, bars);
-    s.track(
-      // A short clicky kick; the 808 track owns everything under 60 Hz.
-      voice("kick", "Rubber kick", "kit", 0.55, {
-        kit: "syn707",
-        fx: { duck: { orbit: 2, depth: 0.55, attack: 0.1 } },
-      }),
-    );
-    s.track(
-      voice("snap", "Snap & clap", "kit", 0.3, {
-        kit: "synlinn",
-        reverb: { mix: 0.08, size: 0.25, fade: 0.5 },
-        humanize: { timing: 2, velocity: 4, seed: 11 },
-      }),
-    );
-    s.track(
-      voice("hats", "Needle hats", "kit", 0.72, {
-        kit: "syn909",
-        pan: 0.14,
-        // Each chorus pass is a little bigger than the last.
-        volumeAutomation: steps(
-          [0, 0.86],
-          [16, 0.88],
-          [24, 0.7],
-          [28, 0.86],
-          [40, 1],
-          [56, 1],
-          [64, 0.86],
-        ),
-        humanize: { timing: 3, velocity: 6, seed: 12 },
-      }),
-    );
-    s.track(
-      voice("sub", "Bending sub", "sine", 0.58, {
-        synth: {
-          attack: 0.003,
-          decay: 0.45,
-          sustain: 0.7,
-          release: 0.07,
-          lpf: 950,
-        },
-        fx: {
-          ...orbit,
-          distort: { type: "soft", drive: 2.2, tone: 1900, mix: 0.42 },
-        },
-      }),
-    );
-    s.track(
-      voice("hook", "Plastic hook", "pulse", 0.45, {
-        pan: 0.08,
-        synth: {
-          attack: 0.003,
-          decay: 0.1,
-          sustain: 0.32,
-          release: 0.08,
-          pw: 0.22,
-          lpf: 6500,
-        },
-        filter: { type: "hpf", cutoff: 200, resonance: 0 },
-        fx: {
-          ...orbit,
-          distort: { type: "fold", drive: 1.2, mix: 0.28, tone: 6200 },
-        },
-        delay: { beats: 0.75, feedback: 0.24, mix: 0.14, pingpong: true },
-        reverb: room,
-        humanize: { timing: 3, velocity: 5, seed: 13 },
-        fxAutomation: {
-          "synth-pw": lanes(
-            [0, 0.22],
-            [16, 0.37],
-            [23, 0.18],
-            [28, 0.3],
-            [40, 0.28],
-            [56, 0.42],
-            [63, 0.12],
-            [68, 0.3],
-          ),
-        },
-      }),
-    );
-    s.track(
-      voice("keys", "Soft reset keys", "rhodes", 0.4, {
-        pan: -0.18,
-        reverb: hall,
-        humanize: { timing: 8, velocity: 6, length: 6, seed: 14 },
-      }),
-    );
-    s.track(
-      voice("chords", "Sugar stack", "supersaw", 0.5, {
-        synth: {
-          attack: 0.012,
-          decay: 0.35,
-          sustain: 0.55,
-          release: 0.14,
-          unison: 7,
-          detune: 0.28,
-          spread: 0.9,
-          lpf: 5200,
-        },
-        filter: { type: "hpf", cutoff: 160, resonance: 0 },
-        reverb: room,
-        fx: { ...orbit, crush: { bits: 16, coarse: 1, mix: 0 } },
-        // The Overload stack sits a touch under her.
-        volumeAutomation: steps([0, 0.8], [40, 0.9], [56, 0.8]),
-        fxAutomation: {
-          "synth-lpf": lanes(
-            [0, 5200],
-            [12, 900],
-            [15.9, 5200],
-            [36, 900],
-            [39.9, 5600],
-            [56, 6400],
-            [68, 6400],
-          ),
-          // A. G. Cook's move: one layer drifts from pretty to harsh.
-          "synth-detune": lanes(
-            [0, 0.26],
-            [40, 0.32],
-            [56, 0.4],
-            [63.5, 0.85],
-            [64, 0.3],
-          ),
-          // The crush sweeps in over the last pre-chorus bar, clean on the drop.
-          "crush-bits": sweeps(16, 3, [15, 39], 0.25, 1),
-          "crush-mix": sweeps(0, 0.85, [15, 39], 0.25, 1),
-        },
-      }),
-    );
-    s.track(
-      voice("arp", "Chip arp", "square", 0.5, {
-        pan: -0.24,
-        synth: {
-          attack: 0.002,
-          decay: 0.09,
-          sustain: 0.12,
-          release: 0.05,
-          lpf: 7500,
-        },
-        filter: { type: "hpf", cutoff: 600, resonance: 0 },
-        // Dotted-eighth pingpong plus a slow chorus: the arp cascades side to side.
-        delay: { beats: 0.75, feedback: 0.3, mix: 0.22, pingpong: true },
-        fx: {
-          ...orbit,
-          chorus: { rate: 0.45, depth: 0.35, mix: 0.45 },
-          crush: { bits: 16, coarse: 1, mix: 0 },
-        },
-        volumeAutomation: steps([0, 0.82], [40, 0.9], [56, 1]),
-        fxAutomation: {
-          // The glitch break bit-crushes the arp deeper bar by bar.
-          "crush-bits": lanes([0, 16], [24, 12], [27.9, 4], [28, 16], [68, 16]),
-          "crush-mix": lanes([0, 0], [24, 0.5], [27.9, 0.9], [28, 0], [68, 0]),
-        },
-        humanize: { timing: 2, velocity: 6, seed: 18 },
-      }),
-    );
-    s.track(
-      voice("arp2", "Pulse arp", "pulse", 0.42, {
-        pan: 0.3,
-        synth: {
-          attack: 0.002,
-          decay: 0.08,
-          sustain: 0.1,
-          release: 0.05,
-          pw: 0.33,
-          lpf: 7000,
-        },
-        filter: { type: "hpf", cutoff: 700, resonance: 0 },
-        delay: { beats: 0.5, feedback: 0.22, mix: 0.16, pingpong: true },
-        fx: orbit,
-        volumeAutomation: steps([0, 0.85], [56, 1]),
-        humanize: { timing: 2, velocity: 6, seed: 19 },
-      }),
-    );
-    s.track(
-      voice("vocal", "Candy singer", "sing", 0.76, {
-        sing: {
-          preset: "aah",
-          voice: "soprano",
-          formant: 2.5,
-          bright: 0.72,
-          articulate: 1,
-          breath: 0.06,
-          jitter: 0.25,
-          vib: 5.6,
-          vibmod: 0.14,
-          vibdelay: 0.3,
-          ring: 0.38,
-        },
-        filter: { type: "hpf", cutoff: 230, resonance: 0 },
-        // Close and present: a presence lift, a little air and a gentle
-        // compressor hold her level steady over the stack.
-        fx: {
-          crush: { bits: 16, coarse: 1, mix: 0 },
-          eq: { mid: 2, midfreq: 3000, high: 2, highfreq: 9000 },
-          compressor: {
-            threshold: -20,
-            ratio: 3,
-            attack: 0.006,
-            release: 0.12,
-            makeup: 4,
-          },
-        },
-        delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
-        delayMixAutomation: throws(
-          [13, 17, 19, 21, 23, 37, 41, 43, 45, 47, 49, 51, 57, 59, 61, 63],
-          0.07,
-          0.34,
-        ),
-        fxAutomation: {
-          // Formant lifts through the pre-chorus peak; wobbles through the break.
-          "sing-formant": [
-            ...lanes([0, 2.5], [15.5, 2.5], [15.95, 7], [16, 2.5]),
-            ...lanes(
-              [24, 2.5],
-              [25, -2],
-              [26, 6],
-              [27, -1],
-              [27.9, 5],
-              [28, 2.5],
-            ),
-            ...lanes(
-              [39.5, 2.5],
-              [39.95, 7],
-              [40, 2.5],
-              [55, 2.5],
-              [55.6, 5.5],
-              [56, 2.5],
-            ),
-          ],
-          "crush-mix": lanes(
-            [0, 0],
-            [24, 0.2],
-            [26, 0.6],
-            [27.9, 0.7],
-            [28, 0],
-          ),
-          "crush-bits": lanes([0, 16], [24, 10], [27.9, 5], [28, 16]),
-        },
-        reverb: room,
-        humanize: { timing: 6, velocity: 5, length: 4, seed: 16 },
-      }),
-    );
-    s.track(
-      voice("harm", "Candy double", "sing", 0.55, {
-        pan: 0.32,
-        sing: {
-          preset: "aah",
-          voice: "alto",
-          formant: 2,
-          bright: 0.55,
-          articulate: 1,
-          breath: 0.12,
-          voices: 3,
-          spread: 14,
-          vib: 5.2,
-          vibmod: 0.1,
-          vibdelay: 0.35,
-        },
-        filter: { type: "hpf", cutoff: 300, resonance: 0 },
-        reverb: hall,
-        humanize: { timing: 9, velocity: 6, seed: 17 },
-      }),
-    );
-    s.track(
-      // The octave-up double for the final chorus: thin, bright, tucked under.
-      voice("high", "Pixel double", "sing", 0.36, {
-        pan: -0.28,
-        sing: {
-          preset: "glass",
-          voice: "soprano",
-          formant: 4.5,
-          bright: 0.6,
-          articulate: 1,
-          breath: 0.1,
-          vib: 6,
-          vibmod: 0.08,
-          vibdelay: 0.2,
-        },
-        filter: { type: "hpf", cutoff: 500, resonance: 0 },
-        reverb: hall,
-        humanize: { timing: 5, velocity: 5, seed: 21 },
-      }),
-    );
-    s.track(
-      voice("chops", "Up pixels", "sampler", 0.3, {
-        sampler: {
-          mode: "keyed",
-          voices: {
-            up: {
-              ...bundledSampleRef("stay-up"),
-              begin: 0.25,
-              end: 0.5,
-              fit: true,
-              fadeTime: 0.007,
-              fadeInTime: 0.002,
-            },
-          },
-        },
-        pan: 0.22,
-        filter: { type: "hpf", cutoff: 650, resonance: 0 },
-        fx: { crush: { bits: 10, coarse: 2, mix: 0.19 } },
-        delay: { beats: 0.75, feedback: 0.2, mix: 0.12, pingpong: true },
-      }),
-    );
-    s.track(
-      voice("spark", "Glass pixels", "sampler", 0.18, {
-        sampler: {
-          mode: "keyed",
-          voices: {
-            glass: { ...bundledSampleRef("glass-hit"), fadeTime: 0.012 },
-          },
-        },
-        pan: -0.31,
-        reverb: hall,
-        fx: { crush: { bits: 7, coarse: 2, mix: 0.24 } },
-      }),
-    );
-    s.track(
-      voice("tear", "Tape tears", "sampler", 0.26, {
-        sampler: {
-          mode: "keyed",
-          voices: {
-            // Notes from 48 play the riser, from 60 the tape hit.
-            rise: { ...bundledSampleRef("riser"), root: 48, fadeTime: 0.05 },
-            tape: { ...bundledSampleRef("tape-hit"), fadeTime: 0.006 },
-          },
-        },
-        filter: { type: "hpf", cutoff: 190, resonance: 0 },
-      }),
-    );
-
+    candyTracks(s, DEMO_LANES);
     const hit = (
       track: string,
       bar: number,

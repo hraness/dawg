@@ -8,7 +8,7 @@ import { compileSheet } from "./compile.ts";
 import { critique } from "./critic.ts";
 import { messages, type ChatMessage } from "./prompt.ts";
 import { sheetSchema } from "./schema.ts";
-import { validateSheet, type SongSheet } from "./sheet.ts";
+import { settleSheet, validateSheet, type SongSheet } from "./sheet.ts";
 
 /** One completion: the chat in, the reply text out (JSON, schema-constrained when the model can). */
 export type SheetModel = (
@@ -37,6 +37,8 @@ export type GenerateOptions = Readonly<{
   rounds?: number;
   /** The critic score that ends the loop early (default 90). */
   pass?: number;
+  /** The most on-beat semitone clashes a passing sheet may have (default 0.1). */
+  maxRubs?: number;
   onRound?: (round: Round) => void;
 }>;
 
@@ -56,6 +58,7 @@ export async function generateSong(
 ): Promise<Generated> {
   const rounds = Math.max(1, options.rounds ?? 3);
   const pass = options.pass ?? 90;
+  const maxRubs = options.maxRubs ?? 0.1;
   const schema = sheetSchema();
   const log: Round[] = [];
   let best:
@@ -68,17 +71,21 @@ export async function generateSong(
     let notes: readonly string[];
     let score = 0;
     let ok = false;
+    let clean = false;
     try {
       raw = parseReply(reply);
       const checked = validateSheet(raw);
       if (checked.ok) {
         ok = true;
-        const review = critique(checked.sheet);
+        // Settle clashes here so the retries spend themselves on rhythm and shape.
+        const sheet = settleSheet(checked.sheet);
+        const review = critique(sheet);
         // Every repair the validator made costs a little, so retries fix them.
         score = Math.max(0, review.score - 2 * checked.warnings.length);
+        clean = review.rubs <= maxRubs;
         notes = [...review.notes, ...checked.warnings];
         if (!best || score > best.critic)
-          best = { sheet: checked.sheet, critic: score, notes };
+          best = { sheet, critic: score, notes };
       } else notes = checked.errors;
     } catch (error) {
       notes = [
@@ -88,7 +95,9 @@ export async function generateSong(
     const entry = { round, ok, score, notes, ms: Date.now() - started };
     log.push(entry);
     options.onRound?.(entry);
-    if (ok && score >= pass) break;
+    // A sheet passes on its score and only with few clashes: the compiler
+    // moves a clashing note, so a clashing sheet sounds unlike its plan.
+    if (ok && score >= pass && clean) break;
     retry = { sheet: reply.slice(0, 24_000), notes: notes.slice(0, 12) };
   }
   if (!best)

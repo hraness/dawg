@@ -14,10 +14,12 @@ import type {
 import { PARTS } from "../../demos/hyperpop.ts";
 import { LIBRARY, PATTERN_SLOTS, type PatternSlot } from "./library.ts";
 
-export const PALETTES = ["night", "glass"] as const;
+export const PALETTES = ["night", "glass", "candy"] as const;
 export type Palette = (typeof PALETTES)[number];
 
-export const KINDS: readonly SectionKind[] = [
+/** Section kinds; the bridge is the candy palette's alone. */
+export type SheetKind = SectionKind | "bridge";
+export const KINDS: readonly SheetKind[] = [
   "intro",
   "verse",
   "pre",
@@ -25,8 +27,34 @@ export const KINDS: readonly SectionKind[] = [
   "post",
   "break",
   "build",
+  "bridge",
   "outro",
 ];
+/** The candy palette's song form: every kind has its one length. */
+export const CANDY_BARS: Readonly<Partial<Record<SheetKind, number>>> = {
+  intro: 4,
+  verse: 8,
+  pre: 4,
+  chorus: 8,
+  break: 4,
+  bridge: 8,
+  outro: 4,
+};
+/** Parts only the candy palette sings: more chorus lines, the bridge, the tag. */
+export const CANDY_PARTS = [
+  "pre3",
+  "pre4",
+  "ch4",
+  "ch5",
+  "ch6",
+  "br1",
+  "br2",
+  "br3",
+  "br4",
+  "end1",
+  "end2",
+] as const;
+export type SheetPart = Part | (typeof CANDY_PARTS)[number];
 export const DRUMS: readonly DrumFamily[] = [
   "euro",
   "bounce",
@@ -59,9 +87,11 @@ export const LAYERS: readonly Layer[] = [
 /**
  * A sung note: [beat inside the part, scale degree, length in beats,
  * syllable]. Degree 1 is the tonic, 8 the octave above, 0 the 7th below.
+ * On the candy palette a beat from -1 is a pickup sung before the part's
+ * bar.
  */
 export type SheetNote = readonly [number, number, number, string];
-/** A sung part, note by note: one bar (two for ch1..ch3). */
+/** A sung part, note by note: one bar (two for ch1..ch3, two for every candy part). */
 export type SheetLine = readonly SheetNote[];
 
 /** A lead hook: per bar, [beat, degree, beats] notes. */
@@ -72,7 +102,7 @@ export type SheetHook = readonly (readonly (readonly [
 ])[])[];
 
 export type SheetSection = Readonly<{
-  kind: SectionKind;
+  kind: SheetKind;
   name: string;
   bars: number;
   /** A progression name: one chord per bar, cycling. */
@@ -82,7 +112,7 @@ export type SheetSection = Readonly<{
   energy?: number;
   play: readonly Layer[];
   /** The part that starts on each bar (null: none); choruses take two bars. */
-  lines?: readonly (Part | null)[];
+  lines?: readonly (SheetPart | null)[];
   riff?: string;
   arp?: string;
   bells?: string;
@@ -107,7 +137,7 @@ export type SongSheet = Readonly<{
   palette: Palette;
   /** Named progressions of roman numerals (`i VI III VII`). */
   progressions: Readonly<Record<string, readonly string[]>>;
-  lines: Readonly<Partial<Record<Part, SheetLine>>>;
+  lines: Readonly<Partial<Record<SheetPart, SheetLine>>>;
   hooks?: Readonly<Record<string, SheetHook>>;
   sections: readonly SheetSection[];
 }>;
@@ -198,6 +228,9 @@ export function chordQuality(key: Key, degree: number): ChordQuality {
   return third === 3 ? "minor" : "major";
 }
 
+/** A numeral ending in 6 is a first inversion: the bass takes the 3rd. */
+export const isInversion = (numeral: string): boolean => /6\s*$/.test(numeral);
+
 /** The numeral in its conventional case: `i`, `VI`. */
 export function numeralFor(key: Key, degree: number): string {
   const text = NUMERALS[degree - 1]!;
@@ -223,19 +256,30 @@ export type Validated =
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const partBars = (part: Part) => (part.startsWith("ch") ? 2 : 1);
+/** Bars a part takes: every candy part two, otherwise two for a chorus part. */
+export const partBars = (part: SheetPart, palette?: Palette) =>
+  palette === "candy" || part.startsWith("ch") ? 2 : 1;
 
-export const partSpan = (part: Part) => partBars(part) * 4;
+export const partSpan = (part: SheetPart, palette?: Palette) =>
+  partBars(part, palette) * 4;
+
+/** The longest a note may be held (candy holds words across bar lines). */
+const longest = (palette?: Palette) => (palette === "candy" ? 6 : 4);
 
 /**
  * A line's notes in order, each held at most to the next onset and the end
  * of the part (a length of 0 holds it exactly that far).
  */
-export function lineNotes(part: Part, line: SheetLine): SheetNote[] {
-  const span = partSpan(part);
+export function lineNotes(
+  part: SheetPart,
+  line: SheetLine,
+  palette?: Palette,
+): SheetNote[] {
+  const span = partSpan(part, palette);
+  const ring = palette === "candy" ? 6 : 3;
   const sorted = [...line].sort((a, b) => a[0] - b[0]);
   return sorted.map(([beat, degree, beats, syllable], k) => {
-    const room = (sorted[k + 1]?.[0] ?? Math.min(span, beat + 3)) - beat;
+    const room = (sorted[k + 1]?.[0] ?? Math.min(span, beat + ring)) - beat;
     const len = beats > 0 ? Math.min(beats, room) : room;
     return [beat, degree, Math.max(0.1, len), syllable] as const;
   });
@@ -249,7 +293,7 @@ export function lineNotes(part: Part, line: SheetLine): SheetNote[] {
 const USUAL: Readonly<
   Record<
     "riff" | "arp" | "bells" | "stabs",
-    Readonly<Record<SectionKind, string>>
+    Readonly<Partial<Record<SheetKind, string>>>
   >
 > = {
   riff: {
@@ -340,26 +384,34 @@ export function validateSheet(raw: unknown): Validated {
           );
           continue;
         }
-        out.push(key ? numeralFor(key, degree) : String(numeral));
+        out.push(
+          (key ? numeralFor(key, degree) : String(numeral)) +
+            (isInversion(numeral as string) ? "6" : ""),
+        );
       }
       progressions[name] = out;
     }
 
-  const lines: Partial<Record<Part, SheetLine>> = {};
+  const candy = palette === "candy";
+  const partNames: readonly string[] = candy
+    ? [...PARTS, ...CANDY_PARTS]
+    : PARTS;
+  const first = candy ? -1 : 0;
+  const lines: Partial<Record<SheetPart, SheetLine>> = {};
   if (!isRecord(raw.lines))
     errors.push(
-      "lines: an object of sung parts keyed v1..v8, pre1, pre2, ch1..ch3",
+      `lines: an object of sung parts keyed ${candy ? partNames.join(", ") : "v1..v8, pre1, pre2, ch1..ch3"}`,
     );
   else
     for (const [part, value] of Object.entries(raw.lines)) {
-      if (!(PARTS as readonly string[]).includes(part)) {
+      if (!partNames.includes(part)) {
         warnings.push(
-          `lines.${part} was dropped: parts are ${PARTS.join(", ")}`,
+          `lines.${part} was dropped: parts are ${partNames.join(", ")}`,
         );
         continue;
       }
-      const p = part as Part;
-      const span = partSpan(p);
+      const p = part as SheetPart;
+      const span = partSpan(p, palette as Palette);
       if (!Array.isArray(value)) {
         errors.push(
           `lines.${part}: a list of [beat, degree, beats, "syllable"] notes`,
@@ -387,7 +439,7 @@ export function validateSheet(raw: unknown): Validated {
           string,
         ];
         if (
-          beat < 0 ||
+          beat < first ||
           beat >= span ||
           notes.some(([b]) => Math.abs(b - beat) < 0.01)
         ) {
@@ -397,21 +449,22 @@ export function validateSheet(raw: unknown): Validated {
         notes.push([
           Math.round(beat * 4) / 4,
           Math.max(-3, Math.min(15, Math.round(degree))),
-          Math.max(0, Math.min(4, beats)),
-          syllable.trim().slice(0, 12) || "ah",
+          Math.max(0, Math.min(longest(palette as Palette), beats)),
+          syllable.replace(/\s+/g, "").slice(0, 12) || "ah",
         ]);
       }
       if (skipped > 0)
         warnings.push(
-          `lines.${part}: ${skipped} notes were dropped; each note is [beat 0 to ${span - 0.25}, degree, beats, "syllable"] with its own beat`,
+          `lines.${part}: ${skipped} notes were dropped; each note is [beat ${first} to ${span - 0.25}, degree, beats, "syllable"] with its own beat${span === 4 && palette !== "candy" ? `. In ${palette} a ${part.replace(/\d+$/, "")} part is one bar; only candy parts last two` : ""}`,
         );
-      if (notes.length < 2) {
+      // The outro's tag may be one held word.
+      if (notes.length < (candy && p.startsWith("end") ? 1 : 2)) {
         errors.push(
           `lines.${part}: give at least 2 notes as [beat, degree, beats, "syllable"]`,
         );
         continue;
       }
-      lines[p] = lineNotes(p, notes);
+      lines[p] = lineNotes(p, notes, palette as Palette);
     }
 
   const hooks: Record<string, SheetHook> = {};
@@ -479,9 +532,24 @@ export function validateSheet(raw: unknown): Validated {
         errors.push(`${where}: a section object`);
         return;
       }
-      const kind = value.kind as SectionKind;
-      if (!KINDS.includes(kind))
-        errors.push(`${where}.kind: use one of ${KINDS.join(", ")}`);
+      let kind = value.kind as SheetKind;
+      if (!candy && kind === "bridge") {
+        warnings.push(
+          `${where}.kind: night and glass have no bridge, so it became a break`,
+        );
+        kind = "break";
+      }
+      const kinds = candy
+        ? KINDS.filter((k) => CANDY_BARS[k])
+        : KINDS.filter((k) => k !== "bridge");
+      if (candy && KINDS.includes(kind) && !kinds.includes(kind)) {
+        warnings.push(
+          `${where} was dropped: the candy palette has no ${kind}; use ${kinds.join(", ")}`,
+        );
+        return;
+      }
+      if (!kinds.includes(kind))
+        errors.push(`${where}.kind: use one of ${kinds.join(", ")}`);
       const name =
         typeof value.name === "string" && value.name.trim()
           ? value.name.trim().slice(0, 24)
@@ -491,8 +559,14 @@ export function validateSheet(raw: unknown): Validated {
           `${where}.name: "${name}" is used twice; names must differ`,
         );
       names.add(name.toLowerCase());
-      const bars =
-        typeof value.bars === "number" ? Math.round(value.bars) : NaN;
+      let bars = typeof value.bars === "number" ? Math.round(value.bars) : NaN;
+      const fixed = candy ? CANDY_BARS[kind] : undefined;
+      if (fixed !== undefined && bars !== fixed) {
+        warnings.push(
+          `${where}.bars: a candy ${kind} is ${fixed} bars, so it was made ${fixed}`,
+        );
+        bars = fixed;
+      }
       if (!(bars >= 2 && bars <= 16))
         errors.push(`${where}.bars: 2 to 16 (4 or 8 is usual)`);
       const chords = typeof value.chords === "string" ? value.chords : "";
@@ -505,9 +579,11 @@ export function validateSheet(raw: unknown): Validated {
             DRUMS.includes(d as DrumFamily),
           ) as DrumFamily[])
         : [];
+      // The candy palette plays its own drums for each kind of section.
       if (
-        drums.length === 0 ||
-        drums.length !== (value.drums as unknown[]).length
+        !candy &&
+        (drums.length === 0 ||
+          drums.length !== (value.drums as unknown[]).length)
       )
         errors.push(
           `${where}.drums: a list of drum families from ${DRUMS.join(", ")}`,
@@ -515,7 +591,10 @@ export function validateSheet(raw: unknown): Validated {
       const play = Array.isArray(value.play)
         ? (value.play.filter((l) => LAYERS.includes(l as Layer)) as Layer[])
         : [];
-      if (!Array.isArray(value.play) || play.length !== value.play.length)
+      if (
+        !candy &&
+        (!Array.isArray(value.play) || play.length !== value.play.length)
+      )
         errors.push(`${where}.play: layers from ${LAYERS.join(", ")}`);
       const energy =
         typeof value.energy === "number"
@@ -534,12 +613,21 @@ export function validateSheet(raw: unknown): Validated {
         const list = Array.isArray(value.lines)
           ? value.lines.slice(0, bars)
           : [];
-        const out: (Part | null)[] = [];
+        const out: (SheetPart | null)[] = [];
         let busyUntil = 0;
-        list.forEach((part, bar) => {
-          if (part === null || part === "" || part === undefined)
+        list.forEach((given, bar) => {
+          if (given === null || given === "" || given === undefined)
             return out.push(null);
-          if (typeof part !== "string" || !lines[part as Part]) {
+          let part = given;
+          // A night or glass chorus borrowing candy's ch4 to ch6 reuses ch1 to ch3.
+          const extra = /^ch([4-6])$/.exec(String(part));
+          if (!candy && extra && !lines[part as SheetPart]) {
+            part = `ch${Number(extra[1]) - 3}`;
+            warnings.push(
+              `${where}.lines[${bar}]: night and glass have no ${given}, so ${part} sings there`,
+            );
+          }
+          if (typeof part !== "string" || !lines[part as SheetPart]) {
             warnings.push(
               `${where}.lines[${bar}]: "${String(part).slice(0, 8)}" is not in lines, so that bar is silent`,
             );
@@ -547,18 +635,19 @@ export function validateSheet(raw: unknown): Validated {
           }
           if (bar < busyUntil) {
             warnings.push(
-              `${where}.lines[${bar}]: ${part} was dropped because the part before it still sings; put null after each two-bar chorus part`,
+              `${where}.lines[${bar}]: ${part} was dropped because the part before it still sings; put null after each two-bar ${candy ? "" : "chorus "}part`,
             );
             return out.push(null);
           }
-          if (bar + partBars(part as Part) > bars) {
+          const size = partBars(part as SheetPart, palette as Palette);
+          if (bar + size > bars) {
             warnings.push(
               `${where}.lines[${bar}]: ${part} was dropped because it runs past the section's end`,
             );
             return out.push(null);
           }
-          busyUntil = bar + partBars(part as Part);
-          out.push(part as Part);
+          busyUntil = bar + size;
+          out.push(part as SheetPart);
         });
         section.lines = out;
       }
@@ -581,7 +670,7 @@ export function validateSheet(raw: unknown): Validated {
         if (
           play.includes(layer) &&
           section[slot] === undefined &&
-          KINDS.includes(kind)
+          USUAL[slot][kind]
         )
           section[slot] = USUAL[slot][kind];
       if (value.lead !== undefined) {
@@ -645,3 +734,103 @@ export function validateSheet(raw: unknown): Validated {
 
 export const isPatternSlot = (slot: string): slot is PatternSlot =>
   (PATTERN_SLOTS as string[]).includes(slot);
+
+/**
+ * Write each on-beat note that clashes a semitone with its chord as the
+ * neighbouring degree that clashes least wherever the note plays (a line in
+ * every section that sings it, a hook in every bar it repeats over), so the
+ * sheet says what is heard. A short note stepping straight on to its
+ * neighbour leans on the beat and stays.
+ */
+export function settleSheet(sheet: SongSheet): SongSheet {
+  const key = parseKey(sheet.key);
+  if (!key) return sheet;
+  const chordAt = (name: string, bar: number) => {
+    const list = sheet.progressions[name] ?? [];
+    const numeral = list[bar % Math.max(1, list.length)] ?? "I";
+    return new Set(chordClasses(key, numeralDegree(numeral) ?? 1));
+  };
+  const rubs = (chords: readonly Set<number>[], degree: number) => {
+    const pc = degreePitch(key, degree) % 12;
+    return chords.filter(
+      (c) => !c.has(pc) && (c.has((pc + 1) % 12) || c.has((pc + 11) % 12)),
+    ).length;
+  };
+  // The neighbour with the fewest clashes, kept only when it clashes less.
+  const best = (
+    chords: readonly Set<number>[],
+    degree: number,
+    low: number,
+    high: number,
+  ) => {
+    let pick = degree;
+    let least = rubs(chords, degree);
+    for (const d of [degree - 1, degree + 1])
+      if (d >= low && d <= high && rubs(chords, d) < least) {
+        pick = d;
+        least = rubs(chords, d);
+      }
+    return pick;
+  };
+  const leans = (
+    notes: readonly (readonly [number, number, number, ...unknown[]])[],
+    k: number,
+  ) => {
+    const [beat, degree, beats] = notes[k]!;
+    const next = notes[k + 1];
+    return (
+      beats <= 0.5 &&
+      next !== undefined &&
+      next[0] - beat <= 0.5 &&
+      Math.abs(next[1] - degree) === 1
+    );
+  };
+
+  const heard = new Map<SheetPart, Set<number>[][]>();
+  for (const section of sheet.sections)
+    (section.lines ?? []).forEach((part, bar) => {
+      const line = part ? sheet.lines[part] : undefined;
+      if (!part || !line) return;
+      const slots = heard.get(part) ?? line.map(() => []);
+      line.forEach(([beat], k) =>
+        slots[k]!.push(chordAt(section.chords, bar + Math.floor(beat / 4))),
+      );
+      heard.set(part, slots);
+    });
+  const lines = { ...sheet.lines };
+  for (const [part, slots] of heard) {
+    const line = lines[part]!;
+    lines[part] = line.map((note, k): SheetNote => {
+      const [beat, degree, beats, lyric] = note;
+      if (beat % 1 !== 0 || leans(line, k)) return note;
+      return [beat, best(slots[k]!, degree, -3, 15), beats, lyric];
+    });
+  }
+
+  // The candy palette fits its hooks to the chords itself.
+  if (sheet.palette === "candy" || !sheet.hooks) return { ...sheet, lines };
+  const plays = new Map<string, Set<number>[][]>();
+  for (const section of sheet.sections) {
+    const bars = (section.lead ?? []).flatMap((name) =>
+      (sheet.hooks?.[name] ?? []).map((_, b) => [name, b] as const),
+    );
+    for (let at = 0; bars.length > 0 && at < section.bars; at++) {
+      const [name, b] = bars[at % bars.length]!;
+      const slots =
+        plays.get(name) ?? sheet.hooks[name]!.map(() => [] as Set<number>[]);
+      slots[b]!.push(chordAt(section.chords, at));
+      plays.set(name, slots);
+    }
+  }
+  const hooks = { ...sheet.hooks };
+  for (const [name, slots] of plays)
+    hooks[name] = hooks[name]!.map((notes, b) =>
+      notes.map((note, k) => {
+        const [beat, degree, beats] = note;
+        if (beat % 1 !== 0 || leans(notes, k) || slots[b]!.length === 0)
+          return note;
+        return [beat, best(slots[b]!, degree, 1, 16), beats] as const;
+      }),
+    );
+  return { ...sheet, lines, hooks };
+}

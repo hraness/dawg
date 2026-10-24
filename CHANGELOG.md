@@ -2,6 +2,39 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.32.0
+
+### Added
+
+- **The candy palette: `dawg make` can write songs with Candy Fault's production.**
+  - **Before:** Candy Fault was a 2,268-line hand-written build in a pop form the sheet could not express, so it was not an example.
+  - **Now:** its arranging is rules (`core/distill/hyperpop/candy.ts`) driven by the sheet's chords, sung lines and two hooks.
+  - **The form:** intro, verse, pre, chorus, glitch break, verse, pre, chorus, bridge, last chorus, outro.
+  - **What the rules derive from the chords:**
+    - Rhodes voicings that move by the smallest step
+    - a pre-chorus stack with 4-3 suspensions
+    - an open chorus stack with octave stabs
+    - an 808 that slides, pops and walks by step
+    - chip arpeggios, and a pluck that answers the singer
+    - a harmony under held words, and an octave double in the last chorus
+    - the glitch break's stuttered peak word
+    - the silent beat before the last chorus, and a last bar that lands on the tonic
+  - **Instruments, mix and automation:** Candy Fault's own, placed on the new song's sections.
+  - **No key change:** the sheet cannot ask for one, and the candy rules never lift.
+- **Candy Fault is the third example sheet.** It compiles back to within a few notes per track of the demo, and within 0.6 dB per section. The demo itself is unchanged.
+- **First inversions.** A numeral ending in 6 (`V6`) puts the 3rd in the bass, so a bridge bass can walk down by step.
+
+### Changed
+
+- **The critic listens for a sequencer singing.**
+  - **New checks:** sung lines that share one rhythm, notes that are almost all one length, and lines with no held word.
+  - **Clashes cost more.** A short note that steps straight on to its neighbour counts as an appoggiatura, not a clash.
+  - **Per section:** verse shapes are counted inside each verse, so a second verse may reuse the first verse's tune. A chorus part that opens like another counts as a repeat.
+- **`generateSong` settles clashing beats before the critic.** An on-beat note a semitone off its chord moves to the nearest chord tone in the sheet itself, so retries go to rhythm and shape.
+- **Sheet repairs for small-model slips.** A lyric with spaces loses them instead of failing the render, and a night or glass section marked `bridge` becomes a `break` with a warning.
+- **`generateSong` passes a sheet only when at most 10% of its on-beat notes clash with the chord** (`maxRubs`), as well as on its score.
+- **The playbook teaches rhythm:** pickups, off-beat starts, rests between lines, and held phrase ends.
+
 ## 0.31.0
 
 ### Added
