@@ -2,6 +2,21 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.34.0
+
+### Added
+
+- **The model writes the music, inside constraints the seed draws.**
+  - **Before:** the model wrote only words and a mood; dice chose every chord, motif and arranging habit. The songs varied but did not sound composed.
+  - **Now:** the seed and brief draw the constraints first (tempo, mode, beats, form, sounds, voice), and the prompt shows them. The card adds `music`: chord loops for the drop, verse, pre and bridge as Roman numerals in the song's mode; motifs for the hook, verse, pre, bridge and switch as a 16th-note grid and scale steps; phrase plans; and what carries the hook, the bass patterns, stabs, the lead octave and harmony thirds. The seed draws whatever the card leaves out.
+  - **One key:** numerals are read in the song's mode. A flat or sharp is kept only when it names the mode's own note (`bVII` in mixolydian), so nothing a card writes can change key or borrow a chord.
+  - **Another round for fixable music:** a hook rhythm with far fewer notes than syllables, a grid that is not whole bars, a wrong step count or a borrowed chord goes back to the model once before the card is used.
+- **Generated vocals phrase like the demos.** Words are set one syllable per note, a verse line every two bars, and a repeat starts where the motif does, with rests after a line instead of wrapping into the next. The echo opens on the held word that ends a line, and the singer stutters the hook's first word into the last drop.
+
+### Changed
+
+- **The seed is mixed with the brief**, not the card's title and hook, so the constraints are known before the model writes. Saved cards keep their brief and replay exactly.
+
 ## 0.33.1
 
 ### Fixed

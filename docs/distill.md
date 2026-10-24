@@ -28,16 +28,30 @@ contains:
 - **Moves:** tape stops, dives, stutters, gaps, risers, crushes, downlifters, filters, glitches, octave jumps and half-time switches.
 - **Counterpoint:** a countermelody in bridges and, in about one song in four, a fugue break. A short subject enters in two or three voices in turn (synth, vox or both), and the voices are settled beat by beat so they agree.
 
-| File           | Role                                                                                                                                                                                                                                                              |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `genome.ts`    | `sampleGenome(seed, pins)` draws the axes; pins fix any of them. `describeGenome` says what was drawn in a few lines.                                                                                                                                             |
-| `compose.ts`   | `compileGenome(genome, content)` is the arranger. It lays out the form, writes each part by section, adds the seams before drops, shapes the dynamics so verses sit about 2 dB under the drops and builds swell into them, and keeps the score under 4,096 notes. |
-| `card.ts`      | The song card the model writes: a title, theme, hook and verse lines, a mood (energy, brightness, grit, space) and pins for only what the brief names. `validateCard` repairs what it can. Mood steers the mode, the drums and the sound design.                  |
-| `generate.ts`  | `generateGenomeSong(brief, model, { seed })` asks for a card, retrying only an unreadable one, and composes it. `songFromCard(card, seed)` needs no model.                                                                                                        |
-| `diversity.ts` | `fingerprint(score)` and `distance(a, b)` compare any two scores on tempo, kick and snare placement, pitch profile, melodic motion, layer density and form. `spread` reports the mean and closest pair.                                                           |
+| File           | Role                                                                                                                                                                                                                                                                                                                                              |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `genome.ts`    | `sampleGenome(seed, pins)` draws the axes; pins fix any of them. `describeGenome` says what was drawn in a few lines.                                                                                                                                                                                                                             |
+| `compose.ts`   | `compileGenome(genome, content)` is the arranger. It lays out the form, writes each part by section, adds the seams before drops, shapes the dynamics so verses sit about 2 dB under the drops and builds swell into them, and keeps the score under 4,096 notes.                                                                                 |
+| `card.ts`      | The song card the model writes: a title, theme, hook and verse lines, a mood, pins for only what the brief names, and the music. `validateCard` repairs what it can, and `musicNotes` names what the model can fix in another round. Without music, mood steers the mode, the drums and the sound design; with music, mood shapes only the sound. |
+| `music.ts`     | The music on a card: chord loops as Roman numerals in the song's mode (drop, verse, pre, bridge), motifs as a 16th-note grid and scale steps (hook, verse, pre, bridge, switch), phrase plans and arranging habits. `readMusic` turns it into chords and motifs; numerals outside the mode are dropped, so the key never changes.                 |
+| `generate.ts`  | `generateGenomeSong(brief, model, { seed })` draws the constraints for the brief and seed first (`briefConstraints`), shows them to the model, asks for a card, retries an unreadable card or fixable music, and composes it. `songFromCard(card, seed)` needs no model.                                                                          |
+| `diversity.ts` | `fingerprint(score)` and `distance(a, b)` compare any two scores on tempo, kick and snare placement, pitch profile, melodic motion, layer density and form. `spread` reports the mean and closest pair.                                                                                                                                           |
 
-The model's temperature only changes the words. The music's variety comes from
-the seed: the same card with a new seed is a new song.
+### Who decides what
+
+The seed decides the constraints: tempo, mode, beats, form, sounds, voice and
+moves. That is where the variety comes from, so the same brief with a new seed
+is a new song. The model decides the music inside them: the chords for each
+section, the motifs every melody grows from, how phrases repeat, and what
+carries the hook. That is where the taste comes from. The arranger performs
+it: strong notes land on chord tones, the words are set one syllable per note,
+a line every two bars, the echo opens on the word that ends a line, and the
+singer stutters the hook's first word into the last drop. Anything the card
+leaves out is drawn from the seed, so a card with no music still makes a song.
+
+The prompt shows one worked card with the constraints it was written for,
+rotating through three, so the model learns the shape without a template to
+copy.
 
 ## The classic sheet
 
@@ -55,7 +69,7 @@ the seed: the same card with a new seed is a new song.
 
 ## Using it
 
-- `dawg make "an icy song about a phone dying at a party"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same card and seed give the same song (the seed is mixed with the card's title and hook, so two briefs on one seed are two songs). `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
+- `dawg make "an icy song about a phone dying at a party"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same card and seed give the same song (the seed is mixed with the brief, so two briefs on one seed are two songs). `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
 - `dawg make --from s.json` composes a saved card with no model, or compiles a classic sheet.
 - `dawg make --classic "<brief>"` writes a classic sheet instead. `--rounds 1-6` sets how many rounds to try.
 - In the TUI the agent has `compose_song`, which takes a card and an optional seed and loads the song in one undoable edit. `song_guide` returns the card guide and the classic playbook, and `write_song` loads a classic sheet. Any model can use these, local or remote.
