@@ -13,11 +13,17 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CALIBRATION_LATEST, scoreFromJSON } from "../core/score.ts";
+import {
+  CALIBRATION_LATEST,
+  scoreFromJSON,
+  type TrackInput,
+} from "../core/score.ts";
+import { KITS } from "../core/distill/hyperpop/genome/genome.ts";
 import {
   ARP,
   BAROQUE,
   BASS,
+  drumTracks,
   LEAD,
   PAD,
   STAB,
@@ -78,7 +84,10 @@ const ROLES: readonly [string, Readonly<Record<string, Make>>][] = [
   ["baroque", BAROQUE],
 ];
 
-async function loudness(make: Make, part: readonly Note[]): Promise<number> {
+async function loudness(
+  track: TrackInput,
+  part: readonly Note[],
+): Promise<number> {
   const score = scoreFromJSON({
     version: 1,
     calibration: CALIBRATION_LATEST,
@@ -87,10 +96,10 @@ async function loudness(make: Make, part: readonly Note[]): Promise<number> {
     bars: 5,
     ticksPerBeat: TPB,
     key: "C",
-    tracks: [{ ...make("t", "T", 0.3, design), id: "t" }],
+    tracks: [track],
     notes: part.map(([beat, len, pitch, velocity], i) => ({
       id: `n${i}`,
-      trackId: "t",
+      trackId: track.id,
       startTick: Math.round(beat * TPB),
       durationTicks: Math.round(len * TPB),
       pitch,
@@ -112,7 +121,10 @@ for (const [role, table] of ROLES) {
   measured[role] = {};
   handBuilt[role] = [];
   for (const [key, make] of Object.entries(table)) {
-    const lufs = await loudness(make, PARTS[role]!);
+    const lufs = await loudness(
+      { ...make("t", "T", 0.3, design), id: "t" },
+      PARTS[role]!,
+    );
     measured[role]![key] = lufs;
     if (make("t", "T", 1, design).instrument !== "patch")
       handBuilt[role]!.push(lufs);
@@ -137,15 +149,67 @@ for (const [role] of ROLES) {
   }
 }
 
-if (write) {
-  const body = Object.entries(trims)
+// Drums: every kit's kick, snare and hats at Redline's balance on the 909
+// kit (snare a touch under it, since the genome's grooves are busier).
+const DRUM_PARTS: Readonly<Record<string, readonly Note[]>> = {
+  kick: range(16).map((i) => [i, 0.25, 36, 0.9]),
+  snare: range(8).map((i) => [i * 2 + 1, 0.25, 38, 0.85]),
+  hats: range(32).map((i) => [i / 2, 0.25, 42, 0.5]),
+};
+const drumLoudness = async (kit: string) => {
+  const tracks = drumTracks(BPM, { kick: kit, snare: kit, hats: kit }, design);
+  const out: Record<string, number> = {};
+  for (const [id, part] of Object.entries(DRUM_PARTS))
+    out[id] = await loudness(
+      tracks.find((t) => t.id === id)!,
+      part,
+    );
+  return out;
+};
+const ref = await drumLoudness("syn909");
+const genome = Object.fromEntries(
+  drumTracks(BPM, { kick: "syn909", snare: "syn909", hats: "syn909" }, design)
+    .filter((t) => t.id in DRUM_PARTS)
+    .map((t) => [t.id, t.volume ?? 1]),
+);
+const db = (x: number) => 20 * Math.log10(x);
+// Redline's kit levels: kick 0.5, snare 0.54, hats 0.13.
+const drumGoal: Record<string, number> = {
+  kick: ref.kick!,
+  snare: ref.snare! + db(0.54 / 0.5 / (genome.snare! / genome.kick!)) - 2,
+  hats: ref.hats! + db(0.13 / 0.5 / (genome.hats! / genome.kick!)),
+};
+const drumTrims: Record<string, Record<string, number>> = {
+  kick: {},
+  snare: {},
+  hats: {},
+};
+for (const kit of KITS) {
+  const m = await drumLoudness(kit);
+  const row = [kit.padEnd(9)];
+  for (const id of Object.keys(DRUM_PARTS)) {
+    const gain = Math.max(-18, Math.min(16, drumGoal[id]! - m[id]!));
+    drumTrims[id]![kit] = Math.round(10 ** (gain / 20) * 1000) / 1000;
+    row.push(
+      `${id} ${m[id]!.toFixed(1)} ${gain >= 0 ? "+" : ""}${gain.toFixed(1)}`,
+    );
+  }
+  console.log(row.join("  "));
+}
+
+const table = (t: Record<string, Record<string, number>>) =>
+  Object.entries(t)
     .map(
-      ([role, t]) =>
-        `  ${role}: {\n${Object.entries(t)
-          .map(([k, v]) => `    ${k}: ${v},`)
+      ([role, r]) =>
+        `  ${role}: {\n${Object.entries(r)
+          .map(
+            ([k, v]) => `    ${/^\w+$/.test(k) ? k : JSON.stringify(k)}: ${v},`,
+          )
           .join("\n")}\n  },`,
     )
     .join("\n");
+
+if (write) {
   writeFileSync(
     join(root, "core/distill/hyperpop/genome/levels.ts"),
     `/**
@@ -157,7 +221,14 @@ if (write) {
 export const SOUND_TRIMS: Readonly<
   Record<string, Readonly<Record<string, number>>>
 > = {
-${body}
+${table(trims)}
+};
+
+/** Per-kit gains for the kick, snare and hats at Redline's 909 balance. */
+export const DRUM_TRIMS: Readonly<
+  Record<string, Readonly<Record<string, number>>>
+> = {
+${table(drumTrims)}
 };
 `,
   );

@@ -33,7 +33,7 @@ import {
   type PhrasePlan,
   type Range,
 } from "./melody.ts";
-import { SOUND_TRIMS } from "./levels.ts";
+import { DRUM_TRIMS, SOUND_TRIMS } from "./levels.ts";
 import { readMusic, type Music } from "./music.ts";
 import { Rng } from "./rng.ts";
 import {
@@ -1416,10 +1416,25 @@ const LEVELS: Readonly<Record<string, number>> = {
   cloud: 0.24,
   fx: 0.24,
   spark: 0.16,
-  fg1: 0.42,
-  fg2: 0.4,
-  fg3: 0.44,
+  fg1: 0.6,
+  fg2: 0.56,
+  fg3: 0.62,
 };
+
+/**
+ * `track` louder or quieter by `gain`. Volume tops out at 1, so the rest goes
+ * to a post gain after the inserts.
+ */
+function withGain(track: TrackInput, gain: number): TrackInput {
+  const volume = (track.volume ?? 1) * gain;
+  if (volume <= 1) return { ...track, volume };
+  const post = Number(track.fx?.postgain?.gain ?? 1) * volume;
+  return {
+    ...track,
+    volume: 1,
+    fx: { ...track.fx, postgain: { gain: Math.min(4, post) } },
+  };
+}
 
 /** The palette trim that puts `sound` at its role's loudness. */
 const trim = (role: string, sound: string) => SOUND_TRIMS[role]?.[sound] ?? 1;
@@ -1521,11 +1536,22 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
         d,
       ),
   };
-  const out: TrackInput[] = drumTracks(g.bpm, g.drums, d).filter((t) =>
-    used.has(t.id),
-  );
+  // Each kit's kick, snare and hats sit at Redline's balance; perc plays the snare kit.
+  const kitOf: Record<string, string> = {
+    kick: g.drums.kick,
+    snare: g.drums.snare,
+    hats: g.drums.hats,
+    perc: g.drums.snare,
+  };
+  const out: TrackInput[] = drumTracks(g.bpm, g.drums, d)
+    .filter((t) => used.has(t.id))
+    .map((t) => {
+      const part = t.id === "perc" ? "snare" : t.id;
+      const gain = DRUM_TRIMS[part]?.[kitOf[t.id] ?? ""] ?? 1;
+      return withGain(t, gain);
+    });
   for (const [id, build] of Object.entries(make))
-    if (used.has(id)) out.push(build());
+    if (used.has(id)) out.push(withGain(build(), 1));
   // Lanes land on the tracks; any track with a dj-filter lane gets the filter.
   return out.map((track) => {
     const thrown =

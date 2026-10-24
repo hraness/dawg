@@ -80,3 +80,45 @@ export const SOUND_TRIMS: Readonly<
     glass: 0.485,
   },
 };
+
+/** Per-kit gains for the kick, snare and hats at Redline's 909 balance. */
+export const DRUM_TRIMS: Readonly<
+  Record<string, Readonly<Record<string, number>>>
+> = {
+  kick: {
+    syn808: 1.274,
+    syn909: 1,
+    acoustic: 1.977,
+    lofi: 1.267,
+    electro: 1.991,
+    trap: 0.658,
+    syn606: 1.995,
+    syn707: 1.229,
+    synlinn: 1.18,
+    breaks: 1.193,
+  },
+  snare: {
+    syn808: 3.366,
+    syn909: 1.266,
+    acoustic: 2.172,
+    lofi: 2.523,
+    electro: 3.826,
+    trap: 1.352,
+    syn606: 2.524,
+    syn707: 1.751,
+    synlinn: 1.744,
+    breaks: 1.692,
+  },
+  hats: {
+    syn808: 4.85,
+    syn909: 0.366,
+    acoustic: 1.626,
+    lofi: 1.507,
+    electro: 2.134,
+    trap: 0.443,
+    syn606: 5.882,
+    syn707: 0.478,
+    synlinn: 0.463,
+    breaks: 1.064,
+  },
+};

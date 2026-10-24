@@ -235,7 +235,7 @@ const VERSE_OF: Readonly<Record<Grammar, Partial<Record<Grammar, number>>>> = {
   glitch: { glitch: 2, trap: 1, bounce: 1 },
 };
 
-const KITS = [
+export const KITS = [
   "syn808",
   "syn909",
   "acoustic",
