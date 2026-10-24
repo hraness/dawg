@@ -48,4 +48,23 @@ describe("agent song sheets", () => {
       tool("write_song").plan({ sheet, extra: 1 }, context()),
     ).toThrow();
   });
+
+  test("compose_song draws a fresh song from a seed and a card", () => {
+    const card = {
+      title: "Velvet Relay",
+      hook: "vel-vet re-lay, pass it on",
+      verses: ["hand to hand the sig-nal", "warm-er ev-ery time"],
+      mood: { energy: 0.8, brightness: 0.3 },
+      pins: { fugue: true },
+    };
+    const plan = tool("compose_song").plan({ card, seed: 77 }, context());
+    if (plan.kind !== "replace") throw new Error("expected one replacement");
+    expect(plan.summary).toContain("Velvet Relay · seed 77");
+    expect(plan.next.tracks.some((t) => t.id === "fg1" || t.id === "fg2")).toBe(true);
+    const again = tool("compose_song").plan({ card, seed: 77 }, context());
+    if (again.kind !== "replace") throw new Error("expected one replacement");
+    expect(JSON.stringify(again.next.toJSON())).toBe(JSON.stringify(plan.next.toJSON()));
+    expect(() => tool("compose_song").plan({ card: { title: "x" } }, context())).toThrow("needs fixes");
+    expect(() => tool("compose_song").plan({ seed: -1 }, context())).toThrow();
+  });
 });
