@@ -33,6 +33,7 @@ import {
   type PhrasePlan,
   type Range,
 } from "./melody.ts";
+import { SOUND_TRIMS } from "./levels.ts";
 import { readMusic, type Music } from "./music.ts";
 import { Rng } from "./rng.ts";
 import {
@@ -1420,6 +1421,9 @@ const LEVELS: Readonly<Record<string, number>> = {
   fg3: 0.44,
 };
 
+/** The palette trim that puts `sound` at its role's loudness. */
+const trim = (role: string, sound: string) => SOUND_TRIMS[role]?.[sound] ?? 1;
+
 function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
   const g = c.g;
   const d = g.design;
@@ -1430,14 +1434,49 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
     Object.keys(ARP).filter((k) => k !== g.sounds.arp),
   );
   const make: Record<string, () => TrackInput> = {
-    bass: () => BASS[g.sounds.bass]!("bass", "Bass", LEVELS.bass!, d),
+    bass: () =>
+      BASS[g.sounds.bass]!(
+        "bass",
+        "Bass",
+        LEVELS.bass! * trim("bass", g.sounds.bass),
+        d,
+      ),
     sub: () => subTrack(LEVELS.sub!),
-    pad: () => PAD[g.sounds.pad]!("pad", "Pad", LEVELS.pad!, d),
-    stabs: () => STAB[g.sounds.stab]!("stabs", "Stabs", LEVELS.stabs!, d),
-    arp: () => ARP[g.sounds.arp]!("arp", "Arp", LEVELS.arp!, d),
-    lead: () => LEAD[g.sounds.lead]!("lead", "Lead", LEVELS.lead!, d),
+    pad: () =>
+      PAD[g.sounds.pad]!(
+        "pad",
+        "Pad",
+        LEVELS.pad! * trim("pad", g.sounds.pad),
+        d,
+      ),
+    stabs: () =>
+      STAB[g.sounds.stab]!(
+        "stabs",
+        "Stabs",
+        LEVELS.stabs! * trim("stab", g.sounds.stab),
+        d,
+      ),
+    arp: () =>
+      ARP[g.sounds.arp]!(
+        "arp",
+        "Arp",
+        LEVELS.arp! * trim("arp", g.sounds.arp),
+        d,
+      ),
+    lead: () =>
+      LEAD[g.sounds.lead]!(
+        "lead",
+        "Lead",
+        LEVELS.lead! * trim("lead", g.sounds.lead),
+        d,
+      ),
     counter: () => ({
-      ...ARP[counterSound]!("counter", "Counter line", LEVELS.counter!, d),
+      ...ARP[counterSound]!(
+        "counter",
+        "Counter line",
+        LEVELS.counter! * trim("arp", counterSound),
+        d,
+      ),
       pan: 0.28,
     }),
     vox: () => singer("vox", "Singer", LEVELS.vox!, s, d),
@@ -1457,14 +1496,30 @@ function tracksFor(c: Ctx, used: ReadonlySet<string>): TrackInput[] {
     fx: () => fxTrack("fx", LEVELS.fx!),
     spark: () => sparkTrack("spark", LEVELS.spark!, d),
     fg1: () => ({
-      ...BAROQUE[baroque[0]!]!("fg1", "Fugue I", LEVELS.fg1!, d),
+      ...BAROQUE[baroque[0]!]!(
+        "fg1",
+        "Fugue I",
+        LEVELS.fg1! * trim("baroque", baroque[0]!),
+        d,
+      ),
       pan: 0.3,
     }),
     fg2: () => ({
-      ...BAROQUE[baroque[1]!]!("fg2", "Fugue II", LEVELS.fg2!, d),
+      ...BAROQUE[baroque[1]!]!(
+        "fg2",
+        "Fugue II",
+        LEVELS.fg2! * trim("baroque", baroque[1]!),
+        d,
+      ),
       pan: -0.3,
     }),
-    fg3: () => BAROQUE[baroque[2]!]!("fg3", "Fugue III", LEVELS.fg3!, d),
+    fg3: () =>
+      BAROQUE[baroque[2]!]!(
+        "fg3",
+        "Fugue III",
+        LEVELS.fg3! * trim("baroque", baroque[2]!),
+        d,
+      ),
   };
   const out: TrackInput[] = drumTracks(g.bpm, g.drums, d).filter((t) =>
     used.has(t.id),

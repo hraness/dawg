@@ -9,8 +9,10 @@ import {
   sampleGenome,
   spread,
 } from "./index.ts";
+import { SOUND_TRIMS } from "./levels.ts";
 import { fugue, type MNote } from "./melody.ts";
 import { Rng } from "./rng.ts";
+import { ARP, BAROQUE, BASS, LEAD, PAD, STAB } from "./sounds.ts";
 import { consonant } from "./theory.ts";
 
 const UNPITCHED = new Set([
@@ -208,4 +210,13 @@ describe("hyperpop genomes", () => {
     );
     expect(distance(fa, fingerprint(songFromCard(a, 7).score))).toBe(0);
   });
+});
+
+test("every palette sound has a measured trim to its role's loudness", () => {
+  // Run `bun scripts/genome-levels.ts --write` after adding a sound.
+  const roles = { bass: BASS, lead: LEAD, pad: PAD, stab: STAB, arp: ARP };
+  for (const [role, table] of Object.entries({ ...roles, baroque: BAROQUE }))
+    expect(Object.keys(SOUND_TRIMS[role] ?? {}).sort()).toEqual(
+      Object.keys(table).sort(),
+    );
 });
