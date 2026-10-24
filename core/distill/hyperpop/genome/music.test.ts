@@ -5,6 +5,7 @@ import {
   cardPins,
   EXAMPLE_CARDS,
   motifOf,
+  musicNotes,
   numeral,
   readMusic,
   sampleGenome,
@@ -29,6 +30,11 @@ describe("music a model writes", () => {
     expect(numeral(cMajor, "I/3")!.name).toBe("I/E");
     expect(numeral(cMajor, "vii")!.name).toContain("/");
     expect(numeral(cMajor, "bVII")).toBeUndefined();
+    // A flat that names the mode's own note is just that chord.
+    expect(numeral(scaleOf(7, "mixolydian"), "bVII")!.name).toBe("VII");
+    expect(numeral(aMinor, "bVI")!.name).toBe("VI");
+    expect(numeral(cMajor, "IVmaj7")!.name).toBe("IV7");
+    expect(numeral(aMinor, "iim7")!.name).toBe("ii°/D");
     expect(numeral(cMajor, "Cmaj7")).toBeUndefined();
   });
 
@@ -108,7 +114,7 @@ describe("music a model writes", () => {
     const card = { ...EXAMPLE_CARDS[1]!, pins: {}, brief };
     const song = songFromCard(card, 11);
     // Mood no longer steers the mode or the beat once the model wrote for them.
-    expect(song.notes.slice(0, 7)).toEqual(shown.slice(0, 7));
+    for (const line of shown.slice(0, -1)) expect(song.notes).toContain(line);
     expect(cardPins(card, new Rng(1)).mode).toBeUndefined();
     expect(
       cardPins({ ...card, music: undefined }, new Rng(1)).mode,
@@ -117,8 +123,33 @@ describe("music a model writes", () => {
     expect(chat[1]!.content).toContain(shown[0]!);
   });
 
+  test("a card's fixable music problems are named for another round", () => {
+    const card = {
+      ...EXAMPLE_CARDS[0]!,
+      music: {
+        chords: { drop: ["I", "bVII", "IV", "V"] },
+        motifs: {
+          hook: { rhythm: "x...x...x.......", steps: [1, 1] },
+          verse: { rhythm: "x.x.x.x.x", steps: [1] },
+        },
+      },
+    };
+    const notes = musicNotes(card, cMajor);
+    expect(notes.some((n) => n.includes("only 3 x's"))).toBe(true);
+    expect(notes.some((n) => n.includes("9 long"))).toBe(true);
+    expect(notes.some((n) => n.includes("needs 4 steps"))).toBe(true);
+    expect(notes.some((n) => n.includes("borrowed"))).toBe(true);
+    // In mixolydian the same flat seven is the mode's own chord.
+    expect(
+      musicNotes(card, scaleOf(0, "mixolydian")).some((n) =>
+        n.includes("borrowed"),
+      ),
+    ).toBe(false);
+  });
+
   test("example cards are valid and their motifs read cleanly", () => {
     for (const card of EXAMPLE_CARDS) {
+      expect(musicNotes(card)).toEqual([]);
       const checked = validateCard(JSON.parse(JSON.stringify(card)));
       expect(checked.ok && checked.warnings).toEqual([]);
       expect(readMusic(card.music, sampleGenome(1).scale).warnings).toEqual([]);

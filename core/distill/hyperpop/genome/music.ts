@@ -60,7 +60,8 @@ export type Music = Readonly<{
   harmonyThirds?: boolean;
 }>;
 
-const NUMERAL = /^(vii|vi|iv|v|iii|ii|i)(°|o|dim)?(7|9|add9)?(?:\/(\d))?$/i;
+const NUMERAL =
+  /^([b♭#♯])?(vii|vi|iv|v|iii|ii|i)(°|o|dim|ø)?(maj7|m7|7|maj9|m9|9|add9|sus2|sus4)?(?:\/(\d))?$/i;
 const DEGREE: Readonly<Record<string, number>> = {
   i: 0,
   ii: 1,
@@ -70,27 +71,36 @@ const DEGREE: Readonly<Record<string, number>> = {
   vi: 5,
   vii: 6,
 };
+const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 
 /**
  * A numeral as a chord in `scale`. The mode decides the quality, so "iv" and
- * "IV" are the same chord; borrowed chords are not written here. "V/3" puts
- * the chord's 3rd in the bass; a diminished chord always passes over its 3rd.
+ * "IV" are the same chord, and "maj7" or "m7" both mean the mode's 7th. A
+ * flat or sharp is read against the major scale and kept only when it names
+ * the mode's own note ("bVII" in mixolydian or minor); a borrowed chord is
+ * not written here. "V/3" puts the chord's 3rd in the bass; a diminished
+ * chord always passes over its 3rd.
  */
 export function numeral(scale: Scale, text: string): Chord | undefined {
   const m = NUMERAL.exec(text.trim());
   if (!m) return undefined;
-  const degree = DEGREE[m[1]!.toLowerCase()]!;
-  const ext: Ext =
-    m[3] === "7"
-      ? "seven"
-      : m[3] === "9"
+  const degree = DEGREE[m[2]!.toLowerCase()]!;
+  if (m[1]) {
+    const shift = /[b♭]/.test(m[1]) ? -1 : 1;
+    if (scale.steps[degree] !== (MAJOR[degree]! + shift + 12) % 12)
+      return undefined;
+  }
+  const suffix = (m[4] ?? "").toLowerCase();
+  const ext: Ext = suffix.endsWith("7")
+    ? "seven"
+    : suffix === "add9"
+      ? "add9"
+      : suffix.endsWith("9")
         ? "nine"
-        : m[3] === "add9"
-          ? "add9"
-          : "triad";
+        : "triad";
   const dim = isDiminished(scale, degree);
   const chord = diatonic(scale, degree, dim ? "triad" : ext);
-  const inv = m[4] === "3" || dim ? 1 : m[4] === "5" ? 2 : 0;
+  const inv = m[5] === "3" || dim ? 1 : m[5] === "5" ? 2 : 0;
   return inv ? over(chord, chord.triad[inv]!) : chord;
 }
 
@@ -139,7 +149,11 @@ export function readMusic(music: Music | undefined, scale: Scale): ReadMusic {
     const chords = list.flatMap((t) => {
       const c = numeral(scale, t);
       if (!c)
-        warnings.push(`${role} chord ${t} is not a numeral like vi or V7`);
+        warnings.push(
+          /^[b♭#♯]/.test(t.trim())
+            ? `${role} chord ${t} is borrowed from outside ${scale.name}; write only the mode's chords`
+            : `${role} chord ${t} is not a numeral like vi or V7`,
+        );
       return c ? [c] : [];
     });
     if (chords.length >= 2) loops[role] = chords.slice(0, 8);

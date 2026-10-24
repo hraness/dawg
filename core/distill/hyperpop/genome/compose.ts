@@ -291,6 +291,8 @@ type Ctx = Readonly<{
     hook: readonly string[];
     verses: readonly string[];
   }>;
+  /** The next verse line to sing; verses carry on where the last one stopped. */
+  cursor: { line: number };
 }>;
 
 /** Per-song habits drawn once, so the song is consistent with itself. */
@@ -399,6 +401,32 @@ function sung(notes: readonly MNote[], syllables: readonly string[]): MNote[] {
     ...n,
     lyric: syllables[i % Math.max(1, syllables.length)] ?? "ah",
   }));
+}
+
+/**
+ * Words set the way a singer phrases them: one syllable per note in order,
+ * starting the line again only at a unit boundary, so a repeat begins where
+ * the motif does; notes past the line's end become rests.
+ */
+function fit(
+  notes: readonly MNote[],
+  syllables: readonly string[],
+  unit: number,
+  from = 0,
+): MNote[] {
+  if (!syllables.length) return [...notes];
+  const out: MNote[] = [];
+  let j = 0;
+  let at = -1;
+  for (const n of notes) {
+    const u = Math.floor((n.beat - from + 1e-6) / unit);
+    if (u !== at) {
+      at = u;
+      if (j >= syllables.length) j = 0;
+    }
+    if (j < syllables.length) out.push({ ...n, lyric: syllables[j++]! });
+  }
+  return out;
 }
 
 function wordsFor(
@@ -682,7 +710,7 @@ function writeDrop(c: Ctx, sec: Section, devices: ReadonlySet<Device>): void {
     const bar = sec.start + p * 4;
     const leadHook = hookNotes(c, chordAt, c.ranges.lead);
     if (lead.includes("vox")) {
-      voxLine(c, bar, sung(hook, wordsFor(c, rng, hook.length, "hook")), {
+      voxLine(c, bar, fit(hook, c.words.hook, c.motifs.hook.beats), {
         harmony: c.style.harmonyThirds && p % 2 === 1,
         high: octave > 0,
       });
@@ -778,7 +806,26 @@ function writeVerse(c: Ctx, sec: Section): void {
         bar,
         notes.map((n) => ({ ...n, vel: n.vel * 0.8 })),
       );
-    else
+    else if (c.words.verses.length) {
+      // Two lines a phrase, a line every two bars, as the demos sing them.
+      const lines = c.words.verses;
+      const next = () => lines[c.cursor.line++ % lines.length]!.split(/\s+/);
+      const first = next();
+      const second = next();
+      voxLine(c, bar, [
+        ...fit(
+          notes.filter((n) => n.beat < 8),
+          first,
+          8,
+        ),
+        ...fit(
+          notes.filter((n) => n.beat >= 8),
+          second,
+          8,
+          8,
+        ),
+      ]);
+    } else
       voxLine(
         c,
         bar,
@@ -1117,7 +1164,7 @@ function writeOutro(c: Ctx, sec: Section): void {
       sec.start,
       hook.map((n) => ({ ...n, vel: n.vel * 0.6 })),
     );
-  else voxLine(c, sec.start, sung(hook, wordsFor(c, rng, hook.length, "hook")));
+  else voxLine(c, sec.start, fit(hook, c.words.hook, c.motifs.hook.beats));
   if (sec.bars >= 4)
     drumSection(c, { ...sec, bars: 2 }, c.grooves.main, { energy: 0.5 });
   lane(
@@ -1562,6 +1609,7 @@ export function compileGenome(g: Genome, content: Content = {}): GenSong {
     ranges,
     motifs: { ...motifs, ...read.motifs },
     words: { theme, hook, verses: content.verses ?? [] },
+    cursor: { line: 0 },
   };
   const devices = new Set<Device>(g.devices);
   for (const sec of sections) {

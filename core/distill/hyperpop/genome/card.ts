@@ -5,7 +5,7 @@
  * brings everything else, so the same brief gives a new song every seed
  * and no two songs share a template.
  */
-import { MODES, type Mode } from "./theory.ts";
+import { MODES, scaleOf, type Mode } from "./theory.ts";
 import { FORMS, GRAMMARS, VOICES, type GenomePins } from "./genome.ts";
 import type { Content } from "./compose.ts";
 import type { Rng } from "./rng.ts";
@@ -16,6 +16,7 @@ import {
   PLANS,
   VERSE_BASSES,
   musicSchema,
+  readMusic,
   validateMusic,
   type Music,
 } from "./music.ts";
@@ -83,6 +84,23 @@ export function syllables(text: string): string[] {
     .replace(/[^a-z0-9'\- ]+/g, " ")
     .split(/[\s-]+/)
     .filter(Boolean)
+    .slice(0, 32);
+}
+
+/**
+ * Syllables as the singer takes them: a trailing `-` tells the voice the
+ * word goes on ("dash-", "board"), as the demos write them.
+ */
+export function sungSyllables(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9'\- ]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => {
+      const parts = word.split("-").filter(Boolean);
+      return parts.map((x, i) => (i < parts.length - 1 ? `${x}-` : x));
+    })
     .slice(0, 32);
 }
 
@@ -274,8 +292,8 @@ export function cardContent(card: SongCard): Content {
   return {
     title: card.title,
     ...(card.theme ? { theme: card.theme } : {}),
-    hook: syllables(card.hook),
-    verses: card.verses,
+    hook: sungSyllables(card.hook),
+    verses: card.verses.map((v) => sungSyllables(v).join(" ")),
     ...(card.music ? { music: card.music } : {}),
   };
 }
@@ -334,6 +352,46 @@ export const CARD_GUIDE = `You write a hyperpop song: the words, the taste and t
   - dropLead (${DROP_LEADS.join(", ")}), dropBass (${DROP_BASSES.join(", ")}), verseBass (${VERSE_BASSES.join(", ")}), leadOctave (the lead doubles the hook an octave up), stabsInDrop (chord stabs on the beat instead of an arp), harmonyThirds (a harmony a third under held words). Leave out what you have no opinion on.
 
 Write original words and music. Never quote an existing song. One key for the whole song: never change key.`;
+
+/**
+ * What a card's music gets wrong that the model can fix in another round:
+ * a hook rhythm with far fewer notes than the hook has syllables, a grid
+ * that is not whole bars, chords outside the mode. The arranger copes with
+ * each, so a card that still has them on its last round is used as it is.
+ */
+export function musicNotes(
+  card: SongCard,
+  scale = scaleOf(0, card.pins?.mode ?? "major"),
+): string[] {
+  const music = card.music;
+  if (!music) return [];
+  const out: string[] = [];
+  const hook = music.motifs?.hook;
+  const words = sungSyllables(card.hook).length;
+  if (hook) {
+    const xs = (hook.rhythm.match(/x/gi) ?? []).length;
+    if (xs < Math.ceil(words * 0.75))
+      out.push(
+        `the hook has ${words} syllables but its rhythm has only ${xs} x's; give it about one x per syllable (a 32-long rhythm has room)`,
+      );
+  }
+  for (const [role, m] of Object.entries(music.motifs ?? {})) {
+    const len = m.rhythm.replace(/\s+/g, "").length;
+    if (![16, 32, 64].includes(len))
+      out.push(`the ${role} rhythm is ${len} long; make it 16, 32 or 64`);
+    const xs = (m.rhythm.match(/x/gi) ?? []).length;
+    if (m.steps.length !== Math.max(0, xs - 1))
+      out.push(
+        `the ${role} motif has ${xs} x's, so it needs ${Math.max(0, xs - 1)} steps, not ${m.steps.length}`,
+      );
+  }
+  out.push(
+    ...readMusic({ chords: music.chords }, scale).warnings.filter((w) =>
+      /borrowed|not a numeral/.test(w),
+    ),
+  );
+  return out;
+}
 
 /** A worked card and the constraints it was written for. */
 type Example = Readonly<{ constraints: readonly string[]; card: SongCard }>;
@@ -413,7 +471,7 @@ const EXAMPLES: readonly Example[] = [
             steps: [2, -2, 2, -3, 1, 1, -2],
           },
           verse: { rhythm: "x.x.x...x.x.....", steps: [1, 1, -1, -1] },
-          switch: { rhythm: "x..x..x.x..x..x.", steps: [2, -2, 2, -2, 2, -2] },
+          switch: { rhythm: "x..x..x.x..x..x.", steps: [2, -2, 2, -2, 2] },
         },
         hookPlan: "AAAB",
         versePlan: "ABAB",

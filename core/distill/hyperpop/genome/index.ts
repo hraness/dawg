@@ -12,6 +12,8 @@ export {
   cardSchema,
   CARD_GUIDE,
   EXAMPLE_CARDS,
+  musicNotes,
+  sungSyllables,
   syllables,
   validateCard,
   type SongCard,

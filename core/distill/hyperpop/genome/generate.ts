@@ -12,6 +12,7 @@ import {
   cardMessages,
   cardPins,
   cardSchema,
+  musicNotes,
   validateCard,
   type SongCard,
 } from "./card.ts";
@@ -69,7 +70,11 @@ export function briefConstraints(brief: string, seed: number): string[] {
   const kinds = songSections(g).map((x) =>
     x.name.replace(/ \d+$/, "").toLowerCase(),
   );
-  return [...describeGenome(g), `sections: ${kinds.join(", ")}`];
+  // The harmony line is the seed's own chord language, which the model's chords replace.
+  return [
+    ...describeGenome(g).filter((line) => !line.startsWith("harmony:")),
+    `sections: ${kinds.join(", ")}`,
+  ];
 }
 
 /** A song from a card and a seed, no model involved. */
@@ -90,6 +95,7 @@ export async function generateGenomeSong(
   const rounds = Math.max(1, options.rounds ?? 3);
   const schema = cardSchema();
   const constraints = briefConstraints(brief, seed);
+  const scale = sampleGenome(mix(brief, seed)).scale;
   let retry: { reply: string; notes: readonly string[] } | undefined;
   let last: readonly string[] = [];
   for (let round = 1; round <= rounds; round++) {
@@ -102,10 +108,22 @@ export async function generateGenomeSong(
     try {
       const checked = validateCard(parseReply(reply));
       if (checked.ok) {
+        const fixes = musicNotes(checked.card, scale);
+        if (fixes.length && round < rounds) {
+          options.onRound?.({
+            round,
+            ok: false,
+            notes: fixes,
+            ms: Date.now() - started,
+          });
+          last = fixes;
+          retry = { reply: reply.slice(0, 8000), notes: fixes };
+          continue;
+        }
         options.onRound?.({
           round,
           ok: true,
-          notes: checked.warnings,
+          notes: [...checked.warnings, ...fixes],
           ms: Date.now() - started,
         });
         const card = { ...briefPins(checked.card, brief), brief };
