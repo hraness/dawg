@@ -30,6 +30,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
   - **New checks:** sung lines that share one rhythm, notes that are almost all one length, and lines with no held word.
   - **Clashes cost more.** A short note that steps straight on to its neighbour counts as an appoggiatura, not a clash.
   - **Per section:** verse shapes are counted inside each verse, so a second verse may reuse the first verse's tune. A chorus part that opens like another counts as a repeat.
+- **`generateSong` settles clashing beats before the critic.** An on-beat note a semitone off its chord moves to the nearest chord tone in the sheet itself, so retries go to rhythm and shape.
+- **Sheet repairs for small-model slips.** A lyric with spaces loses them instead of failing the render, and a night or glass section marked `bridge` becomes a `break` with a warning.
 - **`generateSong` passes a sheet only when at most 10% of its on-beat notes clash with the chord** (`maxRubs`), as well as on its score.
 - **The playbook teaches rhythm:** pickups, off-beat starts, rests between lines, and held phrase ends.
 
