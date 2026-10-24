@@ -130,13 +130,15 @@ describe("music a model writes", () => {
         chords: { drop: ["I", "bVII", "IV", "V"] },
         motifs: {
           hook: { rhythm: "x...x...x.......", steps: [1, 1] },
-          verse: { rhythm: "x.x.x.x.x", steps: [1] },
+          verse: { rhythm: "x.x.x.x.x".padEnd(20, "."), steps: [1] },
         },
       },
     };
     const notes = musicNotes(card, cMajor);
     expect(notes.some((n) => n.includes("only 3 x's"))).toBe(true);
-    expect(notes.some((n) => n.includes("9 long"))).toBe(true);
+    expect(notes.some((n) => n.includes("20 long"))).toBe(true);
+    // A short rhythm only pads out with rests, so it is not a problem.
+    expect(notes.some((n) => n.includes("hook rhythm"))).toBe(false);
     expect(notes.some((n) => n.includes("needs 4 steps"))).toBe(true);
     expect(notes.some((n) => n.includes("borrowed"))).toBe(true);
     // In mixolydian the same flat seven is the mode's own chord.

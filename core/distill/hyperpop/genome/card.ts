@@ -377,8 +377,12 @@ export function musicNotes(
   }
   for (const [role, m] of Object.entries(music.motifs ?? {})) {
     const len = m.rhythm.replace(/\s+/g, "").length;
-    if (![16, 32, 64].includes(len))
-      out.push(`the ${role} rhythm is ${len} long; make it 16, 32 or 64`);
+    // A short rhythm pads out with rests; a long one loses its tail.
+    const longest = role === "hook" ? 64 : 16;
+    if (len > longest)
+      out.push(
+        `the ${role} rhythm is ${len} long but only the first ${longest} play; keep it to ${longest}`,
+      );
     const xs = (m.rhythm.match(/x/gi) ?? []).length;
     if (m.steps.length !== Math.max(0, xs - 1))
       out.push(
