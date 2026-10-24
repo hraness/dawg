@@ -7,6 +7,7 @@
 import type { SheetModel } from "../generate.ts";
 import { parseReply } from "../generate.ts";
 import {
+  briefPins,
   cardContent,
   cardMessages,
   cardPins,
@@ -43,10 +44,22 @@ export type GenomeOptions = Readonly<{
 
 export const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
+/**
+ * The seed a card's song is drawn from: the seed mixed with the card's words,
+ * so two briefs on one seed are two songs, and a saved card replays exactly.
+ */
+export function cardSeed(card: SongCard, seed: number): number {
+  let h = 0x811c9dc5;
+  for (const ch of `${card.title}\n${card.hook}`)
+    h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+  return ((h ^ seed) >>> 0) % 2 ** 31;
+}
+
 /** A song from a card and a seed, no model involved. */
 export function songFromCard(card: SongCard, seed: number): GenSong {
+  const s = cardSeed(card, seed);
   return compileGenome(
-    sampleGenome(seed, cardPins(card, new Rng(seed).fork("card"))),
+    sampleGenome(s, cardPins(card, new Rng(s).fork("card"))),
     cardContent(card),
   );
 }
@@ -74,9 +87,10 @@ export async function generateGenomeSong(
           notes: checked.warnings,
           ms: Date.now() - started,
         });
+        const card = briefPins(checked.card, brief);
         return {
-          ...songFromCard(checked.card, seed),
-          card: checked.card,
+          ...songFromCard(card, seed),
+          card,
           seed,
           warnings: checked.warnings,
           rounds: round,

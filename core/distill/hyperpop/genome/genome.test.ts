@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createDemo, DEMOS } from "../../../demos/index.ts";
 import {
+  briefPins,
+  songFromCard,
   compileGenome,
   distance,
   fingerprint,
@@ -169,5 +171,41 @@ describe("hyperpop genomes", () => {
     const s = spread(prints);
     expect(s.mean).toBeGreaterThan(0.3);
     expect(s.min).toBeGreaterThan(0.12);
+  });
+  test("a card keeps only the pins its brief names", () => {
+    const card = {
+      title: "T",
+      hook: "la la",
+      verses: ["la"],
+      pins: { bpm: 165, mode: "lydian", drums: "jersey", fugue: true },
+    } as const;
+    expect(
+      briefPins(card, "a euphoric rave song about red lights").pins,
+    ).toEqual({});
+    expect(
+      briefPins(card, "a 165 bpm jersey club song in lydian").pins,
+    ).toEqual({ bpm: 165, mode: "lydian", drums: "jersey" });
+    expect(briefPins(card, "sad, with a baroque fugue").pins).toEqual({
+      fugue: true,
+    });
+  });
+  test("one seed under two cards is two songs, and a card replays exactly", () => {
+    const a = {
+      title: "Red Light",
+      hook: "go go go",
+      verses: ["la"],
+      mood: { energy: 0.8, brightness: 0.6 },
+    };
+    const b = {
+      title: "Pixel Grief",
+      hook: "bye bye bye",
+      verses: ["la"],
+      mood: { energy: 0.8, brightness: 0.6 },
+    };
+    const fa = fingerprint(songFromCard(a, 7).score);
+    expect(distance(fa, fingerprint(songFromCard(b, 7).score))).toBeGreaterThan(
+      0.1,
+    );
+    expect(distance(fa, fingerprint(songFromCard(a, 7).score))).toBe(0);
   });
 });
