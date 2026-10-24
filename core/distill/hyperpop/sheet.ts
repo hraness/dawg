@@ -455,7 +455,7 @@ export function validateSheet(raw: unknown): Validated {
       }
       if (skipped > 0)
         warnings.push(
-          `lines.${part}: ${skipped} notes were dropped; each note is [beat ${first} to ${span - 0.25}, degree, beats, "syllable"] with its own beat`,
+          `lines.${part}: ${skipped} notes were dropped; each note is [beat ${first} to ${span - 0.25}, degree, beats, "syllable"] with its own beat${span === 4 && palette !== "candy" ? `. In ${palette} a ${part.replace(/\d+$/, "")} part is one bar; only candy parts last two` : ""}`,
         );
       // The outro's tag may be one held word.
       if (notes.length < (candy && p.startsWith("end") ? 1 : 2)) {
