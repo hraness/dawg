@@ -2,6 +2,20 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.35.0
+
+### Added
+
+- **Charts: songs written section by section, performed with the demos' craft.**
+  - **Before:** generated songs came from dice and a model's card. They varied, but none reached the demos: the bed jumped up to 2.7 semitones a voice between chords, sung notes were clipped 16ths with few scoops or slides, intros ran two bars and sections sixteen.
+  - **Now:** a chart (`core/distill/hyperpop/chart/`) names each section's chords as numerals in one mode, its sung lines, hook and counter as 16th-note rhythms over scale degrees, its layers and its moves. `performChart` plays it: common-tone voicings under one ceiling set by the singer, legato lines with harmony thirds under held words, a layer added on each repeat, a locked bass with a sine under characterful basses, rotating fills, ghosted kicks in busy grids, and a mix leveled to the demos' meters. A chart cannot write a key change or borrow a chord.
+  - **A critic sets the bar from the demos:** `judge(score)` checks distinct bars, voice-leading, semitone clashes under held words, expression per sung note, intro length and section length, and names what falls short. All three demos pass it, and earlier generated songs fail it.
+  - **Three gold charts:** Paper Comet (D major, 162, glass and chip), Snow Day Static (G dorian, 150, chipmunk vocal, footwork drops and a two-voice canon for a bridge) and Tin Foil Halo (A flat mixolydian, 136, a breathy alto over brass and marimba, two-step and dembow). Every one passes the critic. `bun scripts/chart.ts` performs and judges them.
+
+### Changed
+
+- **Generated verses run eight bars at most**, as in the demos, and the back half of a 16-bar drop hands the hook to the lead and the chops.
+
 ## 0.34.0
 
 ### Added
