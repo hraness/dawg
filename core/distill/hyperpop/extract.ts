@@ -11,6 +11,9 @@ import * as glassDemo from "../../demos/glass-garden.ts";
 import * as nightDemo from "../../demos/redline.ts";
 import { PATTERN_SLOTS, patternName } from "./library.ts";
 import {
+  chordClasses,
+  degreePitch,
+  numeralDegree,
   numeralFor,
   parseKey,
   type Key,
@@ -269,7 +272,7 @@ export function candySheet(): Extracted {
     ...(lead ? { lead } : {}),
   });
   return {
-    sheet: {
+    sheet: settle(key, {
       title: "Candy Fault",
       bpm: 156,
       key: "E major",
@@ -335,7 +338,45 @@ export function candySheet(): Extracted {
         section("chorus", "Overload", 8, "chorus", chorus, ["chip"]),
         section("outro", "Shutdown", 4, "outro", ["end1", null, "end2", null]),
       ],
-    },
+    }),
     notes: [],
   };
+}
+
+/**
+ * Write a sung note that clashes on a beat as the chord tone the compiler
+ * moves it to, so the example teaches what is heard. A short note stepping
+ * straight on to its neighbour leans on the beat and stays.
+ */
+function settle(key: Key, sheet: SongSheet): SongSheet {
+  const lines = { ...sheet.lines };
+  for (const section of sheet.sections) {
+    const list = sheet.progressions[section.chords] ?? [];
+    (section.lines ?? []).forEach((part, bar) => {
+      const line = part ? lines[part] : undefined;
+      if (!part || !line) return;
+      lines[part] = line.map((note, k): SheetNote => {
+        const [beat, degree, beats, lyric] = note;
+        const next = line[k + 1];
+        const leans =
+          beats <= 0.5 &&
+          next !== undefined &&
+          next[0] - beat <= 0.5 &&
+          Math.abs(next[1] - degree) === 1;
+        if (beat % 1 !== 0 || leans) return note;
+        const numeral = list[(bar + Math.floor(beat / 4)) % list.length] ?? "I";
+        const tones = new Set(chordClasses(key, numeralDegree(numeral) ?? 1));
+        const pc = degreePitch(key, degree) % 12;
+        const rubs =
+          !tones.has(pc) &&
+          (tones.has((pc + 1) % 12) || tones.has((pc + 11) % 12));
+        if (!rubs) return note;
+        for (const d of [degree - 1, degree + 1])
+          if (tones.has(degreePitch(key, d) % 12))
+            return [beat, d, beats, lyric];
+        return note;
+      });
+    });
+  }
+  return { ...sheet, lines };
 }

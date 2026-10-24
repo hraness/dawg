@@ -172,7 +172,8 @@ export function critique(sheet: SongSheet): Critique {
         }
       });
     });
-  for (const s of sections) {
+  // The candy palette places its hooks itself and fits each to its chord.
+  for (const s of sheet.palette === "candy" ? [] : sections) {
     const bars = (s.lead ?? []).flatMap((name) => sheet.hooks?.[name] ?? []);
     for (let at = 0; bars.length > 0 && at < s.bars; at++)
       for (const [beat, degree] of bars[at % bars.length]!) {

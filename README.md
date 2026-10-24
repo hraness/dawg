@@ -104,8 +104,9 @@ stutters, reversals, a looped-vowel lead and a grain cloud, over
 syncopated stabs and changing beats. Each has production notes, named
 scenes, instruments, effects and automation; `guide hyperpop` explains
 the techniques. To write a new song in the same style, run
-`dawg make "<brief>"`. The local model writes a song sheet and dawg
-produces it (see [Distilled styles](./docs/distill.md)).
+`dawg make "<brief>"`. The local model writes a song sheet, and dawg
+produces it with the sound of Candy Fault, Redline or Glass Garden (see
+[Distilled styles](./docs/distill.md)).
 `demo redline` loads one and opens TAPE; Space plays, Tab changes
 tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
