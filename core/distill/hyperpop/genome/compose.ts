@@ -117,7 +117,9 @@ export function songSections(g: Genome): Section[] {
 
 /** The form archetype as a section list, its bar counts drawn per song. */
 function layout(rng: Rng, g: Genome): Section[] {
-  const v = () => rng.pick([8, 8, 16, 4]);
+  // No verse runs past 8 bars, as in the demos; a 16-bar drop is a sung
+  // chorus and then an instrumental drop, as in Redline.
+  const v = () => rng.pick([8, 8, 8, 4]);
   const d = () => rng.pick([8, 8, 16]);
   const p = () => rng.pick([4, 4, 2, 8]);
   const intro = () => rng.pick([2, 4, 4, 8]);
@@ -707,9 +709,13 @@ function writeDrop(c: Ctx, sec: Section, devices: ReadonlySet<Device>): void {
   if (!c.style.stabsInDrop || (sec.last && rng.chance(0.5)))
     arpBars(c, sec, chordAt, 0.5);
   const hook = hookNotes(c, chordAt, c.ranges.vox);
-  const lead = c.style.dropLead;
   for (let p = 0; p < sec.bars / 4; p++) {
     const bar = sec.start + p * 4;
+    // The back half of a 16-bar drop hands the hook to the lead and chops.
+    const lead =
+      sec.bars >= 16 && p >= sec.bars / 8 && c.g.voice !== "instrumental"
+        ? "lead+chops"
+        : c.style.dropLead;
     const leadHook = hookNotes(c, chordAt, c.ranges.lead);
     if (lead.includes("vox")) {
       voxLine(c, bar, fit(hook, c.words.hook, c.motifs.hook.beats), {
