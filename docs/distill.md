@@ -7,7 +7,39 @@ code does the production.
 
 Hyperpop is the first style. The code is in `core/distill/hyperpop/`.
 
-## The pieces
+There are two ways to make a song. The default is the genome: a seed draws a
+new song from a space of independent musical choices, and the model writes
+only the words and the mood. The classic path (`--classic`) has the model
+fill a sheet that the three demos' production plays. Classic songs come out
+as near-copies of a demo, so it is kept for editing sheets by hand.
+
+## Generated songs: the genome
+
+The code is in `core/distill/hyperpop/genome/`. A song is a seed, and the
+seed draws every axis independently, so the axes combine into songs no demo
+contains:
+
+- **Groove:** a drum grammar for the drops and one for the verses: four, break, jersey, trap, gabber, footwork, twostep, dembow, bounce or glitch. Fills, ghost notes, swing and tempo (about 90 to 190 BPM, with half-time feels) are drawn as well.
+- **Harmony:** a tonic and a mode (major, minor, dorian, mixolydian, lydian, phrygian), and a chord language per section: a loop, a pedal under moving chords, borrowed chords (major and mixolydian only), a circle of fifths or a two-chord vamp. The harmonic rhythm is drawn too. One key for the whole song: nothing in the genome can change key.
+- **Melody:** motifs grown from a rhythm cell and a contour, phrase plans (ABAB, AABA, AB, AA′ and so on), leap size and register.
+- **Sounds:** a bass, lead, pad, stab and arp from the sound tables, plus brightness, grit and space.
+- **Voice:** sung, chipmunk, robot, whisper, abstract, chopped or instrumental, and how much of the vocal is words.
+- **Form:** classic, dropFirst, beatSwitch, slowBurn, falseEnding, through or miniature, with an energy shape.
+- **Moves:** tape stops, dives, stutters, gaps, risers, crushes, downlifters, filters, glitches, octave jumps and half-time switches.
+- **Counterpoint:** a countermelody in bridges and, in about one song in four, a fugue break. A short subject enters in two or three voices in turn (synth, vox or both), and the voices are settled beat by beat so they agree.
+
+| File           | Role                                                                                                                                                                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `genome.ts`    | `sampleGenome(seed, pins)` draws the axes; pins fix any of them. `describeGenome` says what was drawn in a few lines.                                                                                                                                             |
+| `compose.ts`   | `compileGenome(genome, content)` is the arranger. It lays out the form, writes each part by section, adds the seams before drops, shapes the dynamics so verses sit about 2 dB under the drops and builds swell into them, and keeps the score under 4,096 notes. |
+| `card.ts`      | The song card the model writes: a title, theme, hook and verse lines, a mood (energy, brightness, grit, space) and pins for only what the brief names. `validateCard` repairs what it can. Mood steers the mode, the drums and the sound design.                  |
+| `generate.ts`  | `generateGenomeSong(brief, model, { seed })` asks for a card, retrying only an unreadable one, and composes it. `songFromCard(card, seed)` needs no model.                                                                                                        |
+| `diversity.ts` | `fingerprint(score)` and `distance(a, b)` compare any two scores on tempo, kick and snare placement, pitch profile, melodic motion, layer density and form. `spread` reports the mean and closest pair.                                                           |
+
+The model's temperature only changes the words. The music's variety comes from
+the seed: the same card with a new seed is a new song.
+
+## The classic sheet
 
 | File          | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -23,9 +55,10 @@ Hyperpop is the first style. The code is in `core/distill/hyperpop/`.
 
 ## Using it
 
-- `dawg make "an icy song about a phone dying at a party"` writes a sheet with the local model and compiles it to a `.track.json`. `--wav out.wav` also renders it, `--sheet s.json` keeps the sheet, and `--rounds 1-6` sets how many rounds to try.
-- `dawg make --from s.json` compiles a sheet you edited, with no model.
-- In the TUI the agent has `song_guide`, which returns the playbook and an example, and `write_song`, which validates, compiles and loads a sheet in one undoable edit. Any model can use these, local or remote.
+- `dawg make "an icy song about a phone dying at a party"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same brief and seed give the same song. `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
+- `dawg make --from s.json` composes a saved card with no model, or compiles a classic sheet.
+- `dawg make --classic "<brief>"` writes a classic sheet instead. `--rounds 1-6` sets how many rounds to try.
+- In the TUI the agent has `compose_song`, which takes a card and an optional seed and loads the song in one undoable edit. `song_guide` returns the card guide and the classic playbook, and `write_song` loads a classic sheet. Any model can use these, local or remote.
 
 ## The local model
 
@@ -38,9 +71,13 @@ One 26B model fits in 36 GB of memory, but two don't. If another app already has
 
 ## Evaluating
 
-`bun scripts/distill-eval.ts [--out DIR] [--rounds N] ["brief" ...]` runs the briefs through the local model. For each one it prints every round's validity and critic score and writes `N.sheet.json` and `N.track.json`. Run it under the heavy compute lane, because it loads a 17 GB model.
+`bun scripts/genome-eval.ts [--n 12] [--seed 1] [--out DIR] [--model] ["brief" ...]` composes N seeds and prints each genome, the nearest demo and its distance, the pairwise spread and the closest pair. `--model` writes the cards with the local model first. The three demos sit about 0.44 apart from each other. Generated songs average about 0.4 apart and about 0.38 from the nearest demo. Classic sheets sit within 0.1 of their demo. The genome tests require every generated song to be more than 0.25 from every demo.
+
+`bun scripts/distill-eval.ts [--out DIR] [--rounds N] ["brief" ...]` runs the briefs through the classic loop. For each one it prints every round's validity and critic score and writes `N.sheet.json` and `N.track.json`. Run either script with `--model` or the classic loop under the heavy compute lane, because they load a 17 GB model.
 
 ## Adding to the style, or a new style
+
+To widen the genome, add a value to an axis (a drum grammar in `drums.ts`, a chord language in `theory.ts`, a sound in `sounds.ts`, a form or device in `genome.ts`) and give it a weight. The genome tests check that seeds still spread across every axis and stay far from the demos. To add a classic demo:
 
 1. Write and polish a demo by hand with a large model, the way Redline and Glass Garden were made.
 2. Export its book, sections and patterns from the demo file. Add any new patterns to `library.ts` under a name that describes their use.

@@ -2,6 +2,31 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.33.0
+
+### Added
+
+- **Generated songs come from a genome, not from the three demos.**
+  - **Before:** `dawg make` had the model fill a sheet that a demo's production played, so every song was a near-copy of Candy Fault, Redline or Glass Garden (0.03 to 0.09 from its demo on the new distance measure).
+  - **Now:** a seed draws a song from independent axes, so they combine into songs no demo contains:
+    - ten drum grammars (four, break, jersey, trap, gabber, footwork, twostep, dembow, bounce, glitch), with fills, ghosts, swing and tempo
+    - six modes and a chord language per section: loop, pedal, borrowed, circle or vamp
+    - motifs grown from rhythm cells and contours, with phrase plans and leap size
+    - bass, lead, pad, stab and arp sounds, plus brightness, grit and space
+    - seven voices from sung to chopped to instrumental, and how much of the vocal is words
+    - seven forms with an energy shape, and eleven moves such as tape stops, dives, gaps and half-time switches
+  - **The model writes only a song card:** title, theme, hook, verses, mood, and pins for what the brief names. A small model does this well, and the same card with a new seed is a new song.
+  - **One key:** nothing in the genome can change key.
+  - **Spread:** generated songs average about 0.4 apart, about as far as the demos are from each other, and every one sits more than 0.25 from every demo.
+- **Counterpoint.** Bridges carry a countermelody. About one song in four has a fugue break: a short subject enters in two or three synth or vox voices in turn, settled beat by beat so they agree.
+- **`dawg make --seed N`.** The same brief and seed give the same song. With no brief, `--seed` composes without a model. `--from` replays a saved card.
+- **`compose_song` agent tool.** It takes a card and an optional seed and loads the song in one undoable edit. `song_guide` now includes the card guide.
+- **`scripts/genome-eval.ts`** prints each seed's genome, its nearest demo and the spread.
+
+### Changed
+
+- **`dawg make --classic` runs the sheet loop.** `--from` still compiles a classic sheet. The demos are unchanged.
+
 ## 0.32.0
 
 ### Added

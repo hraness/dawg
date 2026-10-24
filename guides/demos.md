@@ -17,8 +17,8 @@ Redline and Glass Garden blend a synth singer with recorded words
 and play the vocal as an instrument: syllable riffs that answer each
 line, stutters on chord tones, reversed swells, a looped vowel doubling
 the lead and a grain cloud. `guide hyperpop` explains the techniques.
-`dawg make "<brief>"` writes a new song in this style with the local
-model.
+`dawg make "<brief>"` writes a new song in this style: the local model
+writes the words and a seed draws the music, so each seed is a new song.
 
 ## Ask
 
@@ -58,8 +58,9 @@ whole-song replacement. The same original offline songs are available
 through demo commands. The studio pack is preinstalled: search_sounds
 finds it, use_sound adds a hash-pinned voice, and audio slices it.
 Keep the distinction between a whole demo song and a short style groove.
-To write a new hyperpop song, call song_guide for the playbook, then
-write_song with a sheet; read the critic notes it returns and revise.
+To write a new hyperpop song, call song_guide for the card guide, then
+compose_song with a song card; a new seed gives a new song for the same
+card. write_song with a classic sheet stays for editing a demo-style sheet.
 Read the production notes and inspect the score before explaining a
 feature. Do not describe these original patterns as recordings or copies
 of commercial songs, or synthetic machine voices as human singers.
