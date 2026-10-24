@@ -235,10 +235,12 @@ describe("hyperpop song sheets", () => {
     const slips = roundTrip(sheet) as Record<string, any>;
     slips.lines.v1[0][3] = "oh no";
     slips.sections[4].kind = "bridge";
+    slips.sections[3].lines[2] = "ch5";
     const mended = validateSheet(slips);
     if (!mended.ok) throw new Error(mended.errors.join("\n"));
     expect(mended.sheet.lines.v1![0]![3]).toBe("ohno");
     expect(mended.sheet.sections[4]!.kind).toBe("break");
+    expect(mended.sheet.sections[3]!.lines![2]).toBe("ch2");
     expect(() => compileSheet(mended.sheet)).not.toThrow();
     const spaced = roundTrip(candySheet().sheet) as Record<string, any>;
     for (const line of Object.values(spaced.lines) as any[][])

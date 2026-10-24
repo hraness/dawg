@@ -40,7 +40,7 @@ intro 8 -> verse 8 -> pre 4 -> chorus 8 -> post 8 (drop) -> verse 8 -> pre 4 -> 
 - Write each verse and pre part for the chord of the bar it is sung on; a part sung over different chords can only use the tones they share.
 - Move by step or third; leap at most a sixth, then step back.
 - Verses sit around degrees 3 to 6. Choruses lift: around 5 to 10, the highest note in the chorus.
-- Chorus parts (ch1, ch2, ch3) last two bars; verse and pre parts one bar. In a section's lines, put a part on the bar it starts and null on the bars it is still singing: a chorus reads ["ch1", null, "ch2", null, "ch1", null, "ch3", null].
+- Night and glass have exactly these parts: v1 to v8, pre1, pre2, ch1, ch2 and ch3. There is no ch4, ch5, ch6, br or end part outside candy; a chorus that wants variety reorders ch1 to ch3. Chorus parts last two bars; verse and pre parts one bar. In a section's lines, put a part on the bar it starts and null on the bars it is still singing: a chorus reads ["ch1", null, "ch2", null, "ch1", null, "ch3", null].
 - Repeat the hook: ch1 returns in every chorus.
 - A line is a list of notes [beat, degree, beats, "syllable"]: one syllable per note, beats counted from the start of the part (0 to 3.75 for verse and pre parts, 0 to 7.75 for chorus parts). Split words into syllables ("neon" -> "ne-", "on"). Verse parts: 4 to 7 notes in eighths and quarters, ending on a held note by beat 3. Chorus parts: 5 to 8 notes, a held note to finish each two-bar phrase.
 - Sing like a person, not a sequencer. Mix quick syllables (0.25 to 0.5 beats) with words held 1 to 2 beats. Start lines off the beat (0.5) or on a pickup. Leave a beat or more of rest between lines. Give each line its own rhythm, and end each phrase on a long note.

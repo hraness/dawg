@@ -615,9 +615,18 @@ export function validateSheet(raw: unknown): Validated {
           : [];
         const out: (SheetPart | null)[] = [];
         let busyUntil = 0;
-        list.forEach((part, bar) => {
-          if (part === null || part === "" || part === undefined)
+        list.forEach((given, bar) => {
+          if (given === null || given === "" || given === undefined)
             return out.push(null);
+          let part = given;
+          // A night or glass chorus borrowing candy's ch4 to ch6 reuses ch1 to ch3.
+          const extra = /^ch([4-6])$/.exec(String(part));
+          if (!candy && extra && !lines[part as SheetPart]) {
+            part = `ch${Number(extra[1]) - 3}`;
+            warnings.push(
+              `${where}.lines[${bar}]: night and glass have no ${given}, so ${part} sings there`,
+            );
+          }
           if (typeof part !== "string" || !lines[part as SheetPart]) {
             warnings.push(
               `${where}.lines[${bar}]: "${String(part).slice(0, 8)}" is not in lines, so that bar is silent`,
