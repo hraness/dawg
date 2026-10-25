@@ -144,6 +144,8 @@ type GatewayFetcher = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+/** The most output a request may ask for (a whole song chart is about 15K tokens). */
+export const MAX_OUTPUT_TOKENS = 64_000;
 /** Retries after a failed request that has not yet produced a byte. */
 export const GATEWAY_RETRIES = 2;
 /** Base backoff; each retry doubles it, with +-50% jitter. */
@@ -302,7 +304,7 @@ function createApiClient(
           Number.isInteger(request.maxTokens) &&
           request.maxTokens > 0
         )
-          body.max_tokens = Math.min(request.maxTokens, 4096);
+          body.max_tokens = Math.min(request.maxTokens, MAX_OUTPUT_TOKENS);
         return JSON.stringify(body);
       };
       let model = primary;

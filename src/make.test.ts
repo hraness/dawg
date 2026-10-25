@@ -70,3 +70,26 @@ describe("dawg make", () => {
     expect(stderr.text).toContain("--seed");
   });
 });
+
+describe("dawg make charts", () => {
+  test("--from replays a saved chart through the performer", async () => {
+    const { GOLD } =
+      await import("../core/distill/hyperpop/chart/gold/index.ts");
+    const dir = mkdtempSync(join(tmpdir(), "dawg-make-"));
+    writeFileSync(join(dir, "chart.json"), JSON.stringify(GOLD[0]));
+    const stdout = sink();
+    const stderr = sink();
+    const code = await runMakeCommand(
+      ["make", "--from", "chart.json", "--out", "g.track.json"],
+      dir,
+      stdout,
+      stderr,
+    );
+    expect(stderr.text).toBe("");
+    expect(code).toBe(0);
+    expect(stdout.text).toContain(`"${GOLD[0]!.title}"`);
+    expect(
+      readFileSync(join(dir, "g.track.json"), "utf8").length,
+    ).toBeGreaterThan(1000);
+  });
+});

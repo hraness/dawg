@@ -1,10 +1,12 @@
 /**
- * `dawg make "<brief>"`: the local model writes a song card (title, hook,
- * verses, mood, the axes the brief names), a seeded genome draws every
- * other axis, and the composer writes a `.track.json` loop (and a WAV with
- * `--wav`). Every seed is a different song; `--seed` repeats one, and
+ * `dawg make "<brief>"`: Claude Opus 5.5, through the AI Gateway or
+ * OpenRouter key, writes a whole chart (form, chords, tunes, words, sounds,
+ * moves) at the demos' level, the critic sends back what's wrong, and the
+ * performer writes a `.track.json` loop (and a WAV with `--wav`). Every
+ * round prints its cost. `--local` or `--seed` runs the genome path instead:
+ * the local model writes a song card and a seeded genome draws the rest, and
  * `--seed` with no brief composes without a model. `--classic` runs the
- * demo-sheet loop instead; `--from` replays a saved card or sheet.
+ * demo-sheet loop; `--from` replays a saved chart, card or sheet.
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -25,7 +27,26 @@ import {
   validateCard,
   type SongCard,
 } from "../core/distill/hyperpop/genome/index.ts";
+import {
+  checkChart,
+  type Chart,
+} from "../core/distill/hyperpop/chart/format.ts";
+import { performChart } from "../core/distill/hyperpop/chart/perform.ts";
+import {
+  writeChart,
+  type ChatTurn,
+} from "../core/distill/hyperpop/chart/write.ts";
 import { encodeLoop } from "../core/loop.ts";
+import {
+  defaultAuthEnv,
+  resolveGatewayKey,
+  resolveOpenRouterKey,
+  type AuthEnv,
+} from "./auth/credentials.ts";
+import { systemRunner } from "./auth/runner.ts";
+import { MAX_OUTPUT_TOKENS } from "./agent/gateway.ts";
+import { resolveModelChoice } from "./agent/models.ts";
+import { apiClient } from "./agent/provider.ts";
 import type { TrackScore } from "../core/score.ts";
 import {
   findLocalModel,
@@ -36,7 +57,10 @@ import {
 import { runRenderCommand } from "./render.ts";
 
 export const MAKE_USAGE =
-  'usage: dawg make "<brief>" [--seed <n>] [--out <song.track.json>] [--wav <song.wav>] [--sheet <card.json>] [--rounds <1-6>] [--classic] · dawg make --seed <n> · dawg make --from <card-or-sheet.json> [--out …] [--wav …]';
+  'usage: dawg make "<brief>" [--model <alias>] [--out <song.track.json>] [--wav <song.wav>] [--sheet <chart.json>] [--rounds <1-6>] · dawg make "<brief>" --local|--seed <n> · dawg make "<brief>" --classic · dawg make --seed <n> · dawg make --from <chart-card-or-sheet.json> [--out …] [--wav …]';
+
+/** The model that writes charts unless `--model` names another. */
+export const CHART_MODEL = "opus-5.5";
 
 type Output = { write(text: string): unknown };
 
@@ -47,8 +71,9 @@ const VALUE = new Set([
   "--rounds",
   "--from",
   "--seed",
+  "--model",
 ]);
-const FLAGS = new Set(["--classic"]);
+const FLAGS = new Set(["--classic", "--local"]);
 
 const slug = (title: string) =>
   title
@@ -62,6 +87,7 @@ export async function runMakeCommand(
   stdout: Output,
   stderr: Output,
   signal?: AbortSignal,
+  auth?: AuthEnv,
 ): Promise<number> {
   const rest = argv.slice(1);
   if (rest.includes("--help") || rest.includes("-h")) {
@@ -105,7 +131,12 @@ export async function runMakeCommand(
     stderr.write(`${MAKE_USAGE}\n`);
     return 2;
   }
-  const rounds = Number(options.get("--rounds") ?? 3);
+  const chartPath =
+    !options.has("--classic") &&
+    !options.has("--local") &&
+    seed === undefined &&
+    (brief !== "" || (from !== undefined && (await isChart(workspace, from))));
+  const rounds = Number(options.get("--rounds") ?? (chartPath ? 4 : 3));
   if (!Number.isInteger(rounds) || rounds < 1 || rounds > 6) {
     stderr.write("dawg make: --rounds takes 1 to 6\n");
     return 2;
@@ -117,6 +148,18 @@ export async function runMakeCommand(
     );
     return 2;
   }
+  if (chartPath)
+    return makeChart({
+      brief,
+      from,
+      rounds,
+      options,
+      workspace,
+      stdout,
+      stderr,
+      signal,
+      auth: auth ?? defaultAuthEnv(systemRunner),
+    });
   if (!options.has("--classic"))
     return makeGenome({
       brief,
@@ -337,6 +380,134 @@ async function makeGenome(run: GenomeRun): Promise<number> {
     );
     stdout.write(
       `card → ${resolve(workspace, sheetOut)} (replay with --from)\n`,
+    );
+  }
+  const wav = options.get("--wav");
+  if (wav)
+    return runRenderCommand(
+      ["render", wav, "--import", out],
+      workspace,
+      stdout,
+      stderr,
+    );
+  return 0;
+}
+
+type ChartRun = Omit<GenomeRun, "seed"> & Readonly<{ auth: AuthEnv }>;
+
+async function isChart(workspace: string, from: string): Promise<boolean> {
+  try {
+    const raw = JSON.parse(await readFile(resolve(workspace, from), "utf8"));
+    return Array.isArray(raw?.sections) && typeof raw?.sounds === "object";
+  } catch {
+    return false;
+  }
+}
+
+/** The chart path: Opus writes and revises a chart, or a saved one replays. */
+async function makeChart(run: ChartRun): Promise<number> {
+  const { brief, from, rounds, options, workspace, stdout, stderr, signal } =
+    run;
+  let chart: Chart;
+  let score: TrackScore;
+  if (from) {
+    chart = JSON.parse(await readFile(resolve(workspace, from), "utf8"));
+    const problems = checkChart(chart);
+    if (problems.length) {
+      stderr.write(
+        `dawg make: ${from} is not a valid chart\n  - ${problems.slice(0, 8).join("\n  - ")}\n`,
+      );
+      return 1;
+    }
+    try {
+      score = performChart(chart).score;
+    } catch (error) {
+      stderr.write(`dawg make: ${(error as Error).message.slice(0, 400)}\n`);
+      return 1;
+    }
+  } else {
+    const gateway = await resolveGatewayKey(run.auth);
+    const service = gateway ? "gateway" : "openrouter";
+    const key = gateway ?? (await resolveOpenRouterKey(run.auth));
+    if (!key) {
+      stderr.write(
+        "dawg make: writing a song needs an AI Gateway or OpenRouter key; run `dawg model key gateway`, or use --local for the local model\n",
+      );
+      return 1;
+    }
+    const alias = options.get("--model") ?? CHART_MODEL;
+    const model = resolveModelChoice(service, alias);
+    if (!model) {
+      stderr.write(`dawg make: unknown model ${alias.slice(0, 40)}\n`);
+      return 2;
+    }
+    const client = apiClient({
+      kind: service,
+      choice: service,
+      apiKey: key.key,
+      source: key.source,
+      modelId: model,
+    });
+    stdout.write(`writing "${brief}" with ${model} (${service})\n`);
+    try {
+      const song = await writeChart(
+        brief,
+        async (turns: readonly ChatTurn[]) => {
+          let text = "";
+          let usage;
+          for await (const event of client.stream(
+            {
+              model,
+              messages: turns,
+              maxTokens: Math.min(32_000, MAX_OUTPUT_TOKENS),
+              maxResponseBytes: 4_000_000,
+            },
+            signal,
+          )) {
+            if (event.type === "text") text += event.delta;
+            else if (event.type === "usage") usage = event;
+          }
+          return { text, ...(usage ? { usage } : {}) };
+        },
+        {
+          rounds,
+          onDraft: (d) =>
+            stdout.write(
+              `  round ${d.round}: ${d.problems.length ? `${d.problems.length} to fix` : "clean"} · $${d.costUsd.toFixed(2)} · ${(d.ms / 1000).toFixed(0)} s${d.problems.length ? `\n    - ${d.problems.slice(0, 4).join("\n    - ")}` : ""}\n`,
+            ),
+        },
+      );
+      chart = song.chart;
+      score = song.score;
+      stdout.write(
+        `  cost $${song.costUsd.toFixed(2)} · ${song.inputTokens} in (${song.cachedInputTokens} cached) · ${song.outputTokens} out\n`,
+      );
+      if (song.problems.length)
+        stdout.write(
+          `  still to improve:\n  - ${song.problems.slice(0, 5).join("\n  - ")}\n`,
+        );
+    } catch (error) {
+      stderr.write(`dawg make: ${(error as Error).message.slice(0, 400)}\n`);
+      return 1;
+    }
+  }
+  const out = resolve(
+    workspace,
+    options.get("--out") ?? `${slug(chart.title)}.track.json`,
+  );
+  await writeFile(out, encodeLoop(score), "utf8");
+  stdout.write(
+    `"${chart.title}" · ${chart.key} ${chart.mode} · ${chart.bpm} bpm · ${score.bars} bars → ${out}\n`,
+  );
+  const sheetOut = options.get("--sheet");
+  if (sheetOut && !from) {
+    await writeFile(
+      resolve(workspace, sheetOut),
+      `${JSON.stringify(chart, null, 2)}\n`,
+      "utf8",
+    );
+    stdout.write(
+      `chart → ${resolve(workspace, sheetOut)} (replay with --from)\n`,
     );
   }
   const wav = options.get("--wav");

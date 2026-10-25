@@ -7,11 +7,15 @@ code does the production.
 
 Hyperpop is the first style. The code is in `core/distill/hyperpop/`.
 
-There are two ways to make a song. The default is the genome: a seed draws a
-new song from a space of independent musical choices, and the model writes
-only the words and the mood. The classic path (`--classic`) has the model
-fill a sheet that the three demos' production plays. Classic songs come out
-as near-copies of a demo, so it is kept for editing sheets by hand.
+There are three ways to make a song. The default is a chart written by
+Claude Opus 5.5: the whole song, section by section, at the demos' level,
+checked by a critic and revised (see [Writing charts with
+Opus](#writing-charts-with-opus)). The genome (`--local` or `--seed`) is
+the offline path: a seed draws a new song from a space of independent
+musical choices, and the local model writes only the words and the mood. The
+classic path (`--classic`) has the model fill a sheet that the three demos'
+production plays. Classic songs come out as near-copies of a demo, so it is
+kept for editing sheets by hand.
 
 ## Generated songs: the genome
 
@@ -66,6 +70,33 @@ The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way
 
 `bun scripts/chart.ts [--out DIR] ["Paper Comet" ...]` performs the gold charts, prints each one's craft and problems, and writes the scores as JSON with `--out`.
 
+### Writing charts with Opus
+
+`write.ts` is the recipe. `writeChart(brief, complete)` sends one system prompt and the brief, and the model answers with a whole chart as JSON.
+
+- **The system prompt** (about 18,000 tokens, cached after the first request) holds the craft rules, the source of `format.ts` as the spec, every sound, kit and grammar name, and the gold charts as examples. The rules are what the demos do:
+  - The intro states the hook within four to eight bars.
+  - Sections are eight bars at most.
+  - Every repeat develops, so at least 45% of tune bars are new.
+  - Sung notes carry expression marks.
+  - Held words sit on chord tones or marked suspensions, in one key with diatonic numerals only.
+  - Moves are placed by ear.
+  - A bridge sometimes turns to a canon, a counter or a fugue-like entry.
+  - The form and sounds are the song's own.
+  - About 4,000 notes are spent mostly on the hook sections.
+  - Words are singable.
+  - The prompt also names hyperpop's range (bright, dark and hard, ambient) so a brief can go anywhere in it.
+- **Each round** reads the answer and checks the chart. The performer plays it, and the critic judges it. Any problem goes back as the next turn with a concrete fix, for example:
+  - a misread field;
+  - a chart over the note budget, which the performer would thin;
+  - a bed that jumps between chords;
+  - too few new bars or expressive notes;
+  - a form copied section for section from a gold chart.
+
+  The best draft wins, and the loop stops at the first clean one. Most songs are clean in two rounds.
+
+- **Cost** is summed over the rounds from the provider's usage. The provider's own charge is used when it reports one, otherwise Opus 5.5 list prices: $4 per million input tokens, $0.20 per million cached and $20 per million output. A first round is about 20,000 output tokens including thinking, about $0.40–0.55. A revision costs about $0.20–0.30. A song costs about $0.65–0.90.
+
 ## The classic sheet
 
 | File          | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -82,7 +113,8 @@ The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way
 
 ## Using it
 
-- `dawg make "an icy song about a phone dying at a party"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same card and seed give the same song (the seed is mixed with the brief, so two briefs on one seed are two songs). `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
+- `dawg make "an icy song about a phone dying at a party"` has Claude Opus 5.5 write and revise a chart through the AI Gateway key (or OpenRouter), and prints each round's problems and cost and the song's total. `--model <alias>` picks another model, `--rounds 1-6` caps the rounds (4 by default), `--sheet chart.json` keeps the chart and `--from chart.json` replays it with no model.
+- `dawg make --local "<brief>"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same card and seed give the same song (the seed is mixed with the brief, so two briefs on one seed are two songs). `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
 - `dawg make --from s.json` composes a saved card with no model, or compiles a classic sheet.
 - `dawg make --classic "<brief>"` writes a classic sheet instead. `--rounds 1-6` sets how many rounds to try.
 - In the TUI the agent has `compose_song`, which takes a card and an optional seed and loads the song in one undoable edit. `song_guide` returns the card guide and the classic playbook, and with a brief and a seed the constraints that seed draws, and `write_song` loads a classic sheet. Any model can use these, local or remote.
