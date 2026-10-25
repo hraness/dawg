@@ -104,10 +104,11 @@ stutters, reversals, a looped-vowel lead and a grain cloud, over
 syncopated stabs and changing beats. Each has production notes, named
 scenes, instruments, effects and automation; `guide hyperpop` explains
 the techniques. To write a new song in the same style, run
-`dawg make "<brief>"`. The local model writes the words and the mood,
-and a seed draws the rest: groove, harmony, sounds, voice, form, moves
-and sometimes a fugue break. Every seed is a new song, not a copy of a
-demo (see [Distilled styles](./docs/distill.md)).
+`dawg make "<brief>"`. Claude Opus 5.5 writes the whole song as a chart
+(form, chords, tunes, words, sounds and moves), a critic sends back what
+falls short of the demos, and each round prints its cost, about $0.65–0.90
+a song. `--local` uses the local model and a seed instead (see [Distilled
+styles](./docs/distill.md)).
 `demo redline` loads one and opens TAPE; Space plays, Tab changes
 tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
@@ -155,17 +156,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.35.0/hraness-dawg-0.35.0.tgz"
+bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.36.0/hraness-dawg-0.36.0.tgz"
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.35.0 --repo hraness/dawg
+gh release download v0.36.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.35.0.tgz --repo hraness/dawg
-bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.35.0.tgz"
+gh attestation verify hraness-dawg-0.36.0.tgz --repo hraness/dawg
+bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.36.0.tgz"
 ```
 
 To run from source instead:

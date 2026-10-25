@@ -2,6 +2,23 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.36.0
+
+### Changed
+
+- **`dawg make "<brief>"` writes the song with Claude Opus 5.5.**
+  - **Before:** the local model wrote a card and a seed drew the rest. The songs varied but did not reach the demos' composition.
+  - **Now:** Opus 5.5, through the AI Gateway key (or OpenRouter), writes a whole chart. Its prompt holds the chart format's source, every sound name, the demos' craft as rules and the gold charts as examples. The chart is checked, performed and judged, and each problem goes back with a concrete fix until a draft is clean. Most songs take two rounds.
+  - **Every round prints its cost**, and the total is printed at the end. A song costs about $0.65–0.90.
+  - `--model` picks another model, `--sheet` keeps the chart and `--from` replays it. `--local` (or `--seed`) runs the earlier genome path with the local model.
+- **The prompt asks for the song's own form and sounds.** A chart that copies a gold chart's form section for section is sent back.
+
+### Fixed
+
+- **A chart over the 4,000-note budget is sent back** instead of losing a whole arpeggio and half its hats. `performChart` reports how much of each track it thinned.
+- **A drift in a song's first section no longer fails to perform.** Its ramp no longer starts before tick 0.
+- **Gateway and OpenRouter requests may ask for up to 64,000 output tokens.** They were capped at 4,096, which cut off a whole chart mid-answer.
+
 ## 0.35.0
 
 ### Added

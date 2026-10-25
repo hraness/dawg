@@ -85,6 +85,8 @@ export type Performed = Readonly<{
   title: string;
   score: TrackScore;
   placed: readonly Placed[];
+  /** The share of each track's notes dropped to fit the note budget. */
+  thinned: Readonly<Record<string, number>>;
   notes: readonly string[];
 }>;
 
@@ -1232,6 +1234,9 @@ export function performChart(chart: Chart): Performed {
   for (const t of tracksFor(chart, used, lanes, s.notes)) s.track(t);
   // The score holds 4096 notes: past the budget the quietest half of the
   // second arp goes first, then closed-hat ghosts, then the first arp.
+  const written = new Map<string, number>();
+  for (const n of s.notes)
+    written.set(n.trackId, (written.get(n.trackId) ?? 0) + 1);
   for (const [id, share] of [
     ["arp2", 0.5],
     ["hats", 0.4],
@@ -1250,11 +1255,18 @@ export function performChart(chart: Chart): Performed {
     for (let k = s.notes.length - 1; k >= 0; k--)
       if (quiet.has(s.notes[k]!)) s.notes.splice(k, 1);
   }
+  const thinned: Record<string, number> = {};
+  const kept = new Map<string, number>();
+  for (const n of s.notes) kept.set(n.trackId, (kept.get(n.trackId) ?? 0) + 1);
+  for (const [id, count] of written)
+    if ((kept.get(id) ?? 0) < count)
+      thinned[id] = 1 - (kept.get(id) ?? 0) / count;
   const score = s.finish();
   return {
     title: chart.title,
     score,
     placed,
+    thinned,
     notes: [
       `${scale.name} at ${chart.bpm}`,
       `form: ${placed.map((p) => `${p.name} ${p.bars}`).join(", ")}`,
@@ -1322,7 +1334,8 @@ const ramp = (
   a: number,
   b: number,
 ): AutomationPoint[] => [
-  { tick: tickOf(from) - 1, value: a },
+  // A ramp from the first downbeat has nothing before it to hold.
+  ...(from > 0 ? [{ tick: tickOf(from) - 1, value: a }] : []),
   { tick: tickOf(from), value: a },
   { tick: tickOf(to) - 1, value: b },
   { tick: tickOf(to), value: a },
