@@ -69,6 +69,19 @@ describe("dawg make", () => {
     ).toBe(2);
     expect(stderr.text).toContain("--seed");
   });
+
+  test("rejects an unknown effort before any network", async () => {
+    const stderr = sink();
+    expect(
+      await runMakeCommand(
+        ["make", "a song", "--effort", "max"],
+        tmpdir(),
+        sink(),
+        stderr,
+      ),
+    ).toBe(2);
+    expect(stderr.text).toContain("--effort takes low, medium or high");
+  });
 });
 
 describe("dawg make charts", () => {

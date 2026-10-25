@@ -57,10 +57,17 @@ import {
 import { runRenderCommand } from "./render.ts";
 
 export const MAKE_USAGE =
-  'usage: dawg make "<brief>" [--model <alias>] [--out <song.track.json>] [--wav <song.wav>] [--sheet <chart.json>] [--rounds <1-6>] · dawg make "<brief>" --local|--seed <n> · dawg make "<brief>" --classic · dawg make --seed <n> · dawg make --from <chart-card-or-sheet.json> [--out …] [--wav …]';
+  'usage: dawg make "<brief>" [--model <alias>] [--out <song.track.json>] [--wav <song.wav>] [--sheet <chart.json>] [--rounds <1-6>] [--effort low|medium|high] · dawg make "<brief>" --local|--seed <n> · dawg make "<brief>" --classic · dawg make --seed <n> · dawg make --from <chart-card-or-sheet.json> [--out …] [--wav …]';
 
 /** The model that writes charts unless `--model` names another. */
 export const CHART_MODEL = "opus-5.5";
+/**
+ * How hard the model thinks per round unless `--effort` says. Low writes a
+ * chart as clean as high for a third of the cost (about $0.45 a song against
+ * $1.25 in two rounds), since the critic and the count repair catch the rest.
+ */
+export const CHART_EFFORT = "low";
+const EFFORTS = ["low", "medium", "high"] as const;
 
 type Output = { write(text: string): unknown };
 
@@ -72,6 +79,7 @@ const VALUE = new Set([
   "--from",
   "--seed",
   "--model",
+  "--effort",
 ]);
 const FLAGS = new Set(["--classic", "--local"]);
 
@@ -139,6 +147,12 @@ export async function runMakeCommand(
   const rounds = Number(options.get("--rounds") ?? (chartPath ? 4 : 3));
   if (!Number.isInteger(rounds) || rounds < 1 || rounds > 6) {
     stderr.write("dawg make: --rounds takes 1 to 6\n");
+    return 2;
+  }
+
+  const effort = options.get("--effort") ?? CHART_EFFORT;
+  if (!(EFFORTS as readonly string[]).includes(effort)) {
+    stderr.write("dawg make: --effort takes low, medium or high\n");
     return 2;
   }
 
@@ -461,6 +475,8 @@ async function makeChart(run: ChartRun): Promise<number> {
               messages: turns,
               maxTokens: Math.min(32_000, MAX_OUTPUT_TOKENS),
               maxResponseBytes: 4_000_000,
+              effort: (options.get("--effort") ??
+                CHART_EFFORT) as (typeof EFFORTS)[number],
             },
             signal,
           )) {
@@ -479,6 +495,8 @@ async function makeChart(run: ChartRun): Promise<number> {
       );
       chart = song.chart;
       score = song.score;
+      if (song.stopped)
+        stderr.write(`  ${song.stopped}; kept the best draft\n`);
       stdout.write(
         `  cost $${song.costUsd.toFixed(2)} · ${song.inputTokens} in (${song.cachedInputTokens} cached) · ${song.outputTokens} out\n`,
       );

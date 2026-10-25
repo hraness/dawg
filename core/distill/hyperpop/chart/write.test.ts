@@ -98,4 +98,35 @@ describe("chart writer", () => {
     expect(song.costUsd).toBeCloseTo(0.5);
     expect(song.outputTokens).toBe(100);
   });
+
+  test("a dropped stream asks again once, and a later failure keeps the best draft", async () => {
+    // A gold chart sent back plays but copies its own form, so a round follows.
+    const drop = new Error("AI Gateway stream failed: socket closed");
+    const replies = [drop, fence(GOLD[2]), drop, drop];
+    let calls = 0;
+    const song = await writeChart(
+      "a test song",
+      async () => {
+        const next = replies[calls++]!;
+        if (next instanceof Error) throw next;
+        return { text: next };
+      },
+      { rounds: 3 },
+    );
+    expect(calls).toBe(4);
+    expect(song.chart.title).toBe(GOLD[2]!.title);
+    expect(song.problems[0]).toContain("copies");
+    expect(song.drafts).toHaveLength(1);
+    expect(song.stopped).toContain("round 2 failed");
+  });
+
+  test("any other failure before a draft plays still throws", async () => {
+    let calls = 0;
+    const failed = await writeChart("a test song", async () => {
+      calls++;
+      throw new Error("AI Gateway returned 401");
+    }).catch((e: Error) => e.message);
+    expect(calls).toBe(1);
+    expect(failed).toContain("401");
+  });
 });

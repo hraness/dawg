@@ -2,6 +2,26 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.37.0
+
+### Changed
+
+- **`dawg make` writes charts at low reasoning effort by default, at about a third of the cost.**
+  - **Before:** a song cost about $0.65–0.90 at the provider's default effort, and up to $2.50 at high effort.
+  - **Now:** a song costs about $0.20–0.75, typically $0.30–0.45, and clears the same critic. `--effort low|medium|high` picks another.
+  - Small count mismatches between a line's rhythm and its degrees or syllables are repaired in code instead of costing a round.
+- **The writer stays in the demos' range.** It runs from bright bubblegum through euphoric and driving to bittersweet, and no darker than Glass Garden. Drums drive every section but a short break, at 140–180 bpm. Nothing is ambient or sad and slow.
+- **Charts may borrow color chords in one key.** A major-mode chart may use iv, bVI, bVII and bIII from the parallel minor, or II, III and VI as secondary dominants, as well as 7ths, maj7s and add9s. Nothing in a chart can still name a key change.
+
+### Added
+
+- **Vocal books for charts.** `scripts/vox/chart-book.ts` sings a chart's own lines with Kokoro + WORLD. The book holds a take per line, chops on the chart's hook words and a held vowel. `performChart(chart, book)` plays it as the demos do: the sung lead and its double, the chop bank, a vocal-synth double of the hook and a grain bed, with the synth singer pulled under the takes. When a book takes a song over the note budget, its doubles are thinned before any hats or arps.
+- **`sing.py` can retune another engine's speech.** A spec's `"speech": "take.wav"` replaces Kokoro. whisper.cpp times the words and WORLD sings them, so a different local TTS voice can lead.
+
+### Fixed
+
+- **A dropped connection no longer loses a song.** A round whose stream drops asks once more. If a later round still fails, the best draft already played is kept, and `dawg make` says so.
+
 ## 0.36.0
 
 ### Changed

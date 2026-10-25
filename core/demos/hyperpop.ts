@@ -368,6 +368,17 @@ export type Book = Readonly<{
   melody: Readonly<Record<Part, readonly Sung[]>>;
 }>;
 
+/**
+ * What the vocal tracks need from a book. A chart's book names its own line
+ * parts (`lines`, beats each) and the chorus lines a stutter may cut the head
+ * of (`heads`); the demos' books use the fixed parts.
+ */
+export type VoxBank = Pick<Book, "sample" | "root" | "syllables"> &
+  Readonly<{
+    lines?: Readonly<Record<string, number>>;
+    heads?: readonly string[];
+  }>;
+
 /** A sung note: beat from the part's downbeat, pitch, beats, syllable. */
 export type Sung = readonly [number, number, number, string];
 
@@ -405,20 +416,24 @@ export const RHYTHM = {
 
 /** Parts carry a quarter beat of lead-in before their first downbeat. */
 const LEAD = 0.25;
+/** The lead-in a book line carries, for oneshots started that far early. */
+export const LINE_LEAD = LEAD;
 /** Beats of consonant kept ahead of a syllable's vowel. */
 const CHOP_LEAD = 0.08;
 const frac = (x: number) => Math.round(x * 1e6) / 1e6;
 
-const sliceOf = (book: Book, name: string) => {
+const sliceOf = (book: VoxBank, name: string) => {
   const slice = bundledSample(book.sample)?.slices.find((s) => s.name === name);
   if (!slice) throw new Error(`demo slice missing: ${book.sample}/${name}`);
-  const beats = name === "hold" ? 4 : PARTS.includes(name as Part) ? 0 : 1;
+  const line = book.lines?.[name];
+  const beats =
+    line ?? (name === "hold" ? 4 : PARTS.includes(name as Part) ? 0 : 1);
   const span = (beats || partBeats(name as Part)) + LEAD;
   return { ...slice, beat: (slice.end - slice.begin) / span };
 };
 
 /** A syllable window: from just before its vowel to the end of its slot. */
-function syllable(book: Book, name: string, extra: Partial<SampleRef> = {}) {
+function syllable(book: VoxBank, name: string, extra: Partial<SampleRef> = {}) {
   const { begin, end, beat } = sliceOf(book, name);
   return {
     ...bundledSampleRef(book.sample),
@@ -431,9 +446,9 @@ function syllable(book: Book, name: string, extra: Partial<SampleRef> = {}) {
   };
 }
 
-const lineVoices = (book: Book, extra: Partial<SampleRef> = {}) =>
+const lineVoices = (book: VoxBank, extra: Partial<SampleRef> = {}) =>
   Object.fromEntries(
-    PARTS.map((part) => {
+    (book.lines ? Object.keys(book.lines) : PARTS).map((part) => {
       const { begin, end } = sliceOf(book, part);
       return [
         part,
@@ -461,7 +476,7 @@ export function slot(track: TrackInput, name: string): number {
 
 /** The lead vocal: every sung line as a oneshot, on top of the mix. */
 export function vocalTrack(
-  book: Book,
+  book: VoxBank,
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
@@ -488,7 +503,7 @@ export function vocalTrack(
 
 /** The pitched-up double: the same lines an octave up, formants half-raised. */
 export function doubleTrack(
-  book: Book,
+  book: VoxBank,
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
@@ -516,7 +531,7 @@ export function doubleTrack(
  * syllable on each hit and each note is cut to its own length.
  */
 export function chopTrack(
-  book: Book,
+  book: VoxBank,
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
@@ -550,7 +565,7 @@ export function chopTrack(
  * "st-st-stay" pickups. Pitches are note cents.
  */
 export function stutterTrack(
-  book: Book,
+  book: VoxBank,
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
@@ -567,7 +582,7 @@ export function stutterTrack(
       fadeInTime: 0.08,
     };
   }
-  for (const part of ["ch1", "ch2", "ch3"] as const)
+  for (const part of book.heads ?? ["ch1", "ch2", "ch3"])
     voices[`h_${part}`] = {
       ...lineVoices(book)[part]!,
       clip: 1,
@@ -590,7 +605,7 @@ export function stutterTrack(
 
 /** The held vowel looped into a playable voice that doubles the lead. */
 export function voiceLeadTrack(
-  book: Book,
+  book: VoxBank,
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
@@ -624,7 +639,7 @@ export function voiceLeadTrack(
 
 /** The held vowel as a grain cloud, grains locked to 16ths and the chord. */
 export function grainTrack(
-  book: Book,
+  book: VoxBank,
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {

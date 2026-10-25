@@ -2,8 +2,10 @@
  * The song chart: a hyperpop song written section by section, the way the
  * demos are. Each section brings its own chords, sung lines, hooks, layers
  * and placed moves; the performer (`perform.ts`) plays it with the demos'
- * craft. A chart names notes by scale degree and chords by diatonic
- * numeral, so it cannot leave its key: there is no way to write a key change.
+ * craft. A chart names notes by scale degree and chords by numeral, so it
+ * cannot leave its key: there is no way to write a key change. A major-mode
+ * chart may borrow a few color chords (iv, bVI, bVII, bIII, and the
+ * secondary dominants II, III, VI) without leaving home.
  */
 import type { Grammar } from "../genome/genome.ts";
 import { numeral } from "../genome/music.ts";
@@ -260,6 +262,131 @@ export function readLine(scale: Scale, line: Line): LineNote[] {
   });
 }
 
+/**
+ * A line whose counts are off by one or two, made to fit: missing degrees
+ * repeat the last one, a missing syllable holds the vowel (`_`), and an extra
+ * syllable splits the longest note. Larger mismatches stay for the writer.
+ */
+export function repairLine(line: Line): Line {
+  let rhythm = line.rhythm.replace(/\s+/g, "");
+  if (/[^x.\-]/.test(rhythm)) return line;
+  const cells = () => [...rhythm.matchAll(/x-*/g)];
+  let tokens = line.notes.trim().split(/\s+/);
+  const near = (a: number, b: number) => a !== b && Math.abs(a - b) <= 2;
+  if (near(tokens.length, cells().length) && tokens.length > 0)
+    tokens =
+      tokens.length > cells().length
+        ? tokens.slice(0, cells().length)
+        : [
+            ...tokens,
+            ...Array(cells().length - tokens.length).fill(tokens.at(-1)!),
+          ];
+  let words = line.words?.trim().split(/\s+/);
+  if (
+    words &&
+    tokens.length === cells().length &&
+    near(words.length, tokens.length)
+  ) {
+    while (words.length > tokens.length) {
+      const all = cells();
+      const k = all.reduce(
+        (a, c, n) => (c[0].length > all[a]![0].length ? n : a),
+        0,
+      );
+      const longest = all[k]!;
+      if (longest[0].length < 2) break;
+      const at = longest.index + Math.ceil(longest[0].length / 2);
+      rhythm = rhythm.slice(0, at) + "x" + rhythm.slice(at + 1);
+      tokens.splice(k + 1, 0, tokens[k]!.replace(/[~>!]/g, ""));
+    }
+    while (words.length < tokens.length) words = [...words, "_"];
+  }
+  return {
+    ...line,
+    rhythm,
+    notes: tokens.join(" "),
+    ...(words ? { words: words.join(" ") } : {}),
+  };
+}
+
+/**
+ * The chart with every line's small count mismatches repaired, and drum
+ * and stab grids written with `x` read as full hits.
+ */
+export function repairChart(chart: Chart): Chart {
+  const fix = (lines?: readonly Line[]) => lines?.map(repairLine);
+  const hits = (grids?: readonly string[]) =>
+    grids?.map((g) => g.replace(/\s+/g, "").replace(/[xX]/g, "9"));
+  return {
+    ...chart,
+    sections: chart.sections.map((section) => ({
+      ...section,
+      ...(section.sing ? { sing: fix(section.sing) } : {}),
+      ...(section.hook ? { hook: fix(section.hook) } : {}),
+      ...(section.counter ? { counter: fix(section.counter) } : {}),
+      ...(section.chops ? { chops: fix(section.chops) } : {}),
+      ...(section.kick ? { kick: hits(section.kick) } : {}),
+      ...(section.snare ? { snare: hits(section.snare) } : {}),
+      ...(section.hats ? { hats: hits(section.hats) } : {}),
+      ...(section.stabs ? { stabs: hits(section.stabs) } : {}),
+    })),
+  };
+}
+
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+const BORROWABLE = /^([b♭]?)(vii|vi|iv|v|iii|ii|i)(7|maj7|add9)?$/i;
+// Semitones above the tonic and quality of each chord a major mode may
+// borrow: modal mixture from the parallel minor, and secondary dominants.
+const BORROWED: Readonly<Record<string, boolean>> = {
+  "5m": true, // iv
+  "8M": true, // bVI
+  "10M": true, // bVII
+  "3M": true, // bIII
+  "2M": true, // II (V of V)
+  "4M": true, // III (V of vi)
+  "9M": true, // VI (V of ii)
+};
+
+/**
+ * A chart chord: the mode's own numeral, or in a major-third mode a borrowed
+ * color chord whose case or flat says it is not the mode's own. A numeral
+ * whose case disagrees with the mode's own chord is a mistake elsewhere.
+ */
+export function chartChord(scale: Scale, text: string): Chord | undefined {
+  const own = numeral(scale, text);
+  const m = BORROWABLE.exec(text.trim());
+  const major = scale.steps[2] === 4;
+  if (!m) return own;
+  const upper = m[2] === m[2]!.toUpperCase();
+  if (own && !m[1]) {
+    const ownMajor = (own.triad[1]! - own.triad[0]! + 12) % 12 === 4;
+    if (ownMajor === upper) return own;
+  } else if (own) return own;
+  if (!major) return undefined;
+  const semis =
+    (MAJOR_STEPS[DEGREES.indexOf(m[2]!.toLowerCase())]! - (m[1] ? 1 : 0) + 12) %
+    12;
+  if (!BORROWED[`${semis}${upper ? "M" : "m"}`]) return undefined;
+  const root = (scale.tonic + semis) % 12;
+  const ext = (m[3] ?? "").toLowerCase();
+  const name = `${m[1] ?? ""}${m[2]}${m[3] ?? ""}`;
+  return {
+    name,
+    degree: -1,
+    bass: root,
+    triad: [root, (root + (upper ? 4 : 3)) % 12, (root + 7) % 12],
+    color:
+      ext === "7"
+        ? [(root + 10) % 12]
+        : ext === "maj7"
+          ? [(root + 11) % 12]
+          : ext === "add9"
+            ? [(root + 2) % 12]
+            : [],
+  };
+}
+const DEGREES = ["i", "ii", "iii", "iv", "v", "vi", "vii"];
+
 /** A section's chord at each half bar, from its numerals. */
 export function readChords(scale: Scale, section: ChartSection): Chord[] {
   const bars = section.chords.trim().split(/\s+/);
@@ -267,11 +394,11 @@ export function readChords(scale: Scale, section: ChartSection): Chord[] {
   for (let b = 0; b < section.bars; b++) {
     const text = bars[b % bars.length]!;
     const [first, second] = text.split("-");
-    const a = numeral(scale, first!);
-    const z = second ? numeral(scale, second) : a;
+    const a = chartChord(scale, first!);
+    const z = second ? chartChord(scale, second) : a;
     if (!a || !z)
       throw new Error(
-        `${section.name}: ${text} is not a chord of ${scale.name} (write the mode's own chords)`,
+        `${section.name}: ${text} is not a chord of ${scale.name} (write the mode's own chords, or in a major mode borrow iv, bVI, bVII, bIII, II, III or VI)`,
       );
     halves.push(a, z);
   }
@@ -297,6 +424,17 @@ export function checkChart(chart: Chart): string[] {
     } catch (e) {
       problems.push((e as Error).message);
     }
+    for (const [name, grids] of [
+      ["kick", section.kick],
+      ["snare", section.snare],
+      ["hats", section.hats],
+      ["stabs", section.stabs],
+    ] as const)
+      for (const g of grids ?? [])
+        if (!/^[0-9.\-]{16}$/.test(g))
+          problems.push(
+            `${section.name}: ${name} grid ${g} is not 16 steps of 1-9 and .`,
+          );
     for (const list of [
       section.sing,
       section.hook,
