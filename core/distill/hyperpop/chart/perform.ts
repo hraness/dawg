@@ -16,9 +16,24 @@
  * - a lead that answers in the singer's rests when no hook is written, and
  *   a counter-line that does the same an octave up
  * - every repeat of a section adds a layer, unless the chart already did
+ * - given a vocal book that sings the chart's lines (`phrases`), the demos'
+ *   sampled stack on top: every line as a oneshot, the chipmunk double in
+ *   the big sections, chops re-pitched from the book's syllables, the held
+ *   vowel doubling the hook and as a grain cloud on the chords
  */
 import { BAR, Composer, TPB } from "../../../demos/build.ts";
-import { merge } from "../../../demos/hyperpop.ts";
+import {
+  LINE_LEAD,
+  chopTrack,
+  doubleTrack,
+  grainTrack,
+  merge,
+  slot,
+  vocalTrack,
+  voiceLeadTrack,
+  type Sung,
+  type VoxBank,
+} from "../../../demos/hyperpop.ts";
 import { demoInfo } from "../../../demos/types.ts";
 import type {
   AutomationPoint,
@@ -88,6 +103,21 @@ export type Performed = Readonly<{
   /** The share of each track's notes dropped to fit the note budget. */
   thinned: Readonly<Record<string, number>>;
   notes: readonly string[];
+  /** Every distinct sung line, for a vocal book to sing (first use first). */
+  phrases: readonly Phrase[];
+}>;
+
+/**
+ * A sung line as a vocal book records it: notes from the line's downbeat
+ * (`_` holds join the note before), keyed by its content so a repeat of the
+ * line reuses the take.
+ */
+export type Phrase = Readonly<{
+  key: string;
+  /** The kind of section that first sings it. */
+  kind: ChartKind;
+  beats: number;
+  notes: readonly Sung[];
 }>;
 
 /** A placed note of a line, in song bars and beats. */
@@ -149,6 +179,19 @@ const CHOP_CELLS = [
 ];
 const ARP_ORDERS = ["01231234", "43213210", "23432101", "01234321"];
 
+/** An 8-hex FNV-1a digest. */
+const hash = (text: string) =>
+  (
+    [...text].reduce(
+      (h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619),
+      2166136261,
+    ) >>> 0
+  )
+    .toString(16)
+    .padStart(8, "0");
+/** The octave of `pitch` nearest `center`. */
+const near = (pitch: number, center: number) =>
+  pitch + 12 * Math.round((center - pitch) / 12);
 const slug = (text: string) =>
   text
     .toLowerCase()
@@ -193,7 +236,7 @@ function place(chart: Chart, scale: Scale): Placed[] {
   });
 }
 
-export function performChart(chart: Chart): Performed {
+export function performChart(chart: Chart, book?: VoxBank): Performed {
   const problems = checkChart(chart);
   if (problems.length) throw new Error(problems.join("\n"));
   const scale = chartScale(chart);
@@ -973,6 +1016,76 @@ export function performChart(chart: Chart): Performed {
     }
   }
 
+  // ── the book: each sung line as the vocal book sings it ───────────────
+  const phrases = new Map<string, Phrase>();
+  const takes: { p: Placed; key: string; bar: number }[] = [];
+  for (const p of placed) {
+    const sung = sungBy.get(p)!;
+    let k = 0;
+    for (const line of p.sing ?? []) {
+      const count = readLine(scale, line).length;
+      const mine = sung.slice(k, k + count);
+      k += count;
+      if (!mine.length) continue;
+      const bar = p.start + line.bar;
+      const notes: [number, number, number, string][] = [];
+      for (const n of mine) {
+        const at = (n.bar - bar) * 4 + n.beat;
+        const prev = notes.at(-1);
+        if (prev && (!n.lyric || n.lyric === "_"))
+          prev[2] = Math.round((at + n.length - prev[0]) * 1000) / 1000;
+        else if (n.lyric && n.lyric !== "_")
+          notes.push([
+            at,
+            n.pitch,
+            Math.round(n.length * 1000) / 1000,
+            n.lyric,
+          ]);
+      }
+      if (!notes.length) continue;
+      const last = notes.at(-1)!;
+      const beats = 4 * Math.max(1, Math.ceil((last[0] + last[2]) / 4 - 1e-9));
+      const key = `l_${hash(JSON.stringify(notes))}`;
+      if (!phrases.has(key))
+        phrases.set(key, { key, kind: p.kind, beats, notes });
+      takes.push({ p, key, bar });
+    }
+  }
+  const bookTracks: TrackInput[] = [];
+  if (book) {
+    const has = (key: string) => book.lines?.[key] !== undefined;
+    const lead = vocalTrack(book, BOOK_LEVELS.bvox!, {
+      id: "bvox",
+      name: "Lead vocal",
+    });
+    const dbl = doubleTrack(book, BOOK_LEVELS.bdbl!, { id: "bdbl" });
+    bookTracks.push(
+      lead,
+      dbl,
+      chopTrack(book, BOOK_LEVELS.bchops!, { id: "bchops" }),
+      voiceLeadTrack(book, BOOK_LEVELS.vlead!),
+      grainTrack(book, BOOK_LEVELS.vgrain!),
+    );
+    for (const { p, key, bar } of takes) {
+      if (!has(key)) continue;
+      const { beats } = phrases.get(key)!;
+      const big = p.kind === "chorus" || p.kind === "drop";
+      const velocity = big ? (p.final && p.nth > 0 ? 0.95 : 0.9) : 0.82;
+      const from = Math.max(0, bar * 4 - LINE_LEAD);
+      const play = (track: TrackInput, gain: number) =>
+        s.note(
+          track.id,
+          Math.floor(from / 4),
+          from % 4,
+          slot(track, key),
+          beats + LINE_LEAD - (bar * 4 - LINE_LEAD < 0 ? LINE_LEAD : 0),
+          velocity * gain,
+        );
+      play(lead, 1);
+      if (big || p.layers.has("double")) play(dbl, 1);
+    }
+  }
+
   // ── the hook, the answers, the counter-line and the chops ─────────────
   const hookNote = (
     track: string,
@@ -1102,6 +1215,37 @@ export function performChart(chart: Chart): Performed {
                 : hookWords[w++ % hookWords.length]!,
           },
         );
+      if (book)
+        for (const n of notes)
+          put(
+            "bchops",
+            n.bar,
+            n.beat,
+            near(n.pitch, book.root + 7),
+            Math.min(n.length, 0.9),
+            n.velocity * 0.9,
+          );
+    }
+    if (book && (p.kind === "chorus" || p.kind === "drop")) {
+      // The held vowel doubles the hook, and its grains sit on each chord.
+      for (const n of hookBy.get(p)!)
+        put(
+          "vlead",
+          n.bar,
+          n.beat,
+          near(n.pitch, book.root + 5),
+          n.length,
+          n.velocity * 0.8,
+        );
+      for (let i = 0; i < p.bars; i++)
+        put(
+          "vgrain",
+          p.start + i,
+          0,
+          near(chordAt(p.start + i).bass, book.root),
+          4,
+          0.5,
+        );
     }
   }
 
@@ -1116,7 +1260,17 @@ export function performChart(chart: Chart): Performed {
         s.notes[k] = { ...n, durationTicks: from - on(n) };
     }
   };
-  const vocalIds = new Set(["vox", "harm", "high", "voc", "fx"]);
+  const vocalIds = new Set([
+    "vox",
+    "harm",
+    "high",
+    "voc",
+    "fx",
+    "bvox",
+    "bdbl",
+    "bchops",
+    "vlead",
+  ]);
   for (const p of placed) {
     const end = p.start + p.bars;
     for (const m of p.moves ?? []) {
@@ -1231,13 +1385,30 @@ export function performChart(chart: Chart): Performed {
 
   // ── tracks ─────────────────────────────────────────────────────────────
   const used = new Set(s.notes.map((n) => n.trackId));
-  for (const t of tracksFor(chart, used, lanes, s.notes)) s.track(t);
+  for (const t of tracksFor(chart, used, lanes, s.notes))
+    // Under a book the synth singer and its chops blend in behind the takes.
+    s.track(book && SUNG_UNDER[t.id] ? withGain(t, SUNG_UNDER[t.id]!) : t);
+  for (const t of bookTracks) {
+    if (!used.has(t.id)) continue;
+    const thrown =
+      t.id === "bvox" ? throwLane(s.notes, t.delay?.mix ?? 0.05) : undefined;
+    s.track(thrown ? { ...t, delayMixAutomation: thrown } : t);
+  }
   // The score holds 4096 notes: past the budget the quietest half of the
-  // second arp goes first, then closed-hat ghosts, then the first arp.
+  // second arp goes first, then closed-hat ghosts, then the first arp. A
+  // sung book's doubles go before any of them: the synth chops it covers,
+  // half the vocal-synth double, then the synth line under the sung lead.
   const written = new Map<string, number>();
   for (const n of s.notes)
     written.set(n.trackId, (written.get(n.trackId) ?? 0) + 1);
   for (const [id, share] of [
+    ...(book
+      ? ([
+          ["chop", 1],
+          ["vlead", 0.5],
+          ["vox", 1],
+        ] as const)
+      : []),
     ["arp2", 0.5],
     ["hats", 0.4],
     ["arp", 0.4],
@@ -1267,6 +1438,7 @@ export function performChart(chart: Chart): Performed {
     score,
     placed,
     thinned,
+    phrases: [...phrases.values()],
     notes: [
       `${scale.name} at ${chart.bpm}`,
       `form: ${placed.map((p) => `${p.name} ${p.bars}`).join(", ")}`,
@@ -1374,6 +1546,19 @@ const LEVELS: Readonly<Record<string, number>> = {
   cloud: 0.24,
   fx: 0.24,
   spark: 0.16,
+};
+/** The sampled stack at the demos' balance, a notch under the chart's bed. */
+const BOOK_LEVELS: Readonly<Record<string, number>> = {
+  bvox: 1,
+  bdbl: 0.5,
+  bchops: 0.7,
+  vlead: 0.36,
+  vgrain: 0.26,
+};
+/** What the synth voices keep under a book, as the demos blend theirs. */
+const SUNG_UNDER: Readonly<Record<string, number>> = {
+  vox: 0.32,
+  chop: 0.6,
 };
 /** The genome's kits sit at Redline's balance; a chart's busier grids run hotter. */
 const DRUM_BALANCE: Readonly<Record<string, number>> = {

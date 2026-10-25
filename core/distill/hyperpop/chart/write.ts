@@ -11,7 +11,13 @@ import { GRAMMARS, KITS } from "../genome/genome.ts";
 import { ARP, BASS, LEAD, PAD, SINGERS, STAB } from "../genome/sounds.ts";
 import { MODES } from "../genome/theory.ts";
 import { judge, type Craft } from "./critic.ts";
-import { CHART_KINDS, LAYERS, checkChart, type Chart } from "./format.ts";
+import {
+  CHART_KINDS,
+  LAYERS,
+  checkChart,
+  repairChart,
+  type Chart,
+} from "./format.ts";
 import { GOLD } from "./gold/index.ts";
 import { performChart } from "./perform.ts";
 
@@ -62,14 +68,14 @@ The craft (the performer and the critic measure it):
 2. Every section 8 bars or fewer. A hook section is a sung chorus, then a drop: the hook on the lead or chops for up to 8 bars.
 3. Develop every repeat: a second verse, chorus or drop adds or changes a layer, a feel, a stab grid, an arp order or a line. Write new tunes per section; at least 45% of the bars that carry a tune should bring one the song hasn't played.
 4. Sung lines carry expression: vibrato (~) or a fall (>) on line ends and held words, about one expressive mark for every one or two sung notes, counting the moves.
-5. Hold sung notes on chord tones or prepare the dissonance (mark a deliberate suspension or appoggiatura with !). Chords are the mode's own diatonic numerals (roman numerals, lower case for minor, ° for diminished), one per bar or two split with a dash. There are no key changes and no borrowed chords; the format cannot express them.
+5. Hold sung notes on chord tones or prepare the dissonance (mark a deliberate suspension or appoggiatura with !). Chords are roman numerals (lower case for minor, ° for diminished), one per bar or two split with a dash, and may add 7, maj7 or add9 for color. They are the mode's own, except that a major-mode song may borrow iv, bVI, bVII or bIII, or use II, III or VI as a secondary dominant, for a lift or a sting (the way the demos turn bittersweet for a bar). There are no key changes; the format cannot express them.
 6. Place moves by ear: stutters on the song's own syllables in drops, a dropout that spotlights a line, a silence before the last chorus, a landing on the last drop, a riser or crush into a drop, a drift from pretty to harsh, a dive out of a break, a tape stop.
 7. The form and the sounds are the song's own. The gold charts share one form (intro, verse, pre, chorus, drop, twice, then bridge, break, last chorus, last drop, outro); don't copy it. Cold-open on the hook, run two verses back to back, put a post-chorus or a breakdown mid-song, end on a false ending or a new section, skip the pre or the bridge, use a 6-bar phrase. Pick the singer, stabs, counter and kit for this brief, not the gold charts' defaults.
 8. A bridge or break turns somewhere new: a canon or counter-melody in the singer's rests (the counter layer), a half-time feel, a fugue-like entry of the chops or lead against the singer, sometimes.
 9. Kick, snare and hat grids are 16 steps of digits (velocity / 10) and dots; the 808 locks to the kick. Stab grids are 16 steps; arp orders are 8 digits 0-4 over five chord tones. The whole song holds about 4000 notes: spend them on the hook sections, and keep verses, bridges and breaks lighter (the performer drops parts that don't fit).
 10. Words are singable, concrete and a little strange: one image per song, internet-age, sung in short syllables. Write syllables split with "- " (ne- on) and hold vowels with _.
 
-Hyperpop's range, all fair game: bright bubblegum and chipmunk vocals; dark and hard (phrygian or minor, gabber, glitch or footwork drums, a screamer or sync lead, a growl, fold or reese bass, the crush and drift moves, high grit); and ambient (taps, half or none feels, a cloud, choir or felt bed, sparse drums, wide space and echo, a whisper singer). Match the brief.
+Hyperpop's range runs from bright bubblegum (major or lydian, chipmunk doubles, sparkling arps) through euphoric and driving (mixolydian or major, four-on-the-floor or breakbeat, a supersaw lead) to bittersweet (a major key that leans on vi and a borrowed iv, glassy pads, a little grit), and no darker: dorian or aeolian only when the brief asks for it, never phrygian, never sad and slow. Every song is as active and rich as the gold charts: drums drive every section but a short break, 140 to 180 bpm, the stabs, arps and chops busy, the hook on every voice. No ambient: no none or taps feels outside a break, no whisper-only singer. Match the brief within that range.
 
 Answer with the chart as one JSON object in a \`\`\`json fence and nothing else. It follows the Chart type below exactly.`;
 
@@ -110,9 +116,10 @@ export function readChartAnswer(
     return { error: `the answer is not JSON (${(e as Error).message})` };
   }
   const problems = shapeOf(raw);
+  // Off-by-one counts are mechanical, so code fixes them instead of a round.
   return problems.length
     ? { error: problems.join("; ") }
-    : { chart: raw as Chart };
+    : { chart: repairChart(raw as Chart) };
 }
 
 function shapeOf(raw: unknown): string[] {
@@ -193,6 +200,8 @@ export type WrittenChart = Readonly<{
   craft: Craft;
   problems: readonly string[];
   drafts: readonly Draft[];
+  /** Why the rounds ended early with the best draft so far, if they did. */
+  stopped?: string;
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
@@ -287,12 +296,30 @@ export async function writeChart(
     { role: "user", content: `Brief: ${brief}` },
   ];
   const drafts: Draft[] = [];
+  let stopped: string | undefined;
   let best:
     | { chart: Chart; score: TrackScore; craft: Craft; problems: string[] }
     | undefined;
   for (let round = 1; round <= rounds; round++) {
     const started = Date.now();
-    const { text, usage } = await complete(turns);
+    let reply: Awaited<ReturnType<Complete>> | undefined;
+    // A dropped connection mid-answer asks once more; after that a song with
+    // a played draft keeps it rather than losing the rounds already paid for.
+    for (let tries = 0; !reply; tries++) {
+      try {
+        reply = await complete(turns);
+      } catch (error) {
+        const dropped = /stream (failed|timed out)/.test(
+          (error as Error).message,
+        );
+        if (dropped && tries === 0) continue;
+        if (!best) throw error;
+        stopped = `round ${round} failed: ${(error as Error).message}`;
+        break;
+      }
+    }
+    if (!reply) break;
+    const { text, usage } = reply;
     const read = readChartAnswer(text);
     const review =
       "chart" in read ? reviewChart(read.chart) : { problems: [read.error] };
@@ -335,6 +362,7 @@ export async function writeChart(
   return {
     ...best,
     drafts,
+    ...(stopped ? { stopped } : {}),
     inputTokens: sum((u) => u.inputTokens),
     outputTokens: sum((u) => u.outputTokens),
     cachedInputTokens: sum((u) => u.cachedInputTokens ?? 0),

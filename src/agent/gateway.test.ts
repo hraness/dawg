@@ -122,6 +122,30 @@ describe("Vercel AI Gateway client", () => {
     expect(Array.isArray(body.tools)).toBe(true);
   });
 
+  test("sends a reasoning effort as the provider's option", async () => {
+    const { fetcher, requests } = scriptedFetch([
+      [textChunk("ok"), finishChunk("stop")],
+    ]);
+    const client = createGatewayClient({
+      apiKey: KEY,
+      baseUrl: "https://gateway.test/v1/",
+      modelIds: { "sol-6.1": "provider/sol-6.1" },
+      fetcher,
+    });
+    await collect(
+      client.stream({
+        model: "sol-6.1",
+        messages: [{ role: "user", content: "hi" }],
+        maxResponseBytes: 10_000,
+        effort: "low",
+      }),
+    );
+    const body = requests[0]!.body as Record<string, unknown>;
+    expect(body.providerOptions).toMatchObject({
+      anthropic: { effort: "low" },
+    });
+  });
+
   test("redacts the key from HTTP and in-stream provider errors", async () => {
     const http = createGatewayClient({
       apiKey: KEY,

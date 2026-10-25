@@ -81,6 +81,11 @@ export type ChatStreamRequest = {
   messages: readonly ChatMessage[];
   tools?: readonly ChatTool[];
   temperature?: number;
+  /**
+   * How hard an adaptive-thinking model thinks before answering. Most of a
+   * chart's output tokens are thinking, so this is the main cost lever.
+   */
+  effort?: "low" | "medium" | "high";
   /** Exact provider model ID, bypassing the alias (e.g. a small model for naming). */
   modelId?: string;
   maxTokens?: number;
@@ -299,6 +304,15 @@ function createApiClient(
         }
         if (request.temperature !== undefined)
           body.temperature = request.temperature;
+        if (request.effort !== undefined) {
+          if (provider === "openrouter")
+            body.reasoning = { effort: request.effort };
+          else if (!local)
+            body.providerOptions = {
+              ...(body.providerOptions as object),
+              anthropic: { effort: request.effort },
+            };
+        }
         if (
           request.maxTokens !== undefined &&
           Number.isInteger(request.maxTokens) &&

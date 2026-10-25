@@ -10,11 +10,17 @@ spec = {
 }
 Syllables of one word are written "to-" "night" (trailing hyphen continues
 the word). The text sent to TTS is the words joined with spaces; "text" in
-the spec overrides it (keep the same words).
+the spec overrides it (keep the same words). "speech": a wav path sings a
+take another engine spoke instead of Kokoro (it must say the same words);
+whisper.cpp times its words ($WHISPER_MODEL, default the small.en model in
+~/.cache/dawg/whisper).
 Prints JSON with per-note [begin, end] file fractions for sample slices.
 """
 import json
+import os
+import subprocess
 import sys
+import tempfile
 
 import numpy as np
 import pyworld as pw
@@ -55,6 +61,20 @@ def tts(text, voice, speed):
         audio.append(a)
         off += len(a) / FS
     return np.concatenate(audio).astype(np.float64), toks
+
+
+def speech(path, text):
+    """A spoken take of `text` from a file, its words timed by whisper.cpp."""
+    model = os.environ.get("WHISPER_MODEL", os.path.expanduser("~/.cache/dawg/whisper/ggml-small.en.bin"))
+    with tempfile.TemporaryDirectory() as tmp:
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", str(FS), f"{tmp}/a.wav"], check=True)
+        subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", "16000", f"{tmp}/w.wav"], check=True)
+        subprocess.run(["whisper-cli", "-m", model, "-f", f"{tmp}/w.wav", "-ml", "1", "-sow", "-oj", "-np",
+                        "--prompt", text, "-of", f"{tmp}/w"], check=True, capture_output=True)
+        y, _ = sf.read(f"{tmp}/a.wav", dtype="float64")
+        words = json.loads(open(f"{tmp}/w.json").read())["transcription"]
+    toks = [(clean(w["text"]), w["offsets"]["from"] / 1000, w["offsets"]["to"] / 1000) for w in words]
+    return y, [t for t in toks if t[0]]
 
 
 def syllable_bounds(env, f0, a, b, k):
@@ -114,7 +134,10 @@ def main():
     text = spec.get("text") or " ".join(
         "".join(notes[i]["syl"].rstrip("-") for i in w) for w in words
     )
-    y, toks = tts(text, spec["voice"], spec.get("speed", 1.0))
+    if spec.get("speech"):
+        y, toks = speech(spec["speech"], text)
+    else:
+        y, toks = tts(text, spec["voice"], spec.get("speed", 1.0))
     f0, t = pw.harvest(y, FS, f0_floor=70, f0_ceil=600, frame_period=FP)
     sp = pw.cheaptrick(y, f0, t, FS)
     ap = pw.d4c(y, f0, t, FS)

@@ -59,7 +59,7 @@ copy.
 
 ## Charts: songs written section by section
 
-The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way the demos are: each section names its chords as numerals in the song's mode, its sung lines, its hook and counter lines, which layers play, and the moves placed by ear (a stutter, a dropout, a silent beat, a landing, a tape stop, a riser). Lines are 16th-note rhythms with scale degrees and syllables. A chart has one key and mode, and nothing in it can name another: there is no way to write a key change or borrow a chord.
+The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way the demos are: each section names its chords as numerals in the song's mode, its sung lines, its hook and counter lines, which layers play, and the moves placed by ear (a stutter, a dropout, a silent beat, a landing, a tape stop, a riser). Lines are 16th-note rhythms with scale degrees and syllables. A chart has one key and mode, and nothing in it can name another: there is no way to write a key change. A major-mode chart may borrow color chords from the parallel minor (iv, bVI, bVII, bIII) or use a secondary dominant (II, III, VI); they are color in the one key, never a new tonic.
 
 | File         | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -79,13 +79,13 @@ The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way
   - Sections are eight bars at most.
   - Every repeat develops, so at least 45% of tune bars are new.
   - Sung notes carry expression marks.
-  - Held words sit on chord tones or marked suspensions, in one key with diatonic numerals only.
+  - Held words sit on chord tones or marked suspensions, in one key: diatonic numerals with 7ths, maj7s and add9s, plus the borrowed and secondary-dominant colors above.
   - Moves are placed by ear.
   - A bridge sometimes turns to a canon, a counter or a fugue-like entry.
   - The form and sounds are the song's own.
   - About 4,000 notes are spent mostly on the hook sections.
   - Words are singable.
-  - The prompt also names hyperpop's range (bright, dark and hard, ambient) so a brief can go anywhere in it.
+  - The range runs from bright bubblegum through euphoric and driving to bittersweet, and no darker than Glass Garden. Drums drive every section but a short break, at 140–180 bpm. Nothing is ambient or sad and slow.
 - **Each round** reads the answer and checks the chart. The performer plays it, and the critic judges it. Any problem goes back as the next turn with a concrete fix, for example:
   - a misread field;
   - a chart over the note budget, which the performer would thin;
@@ -95,7 +95,25 @@ The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way
 
   The best draft wins, and the loop stops at the first clean one. Most songs are clean in two rounds.
 
-- **Cost** is summed over the rounds from the provider's usage. The provider's own charge is used when it reports one, otherwise Opus 5.5 list prices: $4 per million input tokens, $0.20 per million cached and $20 per million output. A first round is about 20,000 output tokens including thinking, about $0.40–0.55. A revision costs about $0.20–0.30. A song costs about $0.65–0.90.
+- **Small count mismatches are repaired in code** (a rhythm one or two hits off its degrees or syllables), so a round is not spent on them.
+- **A dropped connection** mid-answer asks once more. If a later round still fails, the best draft already played is kept.
+- **Cost** is summed over the rounds from the provider's usage. The provider's own charge is used when it reports one, otherwise Opus 5.5 list prices: $4 per million input tokens, $0.20 per million cached and $20 per million output. Charts are written at low reasoning effort by default (`--effort low`).
+
+  | Effort        | A song                                 | Measured                                                                 |
+  | ------------- | -------------------------------------- | ------------------------------------------------------------------------ |
+  | low (default) | about $0.20–0.75, typically $0.30–0.45 | eight briefs: seven clean, one lost its revision to a dropped connection |
+  | medium        | about $0.70                            | one brief, clean in two rounds                                           |
+  | high          | about $1.20–2.50                       | the 0.36 songs                                                           |
+
+  Low effort's charts clear the same critic in as few rounds, at a third of the price.
+
+### Vocal books
+
+A chart's synth singer carries its lines, but the demos' vocal comes from a sung studio book: a lead take per line, its double, chops on the hook words and a held vowel. `scripts/vox/chart-book.ts` sings one for any chart (see `scripts/vox/README.md`), and `performChart(chart, book)` plays it. The lead, double and chops come from the book. A vocal-synth double of the hook and a grain bed sit under it, and the synth singer is pulled under the takes. When the book takes the song over the note budget, its doubles are thinned before any hats or arps.
+
+### Judging by ear
+
+Cloudflare's `@cf/cloudflare/clef-omni` audio model scores a rendered excerpt on polish, vocals, darkness and musicality for about $0.0003 a clip, so a set of candidates can be screened before anyone listens. Four 30-second windows per song keep the score steady. On that scale the demos sit at polish 2.53–2.55, musical 2.06–2.28 and dark 0.93–1.21. Cloudflare's Clairic model only extracts features, so it does not help write or judge songs.
 
 ## The classic sheet
 
@@ -113,7 +131,7 @@ The code is in `core/distill/hyperpop/chart/`. A chart is a song written the way
 
 ## Using it
 
-- `dawg make "an icy song about a phone dying at a party"` has Claude Opus 5.5 write and revise a chart through the AI Gateway key (or OpenRouter), and prints each round's problems and cost and the song's total. `--model <alias>` picks another model, `--rounds 1-6` caps the rounds (4 by default), `--sheet chart.json` keeps the chart and `--from chart.json` replays it with no model.
+- `dawg make "an icy song about a phone dying at a party"` has Claude Opus 5.5 write and revise a chart through the AI Gateway key (or OpenRouter), and prints each round's problems and cost and the song's total. `--model <alias>` picks another model, `--rounds 1-6` caps the rounds (4 by default), `--effort low|medium|high` sets the reasoning effort (low by default), `--sheet chart.json` keeps the chart and `--from chart.json` replays it with no model.
 - `dawg make --local "<brief>"` asks the local model for a song card and composes it from a random seed. `--seed N` picks the seed, so the same card and seed give the same song (the seed is mixed with the brief, so two briefs on one seed are two songs). `dawg make --seed N` with no brief composes with no model at all. `--wav out.wav` also renders it, and `--sheet s.json` keeps the card and seed.
 - `dawg make --from s.json` composes a saved card with no model, or compiles a classic sheet.
 - `dawg make --classic "<brief>"` writes a classic sheet instead. `--rounds 1-6` sets how many rounds to try.

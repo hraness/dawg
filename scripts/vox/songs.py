@@ -1,6 +1,7 @@
 """The hyperpop demo vocal books: every sung line of a song plus a chop bank.
 
 Usage: songs.py <out dir> [id ...]
+       songs.py --spec song.json out.wav   (a chart's book, from chart-book.ts)
 Each part is sung on its own (sing.py) with a quarter-beat lead for onset
 consonants, then the parts are laid end to end in one file. Verse and pre
 lines are one bar, chorus lines two. The chop bank is single syllables on one
@@ -164,8 +165,11 @@ def render(song, out):
                     "notes": notes}
             sp, wp = Path(tmp) / f"{name}.json", Path(tmp) / f"{name}.wav"
             sp.write_text(json.dumps(spec))
-            res = subprocess.run([sys.executable, "-I", str(HERE / "sing.py"), str(sp), str(wp)],
-                                 capture_output=True, text=True)
+            for _ in range(2):  # one retry: a cold Kokoro load can fail transiently
+                res = subprocess.run([sys.executable, "-I", str(HERE / "sing.py"), str(sp), str(wp)],
+                                     capture_output=True, text=True)
+                if not res.returncode:
+                    break
             if res.returncode:
                 print(res.stderr[-2000:])
                 raise SystemExit(f"sing failed for {name}")
@@ -189,6 +193,12 @@ def render(song, out):
 
 
 def main():
+    if sys.argv[1] == "--spec":
+        # {"voice", "bpm", "formant"?, "clarity"?, "parts": [[name, beats, notes]]}
+        song = json.loads(Path(sys.argv[2]).read_text())
+        table = render(song, Path(sys.argv[3]))
+        print(json.dumps(table))
+        return
     out = Path(sys.argv[1])
     out.mkdir(parents=True, exist_ok=True)
     only = sys.argv[2:]
