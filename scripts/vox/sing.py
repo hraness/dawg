@@ -77,6 +77,36 @@ def speech(path, text):
     return y, [t for t in toks if t[0]]
 
 
+def word_spans(words, notes, toks):
+    """Each spec word's (start, end) seconds, matched letter by letter.
+
+    Recognizers merge and split words ("mouth full" comes back "Mouthful"),
+    so the tokens become one letter stream, each letter timed by its share of
+    its token, and each word is found in order, at a token start if it can be.
+    """
+    letters, starts, ends, heads = "", [], [], set()
+    for w, s, e in toks:
+        heads.add(len(letters))
+        for k in range(len(w)):
+            starts.append(s + (e - s) * k / len(w))
+            ends.append(s + (e - s) * (k + 1) / len(w))
+        letters += w
+    pos, spans = 0, []
+    for w in words:
+        target = clean("".join(notes[i]["syl"].rstrip("-") for i in w))
+        hits, i = [], letters.find(target, pos)
+        while i >= 0:
+            hits.append(i)
+            i = letters.find(target, i + 1)
+        if not hits:
+            raise SystemExit(f"word not found in TTS tokens: {target} ({toks})")
+        whole = [i for i in hits if i in heads and (i + len(target) in heads or i + len(target) == len(letters))]
+        i = (whole or [i for i in hits if i in heads] or hits)[0]
+        spans.append((starts[i], ends[i + len(target) - 1]))
+        pos = i + len(target)
+    return spans
+
+
 def syllable_bounds(env, f0, a, b, k):
     """Split frames [a,b) into k syllables at energy valleys between nuclei."""
     if k == 1:
@@ -143,18 +173,10 @@ def main():
     ap = pw.d4c(y, f0, t, FS)
     lsp = np.log(sp + 1e-12)
     env = lsp[:, 8:130].mean(axis=1)  # ~200 Hz - 3 kHz energy (log)
-    # Match spec words to TTS tokens in order.
-    ti = 0
     segs = []  # (note index, frame a, frame b)
-    for w in words:
-        target = clean("".join(notes[i]["syl"].rstrip("-") for i in w))
-        while ti < len(toks) and toks[ti][0] != target:
-            ti += 1
-        if ti >= len(toks):
-            raise SystemExit(f"word not found in TTS tokens: {target} ({toks})")
-        _, s, e = toks[ti]
-        ti += 1
-        a, b = int(s * 1000 / FP), min(len(f0), int(e * 1000 / FP))
+    for w, (s, e) in zip(words, word_spans(words, notes, toks)):
+        a = min(int(s * 1000 / FP), len(f0) - 2)
+        b = max(a + 2, min(len(f0), int(e * 1000 / FP)))
         for i, (sa, sb) in zip(w, syllable_bounds(env, f0, a, b, len(w))):
             segs.append((i, sa, sb))
     lead = spec.get("lead", 0.0)
