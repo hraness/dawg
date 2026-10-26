@@ -4,6 +4,14 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Added
+
+- **Three new demo songs, each unlike the first three.**
+  - **Night Swim:** D major at 122, a Balearic house groove with marimba and plucks, sung low by `af_bella` with a low `bm_lewis` echo.
+  - **Kite Season:** E major at 146, felt in half time. Organ, a fuzz guitar wall, a gliding saw hook and glockenspiel over acoustic drums, with a borrowed Am6 in the bridge and a dead stop on a held organ chord.
+  - **Bubble Wrap:** Bb major at 100. Stop-start metallic hits, a rubbery bass and steel-pan answers under a deadpan low verse. A low chant lists parcel labels and grows each pass. The chorus flips to double time with plastic stabs and chipmunk pops, then comes a false ending and a ballad breakdown.
+- **Vocal books that sound sung, not typed.** The three new books are written to speech rhythm, with pickups, rests and held stressed vowels, and their verses sit in a low register. `sing.py` takes an opt-in `human` setting (timing drift, flat landings, slow pitch wander), per-note `dyn` and `air`, and `"~"` melisma. A part can switch voice for a low answer or chant. `scripts/vox/cadence.py` prints a line's spoken rhythm as a starting point.
+
 ### Fixed
 
 - **`sing.py` speech mode now times a take's words by aligning it to Kokoro.** On clips of two or three seconds, whisper's word offsets drifted by whole seconds. Sometimes the last word ran to 30 seconds, and every earlier word fell to zero length. Kokoro now says the same words, and DTW over MFCCs maps its word times onto the take. Run against a second Kokoro voice, the aligned book misses words at almost the same rate as Kokoro singing directly (0.19 against 0.175).

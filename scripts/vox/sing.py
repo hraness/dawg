@@ -9,7 +9,12 @@ spec = {
               "scoop": 0, "fall": 0, "glide": 0.03}, ... ]
 }
 Syllables of one word are written "to-" "night" (trailing hyphen continues
-the word). The text sent to TTS is the words joined with spaces; "text" in
+the word). A "~" note is melisma: the previous syllable's vowel carries on to
+a new pitch, its consonant ending moved to the last "~". Optional per note:
+"dyn" (0-1.5 loudness, default 1; soft notes also get breathier) and "air"
+(0-1 extra breath). Optional spec "human" (0-1, default 0) adds a singer's
+slow pitch wander, onset scoops and a few milliseconds of timing drift,
+seeded by "seed" so a book renders the same every time. The text sent to TTS is the words joined with spaces; "text" in
 the spec overrides it (keep the same words). "speech": a wav path sings a
 take another engine spoke instead of Kokoro (it must say the same words);
 its words are timed by aligning it to Kokoro saying them ("ref_voice").
@@ -33,6 +38,8 @@ FP = 5.0  # ms per WORLD frame
 def words_of(notes):
     words, cur = [], []
     for i, n in enumerate(notes):
+        if n["syl"] == "~":
+            continue
         cur.append(i)
         if not n["syl"].endswith("-"):
             words.append(cur)
@@ -217,6 +224,21 @@ def main():
         b = max(a + 2, min(len(f0), int(e * 1000 / FP)))
         for i, (sa, sb) in zip(w, syllable_bounds(env, f0, a, b, len(w))):
             segs.append((i, sa, sb))
+    # Melisma notes borrow the syllable before them: its vowel, then its coda
+    # on the last note of the run.
+    by_note = {i: (a, b) for i, a, b in segs}
+    full, src = [], None
+    for i, n in enumerate(notes):
+        if n["syl"] == "~":
+            if src is None:
+                raise SystemExit("a melisma note needs a syllable before it")
+            full.append((i, *by_note[src]))
+        else:
+            src = i
+            full.append((i, *by_note[i]))
+    segs = full
+    human = spec.get("human", 0.0)
+    rng = np.random.default_rng(spec.get("seed", 0))
     lead = spec.get("lead", 0.0)
     total_beats = spec["bars"] * 4 + lead
     nfr = int(total_beats * spb * 1000 / FP) + 1
@@ -227,8 +249,10 @@ def main():
     o_w = np.zeros(nfr)  # occupancy for crossfades
     marks = []
     prev_midi = None
-    for i, a, b in segs:
+    for k_seg, (i, a, b) in enumerate(segs):
         n = notes[i]
+        held = k_seg + 1 < len(segs) and notes[segs[k_seg + 1][0]]["syl"] == "~"
+        tail = n["syl"] == "~"
         v = f0[a:b] > 0
         if v.any():
             va = a + int(np.argmax(v))
@@ -238,11 +262,18 @@ def main():
         onset = (a, va)
         nucleus = (va, vb)
         coda = (vb, b)
+        if tail:  # no new consonant; the vowel's settled end
+            onset = (va, va)
+            nucleus = (va + (vb - va) * 3 // 5, vb)
+        if held:  # the consonant ending waits for the last melisma note
+            coda = (vb, vb)
         start = (n["beat"] + lead) * spb
+        if human:
+            start += rng.normal(0, 0.006 * human)
         dur = n["len"] * spb
         on_fr = onset[1] - onset[0]
         coda_fr = min(coda[1] - coda[0], int(0.12 * 1000 / FP))
-        gap = int(n.get("gap", 0.03) * 1000 / FP)
+        gap = int(n.get("gap", 0.0 if held else 0.03) * 1000 / FP)
         nuc_fr = max(4, int(dur * 1000 / FP) - coda_fr - gap)
         t0 = int(start * 1000 / FP) - on_fr
         pieces = [
@@ -254,13 +285,19 @@ def main():
         L = sum(len(p[0]) for p in pieces)
         q_lsp = np.concatenate([p[0] for p in pieces])
         q_ap = np.concatenate([p[1] for p in pieces])
+        dyn = n.get("dyn", 1.0)
+        air = n.get("air", 0.0) + max(0.0, 1 - dyn) * 0.5
+        if dyn != 1.0:
+            q_lsp = q_lsp + 2 * np.log(max(dyn, 0.05))
+        if air:
+            q_ap = q_ap + (1 - q_ap) * min(air, 1.0) * 0.6
         # Pitch: voiced frames take the note; the first frames glide from the
         # previous note (hard tune); optional scoop up / fall at the end.
         hz = 440 * 2 ** ((n["midi"] - 69) / 12)
         src_f0 = np.concatenate([pieces[0][2], np.ones(nuc_fr), pieces[2][2]])
         voiced = src_f0 > 0
         semis = np.full(L, float(n["midi"]))
-        g = int(n.get("glide", 0.03) * 1000 / FP)
+        g = int(n.get("glide", 0.07 if tail else 0.03) * 1000 / FP)
         if prev_midi is not None and g > 0 and n.get("legato", True):
             k = min(g, L)
             semis[:k] = np.linspace(prev_midi, n["midi"], k)
@@ -270,6 +307,14 @@ def main():
         if n.get("fall"):
             k = min(int(0.12 * 1000 / FP), L)
             semis[L - k :] += np.linspace(0, -n["fall"], k)
+        if human and not tail:
+            # Singers land a hair flat and settle; held notes wander slowly.
+            k = min(int(0.06 * 1000 / FP), L - on_fr)
+            if k > 0:
+                semis[on_fr : on_fr + k] += np.linspace(-0.35 * human * rng.uniform(0.3, 1), 0, k)
+        if human:
+            tt = np.arange(L) * FP / 1000
+            semis += 0.12 * human * np.sin(2 * np.pi * rng.uniform(0.4, 1.2) * tt + rng.uniform(0, 6.3))
         if n.get("vib"):
             tt = np.arange(L) * FP / 1000
             ramp = np.clip((tt - 0.25) / 0.2, 0, 1)

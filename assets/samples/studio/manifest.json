@@ -78,6 +78,21 @@
       "sha256": "5056ffee043ff67ce2868a14107ca12f92f584a4693bbc6f680b47af05658400",
       "seconds": 27.557958333333332,
       "bytes": 1322826
+    },
+    "night-swim-vox": {
+      "sha256": "21ab7a460d0ab4550b73fed6ffbab2e22039fd1ae3f495714641149cc93357a6",
+      "seconds": 49.057375,
+      "bytes": 2354798
+    },
+    "kite-season-vox": {
+      "sha256": "7916b6f7996beff9a255386d381e8c023d8c979e59037d7af2ee93e41eb4a61d",
+      "seconds": 50.65083333333333,
+      "bytes": 2431284
+    },
+    "bubble-wrap-vox": {
+      "sha256": "b21570977e21a76a9e718cd5da4e4b862223999573a676de7678c1f60c03755c",
+      "seconds": 86.55,
+      "bytes": 4154444
     }
   }
 }
