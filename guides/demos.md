@@ -6,15 +6,14 @@ order: 0
 ---
 
 Six complete, editable hyperpop songs with original patterns and
-sounds. Every part works offline. Open a song's notes to explore its
-production. More styles will return to the shelf later.
+sounds, all offline. Open a song's notes to explore its production.
 
 - Candy Fault · an abstract synth singer over glitch breaks
 - Redline · F minor drum-and-bass, words over a classic vocoder
 - Glass Garden · A major, tresillo blooms, syllable arps, grain voice
 - Night Swim · D major house, marimba and plucks, a low sung verse
 - Kite Season · E major half-time drive, organ, fuzz guitar, glide lead
-- Bubble Wrap · Bb major stop-start pop, a low chant, a double-time chorus
+- Bubble Wrap · Bb major stop-start pop, low chant, double-time chorus
 
 Redline and Glass Garden blend a synth singer with recorded words
 and play the vocal as an instrument: syllable riffs that answer each

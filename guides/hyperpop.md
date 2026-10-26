@@ -21,11 +21,6 @@ sections without drums, and the voice as an instrument.
 - A vocoder sings the recorded words back as chords under them
 - An 808-style gliding sub; a growl saw doubles it in the drops
 - One-beat dropouts, a tape-stop dive, a kickless breakdown
-- Verses sung low and to speech rhythm (pickups, rests, held last
-  vowels), with a low second voice for answers and chants
-- Night Swim, Kite Season and Bubble Wrap widen the kit: a house
-  marimba groove, a half-time organ and fuzz-guitar drive, and a
-  double-time chorus flip with a false ending and a dead stop
 
 ## Ask
 
