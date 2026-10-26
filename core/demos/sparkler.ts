@@ -277,6 +277,7 @@ export const SECTIONS: readonly SongSection[] = [
     energy: 0.92,
     play: ["sub", "pad", "stabs", "riff"],
     stabs: STABS,
+    stabShift: 12,
     riff: RIFF_CHORUS,
     line: LINE_CHORUS,
     lines: CHORUS_LINES,
@@ -301,7 +302,7 @@ export const SECTIONS: readonly SongSection[] = [
     chords: VERSE,
     drums: ["skip", "bounce"],
     energy: 0.88,
-    play: ["sub", "riff", "arp"],
+    play: ["sub", "pad", "riff", "arp"],
     riff: RIFF_VERSE,
     arp: ARP_VERSE,
     line: LINE_VERSE,
@@ -329,6 +330,7 @@ export const SECTIONS: readonly SongSection[] = [
     energy: 0.95,
     play: ["sub", "pad", "stabs", "riff", "arp"],
     stabs: STABS,
+    stabShift: 12,
     riff: RIFF_CHORUS,
     arp: ARP_HI_HALF,
     line: LINE_CHORUS,
@@ -353,14 +355,15 @@ export const SECTIONS: readonly SongSection[] = [
     // The fugue: subject on the chops (Bb-F), tonal answer on the pluck a
     // fifth up (F-Cm) over the countersubject, the subject in the bass under
     // both (Bb-F), then an episode down to the half cadence. Every voice is
-    // written in build(); the half beat comes in under the bass entry.
+    // written in build() over a held pad; the half beat comes in under the
+    // bass entry.
     kind: "break",
     name: "Counterpoint",
     bars: 8,
     chords: [Bb, F, F, Cm, Bb, F, Gm, F],
     drums: ["none", "half"],
     energy: 0.9,
-    play: [],
+    play: ["pad"],
   },
   {
     kind: "build",
@@ -382,6 +385,7 @@ export const SECTIONS: readonly SongSection[] = [
     drums: ["four", "house"],
     play: ["sub", "pad", "stabs", "riff", "arp", "double"],
     stabs: STABS,
+    stabShift: 12,
     riff: RIFF_CHORUS,
     arp: ARP_HI_HALF,
     line: LINE_CHORUS,
@@ -674,7 +678,7 @@ export const sparkler: DemoDefinition = {
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
       "the words lead; the bed ducks about 4 dB while a line sings",
-      "in the choruses the stabs sit under the hook, the chops and synth singer pull back, and the stabs hit full in the drops",
+      "in the choruses the stabs ride an octave up but quieter, the chops and synth singer pull back, and the stabs hit full in the drops",
       "the bass sits between the kicks in the four-floor sections",
       "delay throws open on the last word of every line",
       "the fugue break keeps its three voices in three registers",
@@ -728,9 +732,11 @@ export const sparkler: DemoDefinition = {
       0.4,
       0.7,
     );
-    // Verse 2 answers on the glitch track between its lines.
+    // Verse 2 answers on the glitch track between its lines; the pad comes
+    // in on "here comes the noise".
     {
       const bar = at("Verse 2");
+      dropout(s, bar, 0, 16, ["pad"]);
       glitch(s, song, BOOK, bar + 3, "4.4.5.6.4.4.2...", ["spark", "light"]);
       glitch(s, song, BOOK, bar + 7, "6.5.4.2.6.5.4...", ["pop", "hey", "ya"]);
     }
@@ -859,7 +865,7 @@ export const sparkler: DemoDefinition = {
         ),
       },
     });
-    // The stabs sit back under the sung choruses and hit full in the drops.
+    // The stabs sit back in the sung choruses and hit full in the drops.
     patch(s, "stabs", {
       volumeAutomation: steps(
         [0, 0.72],
