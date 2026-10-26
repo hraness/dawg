@@ -5,7 +5,7 @@ parent: arrange
 order: 7
 ---
 
-One kit for two songs: seventh chords, a moving bass, whole
+One kit for three songs: seventh chords, a moving bass, whole
 sections without drums, and the voice as an instrument.
 
 - Six sung syllables on one keyed sampler in round robin: every chord

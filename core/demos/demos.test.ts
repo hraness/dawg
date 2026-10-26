@@ -20,15 +20,15 @@ const longestKickRest = (score: ReturnType<typeof createDemo>) => {
   return best;
 };
 
-/** The three songs built on the shared hyperpop kit. */
-const HYPER = ["redline", "glass-garden"];
+/** The songs built on the shared hyperpop kit. */
+const HYPER = ["redline", "glass-garden", "sparkler"];
 
 describe("complete demo songs", () => {
-  test("three hyperpop entries expose truthful form and duration metadata", () => {
-    expect(DEMOS).toHaveLength(3);
-    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(3);
-    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(3);
-    expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(2);
+  test("four hyperpop entries expose truthful form and duration metadata", () => {
+    expect(DEMOS).toHaveLength(4);
+    expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(4);
+    expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(4);
+    expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(3);
     for (const demo of DEMOS) {
       expect(demo.style).toBe("Hyperpop");
       expect(demo.title.length).toBeLessThanOrEqual(16);

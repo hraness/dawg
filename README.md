@@ -97,8 +97,8 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. The shelf holds three editable
-hyperpop songs for now: Candy Fault, Redline and Glass Garden. They share
+For a complete song, type `demo`. The shelf holds four editable
+hyperpop songs for now: Candy Fault, Redline, Glass Garden and Sparkler. They share
 one kit and play the vocal as an instrument, with syllable riffs, glitch
 stutters, reversals, a looped-vowel lead and a grain cloud, over
 syncopated stabs and changing beats. Each has production notes, named

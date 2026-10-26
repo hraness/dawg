@@ -2,6 +2,13 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## Unreleased
+
+### Added
+
+- **Sparkler, a fourth demo song (Bb major, 148 BPM).** It was written by hand the way Redline was: its own vocal book first, then the arrangement on the shared hyperpop kit. The form runs fuse, verse, pre, chorus and burst twice, then an eight-bar counterpoint break that is drumless for its first half, a rocket build, a last chorus, a finale and a smoke tail. In the break, over a held pad, the chops state a two-bar subject, a pluck answers it a fifth up, then the growl saw takes it two octaves down under a held vocal-synth third voice. The pre-choruses borrow E-flat minor for one bar. There is no key change.
+- **`sparkler-vox` in the studio library:** the "Sparkler" vocal book sung by Kokoro `af_heart` and retuned with WORLD, with chops "spark" "pop" "light" "hey" "oh" "ya" and a held "ah".
+
 ## 0.37.0
 
 ### Changed

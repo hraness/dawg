@@ -64,6 +64,12 @@ Q4 = [0, 0.5, 1, 2]
 Q4L = [0.45, 0.45, 0.9, 1.8]
 Q5 = [0, 0.5, 1, 1.5, 2]
 Q5L = [0.45, 0.45, 0.45, 0.45, 1.8]
+# Sparkler pushes off the beat: SA lands its third word on the "and" and
+# holds the last; SB opens on two 16ths and runs down the bar.
+SA = [0, 0.5, 0.75, 1.5, 2, 2.5, 3]
+SAL = [0.45, 0.25, 0.6, 0.45, 0.45, 0.45, 0.9]
+SB = [0, 0.25, 0.5, 1, 1.5, 2.25, 3]
+SBL = [0.25, 0.25, 0.45, 0.45, 0.6, 0.6, 0.9]
 
 SONGS = {
     # Soft Reboot, D major at 140. Verse Bm-G-D-A, chorus G-A-Bm-D.
@@ -149,6 +155,28 @@ SONGS = {
             ("ch3", 8, line("hold on tight 'til the sky turns white".split(), [0, 0.5, 1, 2, 2.5, 3, 4, 5], [75, 77, 80, 77, 75, 80, 77, 79], [0.45, 0.45, 0.9, 0.45, 0.45, 0.9, 0.9, 2.8], fall=1.0)),
             *chops(68, ["red", "line", "go", "up", "hey", "oh"]),
             ("hold", 4, [N("ah", 0, 3.8, 68, vib=0.15)]),
+        ],
+    ),
+    # Sparkler, Bb major at 148. Verse Gm-Eb-Bb-F, pre Eb-F-Eb-Ebm (the
+    # borrowed minor iv), chorus Bb-Dm-Eb-F.
+    "sparkler-vox": dict(
+        title="Sparkler Vocal", voice="af_heart", bpm=148, formant=1.0, clarity=1.5, root=70,
+        parts=[
+            ("v1", 4, line("strike a match and hold it up".split(), SA, [74, 74, 77, 74, 79, 77, 74], SAL)),
+            ("v2", 4, line("write your name be- fore it's gone".split(), SB, [77, 77, 74, 72, 74, 72, 70], SBL, fall=1.0)),
+            ("v3", 4, line("sil- ver sparks a- cross the lawn".split(), SA, [74, 74, 79, 77, 74, 77, 79], SAL)),
+            ("v4", 4, line("eve- ry- one is count- ing down".split(), SB, [79, 77, 77, 74, 77, 74, 70], SBL, fall=1.0)),
+            ("v5", 4, line("light the long fuse".split(), L4, [67, 70, 74, 79], L4L)),
+            ("v6", 4, line("cov- er your ears".split(), L4, [77, 74, 70, 74], L4L, fall=1.0)),
+            ("v7", 4, line("here comes the noise".split(), L4, [70, 74, 79, 82], L4L)),
+            ("v8", 4, line("bright- er than day".split(), L4, [81, 79, 77, 82], L4L, scoop=1.0)),
+            ("pre1", 4, line("wait for it wait for it".split(), [0, 0.5, 1, 2, 2.5, 3], [75, 75, 79, 75, 75, 82], [0.45, 0.45, 0.9, 0.45, 0.45, 0.9])),
+            ("pre2", 4, line("light up the whole sky".split(), Q5, [77, 79, 82, 79, 82], Q5L, scoop=1.0)),
+            ("ch1", 8, line("spar- kler spar- kler in my hand".split(), [0, 0.5, 1.5, 2, 2.5, 3, 4], [77, 82, 77, 82, 81, 82, 77], [0.45, 0.9, 0.45, 0.45, 0.45, 0.9, 2.8], fall=1.0)),
+            ("ch2", 8, line("draw your name a- cross the night".split(), [0, 0.5, 1, 1.5, 2.5, 3, 4], [79, 79, 82, 79, 77, 75, 77], [0.45, 0.45, 0.45, 0.9, 0.45, 0.9, 3.0], vib=0.3)),
+            ("ch3", 8, line("we burn so fast we burn so bright".split(), [0, 0.5, 1, 2, 2.5, 3, 3.5, 4], [75, 79, 82, 79, 77, 79, 81, 81], [0.45, 0.45, 0.9, 0.45, 0.45, 0.45, 0.45, 2.8], vib=0.3)),
+            *chops(70, ["spark", "pop", "light", "hey", "oh", "ya"]),
+            ("hold", 4, [N("ah", 0, 3.8, 70, vib=0.15)]),
         ],
     ),
 }
