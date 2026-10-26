@@ -78,6 +78,11 @@
       "sha256": "5056ffee043ff67ce2868a14107ca12f92f584a4693bbc6f680b47af05658400",
       "seconds": 27.557958333333332,
       "bytes": 1322826
+    },
+    "sparkler-vox": {
+      "sha256": "d09735babde857e538131eae2c7b0cb39a6872c54ba32214ea62b53262e58345",
+      "seconds": 32.0268,
+      "bytes": 1537330
     }
   }
 }
