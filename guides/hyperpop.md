@@ -21,8 +21,6 @@ sections without drums, and the voice as an instrument.
 - A vocoder sings the recorded words back as chords under them
 - An 808-style gliding sub; a growl saw doubles it in the drops
 - One-beat dropouts, a tape-stop dive, a kickless breakdown
-- A counterpoint break: the chops state a subject, a pluck answers
-  it a fifth up, then the bass takes it under a held third voice
 
 ## Ask
 
