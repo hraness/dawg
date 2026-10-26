@@ -311,7 +311,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
     },
     {
       id: "bubble-wrap-vox",
-      title: "Bubble Wrap Vocal",
+      title: "Bubble Wrap Vox",
       description:
         "A plain, low conversational voice singing every line of Bubble Wrap (Bb major, 100), a deadpan low male chant, single-syllable chops on Bb4 for chipmunk riffs and a held ooh.",
       tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "book"],
@@ -350,7 +350,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
     },
     {
       id: "kite-season-vox",
-      title: "Kite Season Vocal",
+      title: "Kite Season Vox",
       description:
         "A low dry alto singing every line of Kite Season (E major, 146, half-time), with a low male answer, single-syllable chops on E4 and a held ooh.",
       tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "book"],

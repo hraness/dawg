@@ -185,7 +185,7 @@ SONGS = {
     # A minor. Lines are two bars, written to the speech rhythm by hand:
     # pickups, long vowels on the stressed words, rests between phrases.
     "kite-season-vox": dict(
-        title="Kite Season Vocal", voice="af_heart", bpm=146, root=64, human=0.25,
+        title="Kite Season Vox", voice="af_heart", bpm=146, root=64, human=0.25,
         parts=[
             ("v1", 8, line("string wound tight on a card- board spool".split(), [0, 0.5, 1, 2, 2.5, 2.75, 3.5, 4.5], [59, 59, 61, 63, 61, 59, 61, 56], [0.45, 0.45, 0.9, 0.45, 0.25, 0.7, 0.9, 2.2], fall=0.5)),
             ("v2", 8, line("your hands are cold so I hold the line".split(), [0, 0.25, 1, 1.5, 2.5, 3, 3.5, 4.5, 5], [59, 61, 59, 56, 59, 61, 63, 61, 59], [0.25, 0.7, 0.45, 0.9, 0.45, 0.45, 0.9, 0.45, 2.0])),
@@ -211,7 +211,7 @@ SONGS = {
     # term each pass, a double-time chorus on Gm7-Eb-Bb/D-F up to G4, and a
     # held ballad breakdown. The chops sit on Bb4 for chipmunk riffs.
     "bubble-wrap-vox": dict(
-        title="Bubble Wrap Vocal", voice="bf_emma", bpm=100, root=70, human=0.25,
+        title="Bubble Wrap Vox", voice="bf_emma", bpm=100, root=70, human=0.25,
         parts=[
             ("v1", 8, line("I wrapped my heart in bub- ble wrap".split(), [0, 0.25, 0.75, 1, 1.5, 2, 2.5, 3], [58, 60, 58, 62, 60, 58, 57, 58], [0.25, 0.45, 0.25, 0.45, 0.45, 0.45, 0.45, 1.5])),
             ("v2", 8, line("and left it on your front step".split(), [0, 0.25, 0.75, 1, 1.5, 1.75, 2.25], [57, 58, 60, 60, 58, 57, 55], [0.25, 0.45, 0.25, 0.45, 0.25, 0.45, 1.8], fall=0.5)),
