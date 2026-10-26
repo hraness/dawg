@@ -12,8 +12,7 @@ Syllables of one word are written "to-" "night" (trailing hyphen continues
 the word). The text sent to TTS is the words joined with spaces; "text" in
 the spec overrides it (keep the same words). "speech": a wav path sings a
 take another engine spoke instead of Kokoro (it must say the same words);
-whisper.cpp times its words ($WHISPER_MODEL, default the small.en model in
-~/.cache/dawg/whisper).
+its words are timed by aligning it to Kokoro saying them ("ref_voice").
 Prints JSON with per-note [begin, end] file fractions for sample slices.
 """
 import json
@@ -63,18 +62,57 @@ def tts(text, voice, speed):
     return np.concatenate(audio).astype(np.float64), toks
 
 
-def speech(path, text):
-    """A spoken take of `text` from a file, its words timed by whisper.cpp."""
-    model = os.environ.get("WHISPER_MODEL", os.path.expanduser("~/.cache/dawg/whisper/ggml-small.en.bin"))
+def mfcc(y, hop=0.01, n=13):
+    """Mean-normalized MFCCs at `hop` seconds, for aligning two takes."""
+    win, step = int(0.025 * FS), int(hop * FS)
+    y = np.pad(y, (0, max(0, win - len(y))))
+    frames = np.lib.stride_tricks.sliding_window_view(y, win)[::step] * np.hanning(win)
+    mag = np.abs(np.fft.rfft(frames, 1024)) ** 2
+    mel = lambda f: 2595 * np.log10(1 + f / 700)
+    edges = 700 * (10 ** (np.linspace(mel(60), mel(7600), 42) / 2595) - 1)
+    bins = np.fft.rfftfreq(1024, 1 / FS)
+    fb = np.array([np.clip(np.minimum((bins - lo) / (c - lo), (hi - bins) / (hi - c)), 0, None)
+                   for lo, c, hi in zip(edges, edges[1:], edges[2:])])
+    lm = np.log(mag @ fb.T + 1e-10)
+    k = np.arange(lm.shape[1])
+    dct = np.cos(np.pi / lm.shape[1] * (k + 0.5)[None, :] * np.arange(1, n + 1)[:, None])
+    c = lm @ dct.T
+    return c - c.mean(axis=0)
+
+
+def dtw_map(a, b):
+    """For each frame of `a`, the frame of `b` it aligns to (plain DTW)."""
+    d = np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
+    n, m = d.shape
+    acc = np.full((n + 1, m + 1), np.inf)
+    acc[0, 0] = 0
+    for i in range(1, n + 1):
+        row = acc[i]
+        for j in range(1, m + 1):
+            row[j] = d[i - 1, j - 1] + min(acc[i - 1, j - 1], acc[i - 1, j], row[j - 1])
+    i, j, path = n, m, {}
+    while i > 0 and j > 0:
+        path.setdefault(i - 1, j - 1)
+        step = np.argmin([acc[i - 1, j - 1], acc[i - 1, j], acc[i, j - 1]])
+        i, j = (i - 1, j - 1) if step == 0 else (i - 1, j) if step == 1 else (i, j - 1)
+    return np.array([path.get(k, 0) for k in range(n)])
+
+
+def speech(path, text, voice):
+    """A spoken take of `text` from a file, its words timed against Kokoro.
+
+    Kokoro says the same words with known word times; DTW over MFCCs maps
+    those times onto the take. (Whisper's word offsets on short clips drift
+    by whole seconds.)
+    """
     with tempfile.TemporaryDirectory() as tmp:
         subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", str(FS), f"{tmp}/a.wav"], check=True)
-        subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path, "-ac", "1", "-ar", "16000", f"{tmp}/w.wav"], check=True)
-        subprocess.run(["whisper-cli", "-m", model, "-f", f"{tmp}/w.wav", "-ml", "1", "-sow", "-oj", "-np",
-                        "--prompt", text, "-of", f"{tmp}/w"], check=True, capture_output=True)
         y, _ = sf.read(f"{tmp}/a.wav", dtype="float64")
-        words = json.loads(open(f"{tmp}/w.json").read())["transcription"]
-    toks = [(clean(w["text"]), w["offsets"]["from"] / 1000, w["offsets"]["to"] / 1000) for w in words]
-    return y, [t for t in toks if t[0]]
+    ref, rtoks = tts(text, voice, 1.0)
+    hop = 0.01
+    m = dtw_map(mfcc(ref, hop), mfcc(y, hop))
+    at = lambda t: m[min(len(m) - 1, int(t / hop))] * hop
+    return y, [(w, at(s), max(at(s) + hop, at(e))) for w, s, e in rtoks]
 
 
 def word_spans(words, notes, toks):
@@ -165,7 +203,7 @@ def main():
         "".join(notes[i]["syl"].rstrip("-") for i in w) for w in words
     )
     if spec.get("speech"):
-        y, toks = speech(spec["speech"], text)
+        y, toks = speech(spec["speech"], text, spec.get("ref_voice", "af_heart"))
     else:
         y, toks = tts(text, spec["voice"], spec.get("speed", 1.0))
     f0, t = pw.harvest(y, FS, f0_floor=70, f0_ceil=600, frame_period=FP)

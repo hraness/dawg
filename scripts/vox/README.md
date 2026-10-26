@@ -28,4 +28,4 @@ The extra pins avoid three install traps: pyworld still imports `pkg_resources` 
 
 ## Other speakers
 
-A `sing.py` spec can take `"speech": "take.wav"` instead of Kokoro: a recording of the line from another local TTS engine. whisper.cpp (`whisper-cli`, model from `$WHISPER_MODEL`, default `~/.cache/dawg/whisper/ggml-small.en.bin`) finds the word times, and WORLD retunes it exactly as it does Kokoro. Only synthetic voices described in text, or the user's own consented voice, go in. Never clone or imitate a real singer.
+A `sing.py` spec can take `"speech": "take.wav"` instead of Kokoro: a recording of the line from another local TTS engine. Kokoro says the same words (`"ref_voice"`, default `af_heart`), and DTW over MFCCs maps Kokoro's word times onto the take; whisper's word offsets on clips this short drifted by whole seconds. WORLD then retunes it exactly as it does Kokoro. Only synthetic voices described in text, or the user's own consented voice, go in. Never clone or imitate a real singer.
