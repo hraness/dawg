@@ -2,6 +2,12 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## Unreleased
+
+### Fixed
+
+- **`sing.py` speech mode now times a take's words by aligning it to Kokoro.** On clips of two or three seconds, whisper's word offsets drifted by whole seconds. Sometimes the last word ran to 30 seconds, and every earlier word fell to zero length. Kokoro now says the same words, and DTW over MFCCs maps its word times onto the take. Run against a second Kokoro voice, the aligned book misses words at almost the same rate as Kokoro singing directly (0.19 against 0.175).
+
 ## 0.37.0
 
 ### Changed
