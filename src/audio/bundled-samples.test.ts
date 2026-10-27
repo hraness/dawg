@@ -76,7 +76,7 @@ test("all eighteen packaged files match manifest, pitch metadata, guards and can
       "utf8",
     ),
   );
-  expect(BUNDLED_SAMPLES).toHaveLength(18);
+  expect(BUNDLED_SAMPLES).toHaveLength(19);
   for (const sample of BUNDLED_SAMPLES) {
     const file = await readBundledSample(sample.id);
     expect(manifest.samples[sample.id]).toEqual({
