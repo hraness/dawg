@@ -3,11 +3,12 @@
  * guitar jangles in 16ths over a four-floor kick, swung shaker and a
  * rolling analog bass; the verses sit low in the singer's chest (A3 to F#4)
  * and the chorus lifts an octave, a low second voice answering "night swim"
- * from under the mix. The break turns to marimba and a squelching acid
- * line, the bridge holds a D pedal under a borrowed C, and the last chorus
- * adds a choir and a whistled counter-melody before the guitar plays out
- * alone. Free-form: the song is written bar by bar on the composer, not on
- * the kit engine. No key change.
+ * from under the mix and two detuned doubles widening the hook. The break
+ * turns to marimba and a squelching acid line, the bridge climbs G, A and
+ * F#m over a D pedal, and the last chorus adds a choir and a whistled
+ * counter-melody before the guitar plays out alone. Everything stays in
+ * D major: no borrowed or chromatic notes. Free-form: the song is written
+ * bar by bar on the composer, not on the kit engine. No key change.
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
@@ -85,18 +86,20 @@ const Asus = c(45, 55, 57, 62, 64);
 const Bm7 = c(47, 54, 57, 59, 62);
 const G = c(43, 55, 59, 62, 66);
 const A = c(45, 52, 57, 61, 64);
-const Bm9 = c(47, 54, 57, 61, 62);
-const Gmaj7 = c(43, 54, 55, 59, 62);
+// The chorus is plain triads (no seconds) so the jangle's arpeggio stays
+// clean under the hook.
+const Bm = c(47, 54, 59, 62, 66);
+const Gadd = c(43, 55, 59, 62, 67);
 const DoverFs = c(42, 54, 57, 62, 66);
-// The bridge rides a D pedal; C is borrowed from D mixolydian, not a new key.
+// The bridge rides a D pedal under G, A and F#m, all inside D major.
 const GoverD = c(38, 55, 59, 62, 67);
 const AoverD = c(38, 57, 61, 64, 69);
-const CoverD = c(38, 55, 60, 64, 67);
+const FsmOverD = c(38, 54, 57, 61, 64);
 const D = c(38, 54, 57, 62, 66);
 const VERSE = [Gmaj9, Fsm7, Em9, Asus];
 const PRE = [Bm7, G, Bm7, A];
-const CHORUS = [Bm9, Gmaj7, DoverFs, A];
-const BRIDGE = [GoverD, AoverD, CoverD, D];
+const CHORUS = [Bm, Gadd, DoverFs, A];
+const BRIDGE = [GoverD, AoverD, FsmOverD, D];
 
 type Kind =
   "intro" | "verse" | "pre" | "chorus" | "break" | "bridge" | "final" | "outro";
@@ -133,7 +136,8 @@ const JANGLE = {
   chorus: ["4.3.2.3.4.3.5.4.", "4.3.2.3.5.4.3.2."],
   bridge: ["0...1...2...3...", "2...1...0......."],
 } as const;
-// Bass steps over the root (0 root, 1 fifth, 2 octave, 5 flat seventh).
+// Bass steps over the root (0 root, 1 fifth, 2 octave). No flat seventh:
+// over the G chords it would be an F natural.
 const BASS = {
   intro: "0.......0.....2.",
   verse: "0.....2.0..1..2.",
@@ -141,7 +145,7 @@ const BASS = {
   chorus: "0..20..20..2012.",
   bridge: "0-------0-----1.",
 } as const;
-const ACID = ["0.20.2.10.2.0.52", "0.2.02.10.215.2.", "02.0.2.1-0.2.5.2"];
+const ACID = ["0.20.2.10.2.0.12", "0.2.02.10.212.1.", "02.0.2.1-0.2.1.2"];
 
 // The whistle's counter-melody over the last pass: long notes above the
 // singer, on the chorus chords' upper tones.
@@ -166,7 +170,7 @@ export const nightSwim: DemoDefinition = {
     title: "Night Swim",
     style: "Hyperpop",
     description:
-      "Balearic trance-pop in D major at 122: a chorused guitar jangling in 16ths over a four-floor kick and rolling analog bass, a low, close verse that lifts an octave into the chorus, a low second voice answering from under the mix, a marimba and acid break, a bridge over a D pedal, and a last chorus with choir and whistled counter-melody.",
+      "Balearic trance-pop in D major at 122: a chorused guitar jangling in 16ths over a four-floor kick and rolling analog bass, a low, close verse that lifts an octave into the chorus, a low second voice answering from under the mix, detuned doubles on the chorus, a marimba and acid break, a bridge over a D pedal, and a last chorus with choir and whistled counter-melody.",
     tempoBpm: BPM,
     key: "D",
     bars: BARS,
@@ -176,15 +180,17 @@ export const nightSwim: DemoDefinition = {
       "verses sung low in the chest, A3 to F#4, the chorus an octave up",
       "lines sung on speech rhythm with pickups, rests and one melisma",
       "a low second voice answering the chorus hook",
+      "two doubles detuned a few cents either side widening the chorus",
       "a chorused clean guitar jangling 16ths, sparse under the words",
       "a marimba and acid-bass break between the choruses",
-      "a bridge over a D pedal with a borrowed C",
+      "a bridge climbing G, A and F#m over a D pedal, all in key",
       "choir and a whistled counter-melody in the last chorus",
     ],
     arrangement: SECTIONS.map(([name, , , bars]) => `${name} ${bars}`),
     mixNotes: [
       "the singer sits dry and close in the verses and opens up on the chorus throws",
       "the low echo voice sits under the lead, darker and wider",
+      "the chorus doubles sit hard left and right, 9 cents apart either side, through a chorus",
       "guitar and pads pump from the kick on orbit 2; the shaker stays loose",
       "the acid line's filter opens across the break and closes for the verse",
       "one beat of silence before the last chorus",
@@ -203,6 +209,37 @@ export const nightSwim: DemoDefinition = {
       delay: { beats: 0.75, feedback: 0.45, mix: 0.22, pingpong: true },
       reverb: { mix: 0.3, size: 0.8, fade: 3, lowpass: 5000 },
     });
+    // Chorus doubles: the same lines a few cents sharp and flat, panned wide
+    // and a hair late, through a chorus. They never duck the bed.
+    const double = (id: string, cents: number, pan: number, seed: number) =>
+      vocalTrack(BOOK, 0.42, {
+        id,
+        name: cents > 0 ? "Double high" : "Double low",
+        pan,
+        sampler: {
+          mode: "oneshot",
+          voices: Object.fromEntries(
+            Object.entries(vox.sampler!.voices).map(([k, v]) => [
+              k,
+              { ...v, speed: 2 ** (cents / 1200) },
+            ]),
+          ),
+        },
+        filter: { type: "hpf", cutoff: 260, resonance: 0 },
+        fx: {
+          compressor: {
+            threshold: -24,
+            ratio: 4,
+            attack: 0.004,
+            release: 0.1,
+            makeup: 8,
+          },
+          chorus: { rate: 0.9 + seed * 0.1, depth: 0.5, mix: 0.5 },
+        },
+        reverb: { mix: 0.22, size: 0.7, fade: 2.4, lowpass: 9000 },
+      });
+    const dblHi = double("dblhi", 9, -0.55, 1);
+    const dblLo = double("dbllo", -9, 0.55, 2);
     for (const track of [
       sounds.kick(BPM, "syn909", 0.8, 0.26),
       sounds.snare(0.4, "syn909"),
@@ -248,6 +285,8 @@ export const nightSwim: DemoDefinition = {
         reverb: { mix: 0.22, size: 0.7, fade: 2.4 },
       }),
       vox,
+      dblHi,
+      dblLo,
       echo,
       chopTrack(BOOK, 1, { humanize: { timing: 5, velocity: 7, seed: 53 } }),
       grainTrack(BOOK, 0.45),
@@ -258,7 +297,14 @@ export const nightSwim: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
-      const track = id === "echo" ? echo : vox;
+      const track =
+        id === "echo"
+          ? echo
+          : id === "dblhi"
+            ? dblHi
+            : id === "dbllo"
+              ? dblLo
+              : vox;
       s.note(
         id,
         bar,
@@ -426,10 +472,13 @@ export const nightSwim: DemoDefinition = {
       [64, "ch2"],
       [72, "ch4"],
     ] as const) {
-      sing("vox", "ch1", bar);
-      sing("vox", "ch2", bar + 2);
-      sing("vox", "ch3", bar + 4);
-      sing("vox", last, bar + 6);
+      const lines = ["ch1", "ch2", "ch3", last] as const;
+      lines.forEach((part, i) => {
+        sing("vox", part, bar + i * 2);
+        // The doubles land 12 and 20 ms late so they thicken, not flam.
+        sing("dblhi", part, bar + i * 2, 0.025, 0.8);
+        sing("dbllo", part, bar + i * 2, 0.04, 0.8);
+      });
     }
     for (const bar of [27, 55, 71]) sing("echo", "echo", bar, 2, 0.85);
     sing("echo", "echo", 80, 1, 0.9);
