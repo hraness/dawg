@@ -21,7 +21,6 @@ sections without drums, and the voice as an instrument.
 - A vocoder sings the recorded words back as chords under them
 - An 808-style gliding sub; a growl saw doubles it in the drops
 - One-beat dropouts, a tape-stop dive, a kickless breakdown
-- A fugue break: one subject passed from organ to pluck to bass to chops
 
 ## Ask
 
