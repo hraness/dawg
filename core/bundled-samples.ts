@@ -355,7 +355,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
         "A bright British voice singing Candy Fault's whole topline (E major, 156) note for note, the final chorus a half step up in F, with single-syllable chops on G#5 for the glitch-break stutters.",
       tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "book"],
       root: 80,
-      seconds: 75.576792,
+      seconds: 75.57679166666667,
       bpm: 156,
       sha256:
         "c9b79428c5ca09bcc57391180707e7f19efb72d5f6f394a0660846909b864281",

@@ -6,7 +6,8 @@
  *   the song hasn't played yet
  * - voice-leading: how far the bed moves between chords (the demos: about
  *   one semitone per voice)
- * - clashes: held sung notes a semitone against the bed under them
+ * - clashes: held sung notes a semitone against the bed under them (synth
+ *   singers only; a sampled book carries its pitch in the audio)
  * - expression: scoops, slides, dives and vibrato per sung note
  * - an intro of four bars or more, sections of eight bars or fewer, and
  *   every repeated section kind developed
@@ -88,9 +89,18 @@ export function craftOf(data: TrackScoreData): Craft {
     a.forEach((p, k) => (moves += Math.abs(z[k]! - p)));
     voices += a.length;
   }
-  // Held words against the bed: a semitone (or a minor 9th) is a clash.
+  // Held words against the bed: a semitone (or a minor 9th) is a clash. A
+  // sampled vocal book's pitches name its lines, not the notes it sings.
+  const books = new Set(
+    (data.tracks ?? [])
+      .filter((t) => t.instrument === "sampler")
+      .map((t) => t.id),
+  );
   const held = score.notes.filter(
-    (n) => SUNG.has(n.trackId) && n.durationTicks >= (tpb * 3) / 4,
+    (n) =>
+      SUNG.has(n.trackId) &&
+      !books.has(n.trackId) &&
+      n.durationTicks >= (tpb * 3) / 4,
   );
   const harmony = score.notes.filter((n) => HARMONY.has(n.trackId));
   let clashing = 0;
