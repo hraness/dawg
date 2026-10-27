@@ -33,6 +33,8 @@ export function transportMapFor(score: TimeScore): TransportMap | undefined {
 export class TransportClock {
   private startedAtMs: number | undefined;
   private pausedBeat = 0;
+  /** Playing, held at `pausedBeat` until the audio is heard (`cue`). */
+  private holding = false;
   private bpm: number;
   private map: TransportMap | undefined;
 
@@ -40,18 +42,34 @@ export class TransportClock {
     this.bpm = bpm;
   }
 
+  /**
+   * Start moving from the paused (or cued) beat as of `nowMs`. Releasing a
+   * cue passes the time its first frame is heard, which may be a device
+   * latency in the future.
+   */
   play(nowMs = performance.now()): void {
+    this.holding = false;
     if (this.startedAtMs === undefined)
       this.startedAtMs = nowMs - this.beatToMs(this.pausedBeat);
+  }
+
+  /**
+   * Play, but hold the beat until `play` releases it: the audio engine is
+   * still rendering its first windows, and a playhead that moved now would
+   * run ahead of the sound by however long that takes.
+   */
+  cue(): void {
+    if (this.startedAtMs === undefined) this.holding = true;
   }
 
   pause(nowMs = performance.now()): void {
     this.pausedBeat = this.beatAt(nowMs);
     this.startedAtMs = undefined;
+    this.holding = false;
   }
 
   toggle(nowMs = performance.now()): void {
-    if (this.startedAtMs === undefined) this.play(nowMs);
+    if (!this.playing) this.play(nowMs);
     else this.pause(nowMs);
   }
 
@@ -61,8 +79,14 @@ export class TransportClock {
     return Math.max(0, (nowMs - this.startedAtMs) / this.beatToMs(1));
   }
 
+  /** True while running or cued. */
   get playing(): boolean {
-    return this.startedAtMs !== undefined;
+    return this.startedAtMs !== undefined || this.holding;
+  }
+
+  /** True while cued: playing, held until the audio is heard. */
+  get cued(): boolean {
+    return this.holding;
   }
 
   setTempo(bpm: number, nowMs = performance.now()): void {
@@ -103,6 +127,12 @@ export class TransportClock {
   ): void {
     if (!Number.isFinite(beat) || beat < 0) return;
     if (!Number.isFinite(eventAtMs) || !Number.isFinite(nowWallMs)) return;
+    if (playing && this.holding) {
+      // A seek while cued moves the hold; nothing is sounding yet.
+      this.pausedBeat = beat;
+      return;
+    }
+    this.holding = false;
     const elapsedMs = playing ? Math.max(0, nowWallMs - eventAtMs) : 0;
     const currentBeat = this.map
       ? this.msToBeat(this.beatToMs(beat) + elapsedMs)

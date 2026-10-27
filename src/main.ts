@@ -966,7 +966,11 @@ if (!demo) {
 if (!draftTrack) await ensureFocusedTrack();
 
 const clock = new TransportClock(score.tempoBpm);
+/** Bumped by each start, so a superseded one never releases the clock. */
+let transportCue = 0;
 let audio = port.player;
+// Render the start window now, so the first play is not a cold start.
+void audio.prewarm?.(score, 0);
 let audioInfoCache: AudioBackendInfo | undefined;
 let audioMenuCache: { at: number; state: MenuAudioDevices } | undefined;
 /** Session and today's spend, from the usage each response reports. */
@@ -2144,7 +2148,7 @@ async function runInteractive(): Promise<void> {
           stageCapture.committed = scoreFromJSON(record.composition);
         else score = scoreFromJSON(record.composition);
         clock.follow(score);
-        if (clock.playing) void audio.play(score);
+        soundScore();
         // Connected windows follow dawgd's transport frames instead.
         const replay =
           port.mode === "file" ? latest.events.slice(previousRevision) : [];
@@ -4178,7 +4182,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
         next.toJSON(),
       );
       score = next;
-      if (clock.playing) void audio.play(score);
+      soundScore();
       return `added ${note.id}`;
     } catch (error) {
       if (!(error instanceof SessionConflictError)) throw error;
@@ -5517,6 +5521,7 @@ async function switchSession(sessionId: string): Promise<void> {
   record = port.mode === "daemon" ? await port.load() : next.record;
   score = scoreFromJSON(record.composition);
   clock.follow(score);
+  soundScore();
   const attached = await attachTrack(port, score, undefined);
   requestedTrack = attached.trackId;
   draftTrack = attached.draft;
@@ -6956,6 +6961,7 @@ async function revealLoadedDemo(): Promise<void> {
       await navigate("focus", () => port.focus(first.id));
     }
     await navigate("seek", () => seekTransport(0));
+    soundScore();
     menu.close();
     tui.closePicker();
     await navigate("arrangement", () => enterTape());
@@ -7463,7 +7469,7 @@ async function commitScore(
     score = next;
   }
   if (retimed || score !== next) clock.follow(score);
-  if (clock.playing) void audio.play(score);
+  soundScore();
   projectSync?.scoreChanged(score);
   reportSampleProblems(score);
   void updateCredits(score);
@@ -7569,7 +7575,7 @@ function syncHost(): SyncHost {
       );
       score = scoreFromJSON(record.composition);
       clock.follow(score);
-      if (clock.playing) void audio.play(score);
+      soundScore();
       reportSampleProblems(score);
       void baseRevision;
       // A plain save may still be a coding agent's edit whose `dawg check`
@@ -7705,7 +7711,7 @@ async function stepHistory(
       }
       draftTrack = !first;
     }
-    if (clock.playing) void audio.play(score);
+    soundScore();
     return ok(
       historyReceipt(
         direction,
@@ -7793,19 +7799,42 @@ async function setTransport(
     await port.transport(action);
     return;
   }
-  if (action === "play") {
-    clock.play();
+  if (action === "play" && clock.playing) {
     await audio.play(score, clock.beatAt());
-  } else if (action === "pause") {
-    clock.pause();
-    audio.stop();
-  } else if (clock.playing) {
-    clock.pause();
-    audio.stop();
+  } else if (action === "play" || (action === "toggle" && !clock.playing)) {
+    await startTransport();
   } else {
-    clock.play();
-    await audio.play(score, clock.beatAt());
+    clock.pause();
+    audio.stop();
   }
+}
+
+/**
+ * Start the transport with its sound: the playhead holds (cued) while the
+ * engine renders its first windows and moves from when the first frame is
+ * heard, so it never runs ahead of the audio. Edits meanwhile still reach
+ * the engine (`clock.playing` is true) and join the start.
+ */
+async function startTransport(): Promise<void> {
+  const cue = ++transportCue;
+  clock.cue();
+  let heardMs: number | undefined;
+  try {
+    if (audio.cue) heardMs = await audio.cue(score, clock.beatAt());
+    else await audio.play(score, clock.beatAt());
+  } finally {
+    if (cue === transportCue && clock.cued)
+      clock.play(heardMs ?? performance.now());
+  }
+}
+
+/**
+ * Keep the engine on the latest score: swap it into a playing loop or, while
+ * stopped, prewarm the window a play from the playhead renders first.
+ */
+function soundScore(): void {
+  if (clock.playing) void audio.play(score);
+  else void audio.prewarm?.(score, clock.beatAt());
 }
 
 /** Move the playhead to transport `beat`, playing or not (section jump). */
@@ -8235,7 +8264,7 @@ function agentHost(
       )
         clock.follow(score);
       if (change.toolName === "load_demo") await revealLoadedDemo();
-      else if (clock.playing) void audio.play(score);
+      else soundScore();
       return { revision: record.revision };
     },
     async transport(action) {

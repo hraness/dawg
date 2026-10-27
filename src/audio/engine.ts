@@ -378,6 +378,11 @@ const MONITOR_AHEAD_SECONDS = 48;
 const MONITOR_HANDOFF_SECONDS = 6;
 /** The first window a start renders: short, so sound comes in quickly. */
 const MONITOR_START_SECONDS = 2;
+/** The first window's shape (a prewarm renders the same one). */
+const START_JOB = Object.freeze({
+  quick: true,
+  seconds: MONITOR_START_SECONDS,
+});
 const MONITOR_CATCH_UP_SECONDS = 3;
 // Runway a start waits for past the playhead: about four seconds per unit of
 // render cost, so slow machines buffer a little longer instead of cutting out.
@@ -495,6 +500,12 @@ type PlayRequest = {
   beat: number | undefined;
   /** Monotonic ms when `beat` was observed. */
   atMs: number;
+  /**
+   * The transport holds at `beat` until this start is heard (`cue`), so
+   * the start renders and plays from `beat` itself, not where a running
+   * playhead would be by the time the first window lands.
+   */
+  cued: boolean;
   generation: number;
   waiters: { resolve: () => void; reject: (error: Error) => void }[];
 };
@@ -582,6 +593,13 @@ export class AudioEngine {
   private generation = 0;
   private spawns = 0;
   private queued: PlayRequest | undefined;
+  /** The request `drain` is rendering or applying. */
+  private inflight: PlayRequest | undefined;
+  /** Monotonic ms the latest cued start's beat is heard at (see `cue`). */
+  private cueHeardMs: number | undefined;
+  /** The prewarm rendering, and the newest one waiting behind it. */
+  private warming: Promise<void> | undefined;
+  private warmNext: { score: TrackScore; beat: number } | undefined;
   private draining = false;
   private lastRenderMs = 0;
   /** The loop last swapped in, for `level` (measured on demand, once). */
@@ -895,10 +913,62 @@ export class AudioEngine {
   public play(score: TrackScore, beat?: number): Promise<void> {
     if (this.info.backend === "none") return Promise.resolve();
     if (this.fallback) return this.fallback.play(score, beat);
+    return this.request(score, beat, false);
+  }
+
+  /**
+   * Start playback at `beat` while the caller's transport holds there:
+   * resolves with the monotonic ms that `beat` is heard at, so the
+   * playhead can start with the sound instead of running ahead of it
+   * while the first windows render. Undefined when the start was
+   * superseded (a stop) or there is no stream to time (no audio, afplay);
+   * the caller then starts its clock as it resolves.
+   */
+  public async cue(
+    score: TrackScore,
+    beat: number,
+  ): Promise<number | undefined> {
+    if (this.info.backend === "none") return undefined;
+    if (this.fallback) {
+      await this.fallback.play(score, beat);
+      return undefined;
+    }
+    const generation = this.generation;
+    this.cueHeardMs = undefined;
+    await this.request(score, beat, true);
+    // An edit before the sound started superseded this request and carries
+    // the hold on (`request`): wait for the start it makes instead.
+    while (this.cueHeardMs === undefined && generation === this.generation) {
+      const carrier = this.queued?.cued
+        ? this.queued
+        : this.inflight?.cued
+          ? this.inflight
+          : undefined;
+      if (!carrier) break;
+      await new Promise<void>((resolve, reject) =>
+        carrier.waiters.push({ resolve, reject }),
+      );
+    }
+    return generation === this.generation ? this.cueHeardMs : undefined;
+  }
+
+  private request(
+    score: TrackScore,
+    beat: number | undefined,
+    cued: boolean,
+  ): Promise<void> {
     this.monitorWanted = true;
     const revision = ++this.renderRevision;
+    // A play supersedes prewarms not yet sent; one in flight runs on.
+    this.warmNext = undefined;
     this.renderer.cancelPending();
     this.cancelStart();
+    // An edit during a start (no loop playing yet) keeps that start's
+    // position and hold; without a loop there is no cursor to read it from.
+    const prior = this.queued ?? this.inflight;
+    const starting =
+      !this.loop && prior?.generation === this.generation ? prior : undefined;
+    const inherit = beat === undefined && starting?.beat !== undefined;
     return new Promise<void>((resolve, reject) => {
       const waiters = this.queued?.waiters ?? [];
       waiters.push({ resolve, reject });
@@ -906,8 +976,9 @@ export class AudioEngine {
         revision,
         seekRevision: this.seekRevision,
         score,
-        beat,
-        atMs: this.now(),
+        beat: inherit ? starting.beat : beat,
+        atMs: inherit ? starting.atMs : this.now(),
+        cued: cued || starting?.cued === true,
         generation: this.generation,
         waiters,
       };
@@ -922,32 +993,21 @@ export class AudioEngine {
       while (this.queued) {
         const request = this.queued;
         this.queued = undefined;
+        this.inflight = request;
         if (request.generation !== this.generation) {
           for (const waiter of request.waiters) waiter.resolve();
           continue;
         }
         try {
-          const timeline = playbackTime(request.score);
-          const map = transportMapFor(timeline);
-          const beat =
+          const { streamed, frame } = this.startPlan(
+            request.score,
             request.beat ??
-            (this.loop ? beatOfFrame(this.loop, this.cursor) : 0);
-          const seconds = map
-            ? map.seconds(
-                ((beat % map.loopBeats) + map.loopBeats) % map.loopBeats,
-              )
-            : (beat * 60) / timeline.tempoBpm;
-          const streamed =
-            this.progressive &&
-            this.info.streaming &&
-            loopSecondsOf(timeline) > 45;
+              (this.loop ? beatOfFrame(this.loop, this.cursor) : 0),
+          );
           let render: LoopRender;
           let next: Loop;
           if (streamed) {
-            ({ render, next } = await this.renderStart(
-              request,
-              Math.max(0, Math.round(seconds * this.sampleRate)),
-            ));
+            ({ render, next } = await this.renderStart(request, frame));
           } else {
             render = await this.renderer.render(request.score);
             next = this.toLoop(render, request.score);
@@ -982,8 +1042,67 @@ export class AudioEngine {
       }
     } finally {
       this.draining = false;
+      this.inflight = undefined;
       this.pendingLoop = undefined;
       this.prefetchMonitor();
+    }
+  }
+
+  /** Whether a start streams windows, and the frame `beat` falls on. */
+  private startPlan(
+    score: TrackScore,
+    beat: number,
+  ): { streamed: boolean; frame: number } {
+    const timeline = playbackTime(score);
+    const map = transportMapFor(timeline);
+    const seconds = map
+      ? map.seconds(((beat % map.loopBeats) + map.loopBeats) % map.loopBeats)
+      : (beat * 60) / timeline.tempoBpm;
+    return {
+      streamed:
+        this.progressive && this.info.streaming && loopSecondsOf(timeline) > 45,
+      frame: Math.max(0, Math.round(seconds * this.sampleRate)),
+    };
+  }
+
+  /**
+   * Render what a cued start at `beat` renders first, ahead of the play:
+   * a streamed song's start window (a short song's whole loop) on the
+   * render worker, which spins the worker up, decodes the samples and
+   * shifts the vocal books that window plays. The play then reads the
+   * worker's caches instead of paying that cold work while the transport
+   * waits. Best effort, and only while nothing plays or starts; calls
+   * while one renders coalesce into one more for the newest score.
+   */
+  public prewarm(score: TrackScore, beat = 0): Promise<void> {
+    if (this.info.backend === "none" || this.fallback) return Promise.resolve();
+    this.warmNext = { score, beat };
+    this.warming ??= (async () => {
+      while (this.warmNext) {
+        const next = this.warmNext;
+        this.warmNext = undefined;
+        await this.warmStart(next.score, next.beat);
+      }
+    })().finally(() => {
+      this.warming = undefined;
+    });
+    return this.warming;
+  }
+
+  private async warmStart(score: TrackScore, beat: number): Promise<void> {
+    if (this.loop || this.draining || this.queued) return;
+    const { streamed, frame } = this.startPlan(score, beat);
+    try {
+      if (!streamed) await this.renderer.warm(score);
+      else {
+        const frames = Math.max(
+          1,
+          Math.round(loopSecondsOf(playbackTime(score)) * this.sampleRate),
+        );
+        await this.renderer.warm(score, wrapFrame(frame, frames), START_JOB);
+      }
+    } catch {
+      // The play renders the window itself.
     }
   }
 
@@ -994,24 +1113,30 @@ export class AudioEngine {
       request.seekRevision !== this.seekRevision && this.seekAnchor
         ? this.seekAnchor
         : request;
-    return anchor.beat === undefined
-      ? undefined
-      : beatAfter(
-          loop,
-          anchor.beat,
-          ((this.now() - anchor.atMs) * this.sampleRate) / 1000,
-        );
+    if (anchor.beat === undefined) return undefined;
+    // A cued transport holds until the start is heard: no time passes.
+    if (request.cued) return anchor.beat;
+    return beatAfter(
+      loop,
+      anchor.beat,
+      ((this.now() - anchor.atMs) * this.sampleRate) / 1000,
+    );
   }
 
   private async apply(loop: Loop, request: PlayRequest): Promise<void> {
     if (this.child) {
       this.handOff(loop, request);
+      // The swap lands on the next frame written, which sounds after the
+      // queue already ahead of it: the cued beat is heard about now.
+      if (request.cued) this.cueHeardMs = this.now();
       return;
     }
     if (this.starting) {
       await this.starting;
-      if (this.child && request.revision === this.renderRevision)
+      if (this.child && request.revision === this.renderRevision) {
         this.handOff(loop, request);
+        if (request.cued) this.cueHeardMs = this.now();
+      }
       return;
     }
     this.starting = this.start(loop, 0, request.revision, request).finally(
@@ -1345,15 +1470,20 @@ export class AudioEngine {
     const landing = this.child
       ? this.projectedCursor(next, request)
       : wrapFrame(frame, frames);
-    const lead = Math.max(
-      this.startLatency * 0.8,
-      this.renderCost * (MONITOR_START_SECONDS + QUICK_PREROLL_SECONDS + 0.25),
-    );
+    // A running playhead moves on while the first window renders, so that
+    // window starts where it will be; a cued one waits where it is.
+    const lead = request.cued
+      ? 0
+      : Math.max(
+          this.startLatency * 0.8,
+          this.renderCost *
+            (MONITOR_START_SECONDS + QUICK_PREROLL_SECONDS + 0.25),
+        );
     const head = wrapFrame(
       landing + Math.round(lead * this.sampleRate),
       frames,
     );
-    const job = { quick: true, seconds: MONITOR_START_SECONDS };
+    const job = START_JOB;
     const fill: MonitorFill = {
       stream,
       start: head,
@@ -1599,7 +1729,8 @@ export class AudioEngine {
           loop: next.loop,
           cursor: this.projectedCursor(next.loop, next.request),
           horizon: MONITOR_AHEAD_SECONDS,
-          catchUp: true,
+          // A cued start's playhead waits for its runway: no gap is lost.
+          catchUp: !next.request.cued,
         });
     // A window nobody will hear soon (an old version, a stopped song, a
     // spot the playhead jumped away from) would hold a worker for seconds.
@@ -1933,6 +2064,8 @@ export class AudioEngine {
       this.onPlayerExit(generation);
     });
     this.pump();
+    // After the first write, which anchors the native sink's frame clock.
+    if (request?.cued) this.cueHeardMs = this.frameMs(0);
     if (this.useTimer) this.timer = setInterval(() => this.pump(), this.tickMs);
   }
 

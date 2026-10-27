@@ -116,6 +116,8 @@ export class DawgDaemon {
   private score!: TrackScore;
   private digest = "";
   private seq = 0;
+  /** Bumped by each start, so a superseded one never releases the clock. */
+  private transportCue = 0;
   private server: Server | undefined;
   private releaseLock: (() => Promise<void>) | undefined;
   private queue: Promise<unknown> = Promise.resolve();
@@ -194,6 +196,8 @@ export class DawgDaemon {
     try {
       await this.reload();
       this.clock.follow(this.score);
+      // Render the start window now, so the first play is not a cold start.
+      void this.audio.prewarm(this.score, 0);
       // We hold the daemon lock, so any socket file left here belongs to a
       // crashed daemon and is safe to reclaim.
       await rm(this.socketPath, { force: true });
@@ -698,6 +702,7 @@ export class DawgDaemon {
     // without restarting the player.
     if (this.clock.playing)
       void this.audio.play(this.score, this.clock.beatAt()).catch(() => {});
+    else void this.audio.prewarm(this.score, this.clock.beatAt());
   }
 
   private transport(
@@ -710,8 +715,7 @@ export class DawgDaemon {
     const pause =
       action === "pause" || (action === "toggle" && this.clock.playing);
     if (play && !this.clock.playing) {
-      this.clock.play();
-      void this.audio.play(this.score, this.clock.beatAt()).catch(() => {});
+      void this.startTransport();
     } else if (pause && this.clock.playing) {
       this.clock.pause();
       this.audio.stop();
@@ -726,11 +730,28 @@ export class DawgDaemon {
     this.broadcastTransport();
   }
 
+  /**
+   * Start the transport with its sound: the clock holds (cued) while the
+   * engine renders its first windows and runs from when the first frame is
+   * heard. Windows see it start then, not while the audio is still silent.
+   */
+  private async startTransport(): Promise<void> {
+    const cue = ++this.transportCue;
+    this.clock.cue();
+    const heardMs = await this.audio
+      .cue(this.score, this.clock.beatAt())
+      .catch(() => undefined);
+    if (cue !== this.transportCue || !this.clock.cued) return;
+    this.clock.play(heardMs ?? performance.now());
+    this.broadcastTransport();
+  }
+
   private transportState(): TransportState {
     const atMs = monotonicEpochMs();
     return {
       seq: this.seq,
-      playing: this.clock.playing,
+      // A cued transport is silent and still: windows show it stopped.
+      playing: this.clock.playing && !this.clock.cued,
       beat: this.clock.beatAt(),
       bpm: this.score.tempoBpm,
       atMs,
