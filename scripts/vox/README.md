@@ -1,6 +1,6 @@
 # Sung hook generator
 
-`songs.py` writes the four studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
+`songs.py` writes the seven studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`, `night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
 
 1. [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) speaks the original lyric with word timestamps.
 2. The WORLD vocoder (pyworld) analyses it and splits each word into syllables at energy valleys.
@@ -21,6 +21,16 @@ uv pip install --python .venv/bin/python \
 The first run downloads the Kokoro weights and voice packs from Hugging Face. Torch inference is not bit-exact across machines, so a regenerated file will not match the checked-in hashes. The hash-pinned WAVs in `assets/samples/studio/` are the canonical distribution. `phrases.py` prints, and saves as `slices.json`, the slice table that `core/bundled-samples.ts` reproduces with `hookSlices()`. `songs.py <outdir> [id...]` renders each line, syllable and held vowel separately at its song's tempo, joins them and saves the named slices as `slices.json`; `core/bundled-samples.ts` lists those slices verbatim.
 
 The extra pins avoid three install traps: pyworld still imports `pkg_resources` (gone in setuptools 81), misaki cannot download its spaCy model into a uv venv, and preshed 3.0.10+ overflows in spaCy's tokenizer on macOS arm64.
+
+## Sounding human
+
+The later books (`night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`) are written to speech rhythm rather than an even grid: small words short, the stressed last vowel held, pickups before the bar, rests between lines, and verses sung low. Three opt-in tools help:
+
+- **`human`** (0–1, per song or per spec) adds a singer's timing drift, flat landings that settle onto the note, and a slow pitch wander. 0.25 is the books' setting.
+- **Per-note `dyn` and `air`**: `dyn` (0–1.5) sets loudness, and soft notes also get breathier; `air` (0–1) adds breath. A `"~"` syllable is melisma: the previous vowel moves to a new pitch, and its ending consonant waits for the last `"~"`.
+- **`cadence.py "<syl- la- bles>" <bpm> [beats] [voice] [grid]`** has Kokoro say the line and prints onsets and lengths for `line()`, scaled to fill `beats` and snapped to `grid`. It is a speech shape to start from, not a melody.
+
+A part can take a fourth item, a dict that overrides the song's settings for that part, such as `{"voice": "bm_lewis"}` for a low answer or chant.
 
 ## Chart books
 

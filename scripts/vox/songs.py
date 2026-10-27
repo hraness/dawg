@@ -7,6 +7,8 @@ consonants, then the parts are laid end to end in one file. Verse and pre
 lines are one bar, chorus lines two. The chop bank is single syllables on one
 pitch (the sample root) so a keyed sampler can re-pitch them into riffs, and
 "hold" is a sustained vowel for loops and grain clouds.
+A part may carry a fourth element, a dict merged into its sing.py spec
+(e.g. {"voice": "am_michael", "formant": -1}) for duets and low answers.
 Prints the slice table (file fractions) for core/bundled-samples.ts.
 """
 import json
@@ -151,6 +153,88 @@ SONGS = {
             ("hold", 4, [N("ah", 0, 3.8, 68, vib=0.15)]),
         ],
     ),
+    # Night Swim, D major at 122, sung low (A3-D5) on speech rhythms from
+    # cadence.py. Verse Gmaj9-F#m7-Em9-A, chorus Bm9-Gmaj7-D/F#-A. Parts are
+    # their own lengths; the demo places each line, pickups included.
+    "night-swim-vox": dict(
+        title="Night Swim Vocal", voice="af_bella", bpm=122, root=62, human=0.25,
+        parts=[
+            ("v1", 4, line("shoes in my hand at the gate".split(), [0, 0.5, 0.75, 1, 1.5, 1.75, 2], [62, 62, 62, 64, 62, 62, 59], [0.45, 0.2, 0.2, 0.45, 0.2, 0.2, 1.3], fall=0.5)),
+            ("v2", 4, line("light on the wa- ter still warm".split(), [0, 0.5, 0.75, 1, 1.25, 1.75, 2.25], [64, 64, 62, 62, 59, 62, 64], [0.45, 0.2, 0.2, 0.2, 0.45, 0.45, 1.4])),
+            ("v3", 4, line("you said the lock nev- er worked".split(), [0, 0.25, 0.5, 1, 1.5, 1.75, 2.25], [62, 62, 62, 66, 64, 62, 62], [0.2, 0.2, 0.45, 0.45, 0.2, 0.45, 1.3], fall=0.5)),
+            ("v4", 4, line("so we climbed in an- y- way".split(), [0, 0.25, 0.5, 1, 1.25, 1.5, 2], [59, 59, 62, 62, 61, 59, 57], [0.2, 0.2, 0.45, 0.2, 0.2, 0.45, 1.6], fall=1.0)),
+            ("v5", 4, line("phone on the edge of the deck".split(), [0, 0.5, 0.75, 1, 1.5, 1.75, 2], [64, 64, 64, 66, 64, 62, 62], [0.45, 0.2, 0.2, 0.45, 0.2, 0.2, 1.3])),
+            ("v6", 4, line("glow- ing a- gain let it go".split(), [0, 0.5, 0.75, 1, 2, 2.5, 2.75], [66, 64, 62, 64, 62, 64, 59], [0.45, 0.2, 0.2, 0.7, 0.45, 0.2, 1.2], fall=0.5)),
+            ("v7", 4, line("un- der the sur- face it's qui- et".split(), [0, 0.5, 0.75, 1, 1.5, 2, 2.5, 3], [62, 62, 62, 64, 66, 64, 66, 64], [0.45, 0.2, 0.2, 0.45, 0.45, 0.45, 0.45, 0.9])),
+            ("v8", 4, line("on- ly the sound of your heart".split(), [0, 0.25, 0.5, 0.75, 1.5, 1.75, 2], [62, 64, 66, 69, 66, 64, 64], [0.2, 0.2, 0.2, 0.7, 0.2, 0.2, 1.4], vib=0.12)),
+            ("pre1", 4, line("hold your breath count to three".split(), [0, 0.5, 0.75, 1, 1.5, 1.75], [66, 66, 66, 69, 66, 69], [0.45, 0.2, 0.2, 0.45, 0.2, 1.6])),
+            ("pre2", 4, line("don't come up don't come up yet".split(), [0, 0.5, 1, 1.5, 2, 2.5, 3], [69, 69, 71, 69, 69, 71, 73], [0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 1.8], scoop=0.5)),
+            ("ch1", 8, line("stay un- der with me".split(), [0, 1.25, 1.75, 2.25, 3.25], [66, 69, 71, 69, 67], [1.2, 0.45, 0.45, 0.95, 3.2], vib=0.15)),
+            ("ch2", 8, line("night swim night swim".split(), [0, 0.75, 1.75, 2.5], [69, 66, 69, 73], [0.7, 0.95, 0.7, 3.4], vib=0.15)),
+            ("ch3", 8, line("the whole sky be- low us".split(), [0, 0.25, 1.25, 2.5, 3, 3.75], [64, 66, 71, 69, 66, 62], [0.2, 0.95, 1.2, 0.45, 0.7, 3.0], fall=0.5)),
+            ("ch4", 8, line("night swim night swim".split(), [0, 0.75, 1.75, 2.5], [69, 66, 69, 74], [0.7, 0.95, 0.7, 0.9])
+                + [N("~", 3.5, 0.5, 73), N("~", 4, 0.5, 71), N("~", 4.5, 2.5, 69, vib=0.2)]),
+            ("br", 8, line("I don't want to go home yet".split(), [0, 0.25, 0.75, 1.25, 1.5, 2, 3.25], [57, 59, 62, 62, 61, 59, 57], [0.2, 0.45, 0.45, 0.2, 0.45, 1.2, 2.4], fall=1.0)),
+            ("echo", 4, line("night swim".split(), [0, 0.75], [57, 54], [0.7, 2.2], fall=0.5), {"voice": "bm_lewis"}),
+            *chops(62, ["swim", "night", "stay", "oh", "ah", "mm"]),
+            ("hold", 4, [N("ooh", 0, 3.8, 62, vib=0.12)]),
+        ],
+    ),
+    # Kite Season, E major at 146 sung half-time and low (G#3-A4) in a dry
+    # alto. Verse E-C#m-F#m-G#m, chorus A-E/G#-C#m-B, the bridge C#m7-Amaj7-
+    # F#m7-Bsus, all in key. Lines are two bars, written to the speech rhythm by hand:
+    # pickups, long vowels on the stressed words, rests between phrases.
+    "kite-season-vox": dict(
+        title="Kite Season Vox", voice="af_heart", bpm=146, root=64, human=0.25,
+        parts=[
+            ("v1", 8, line("string wound tight on a card- board spool".split(), [0, 0.5, 1, 2, 2.5, 2.75, 3.5, 4.5], [59, 59, 61, 63, 61, 59, 61, 56], [0.45, 0.45, 0.9, 0.45, 0.25, 0.7, 0.9, 2.2], fall=0.5)),
+            ("v2", 8, line("your hands are cold so I hold the line".split(), [0, 0.25, 1, 1.5, 2.5, 3, 3.5, 4.5, 5], [59, 61, 59, 56, 59, 61, 63, 61, 59], [0.25, 0.7, 0.45, 0.9, 0.45, 0.45, 0.9, 0.45, 2.0])),
+            ("v3", 8, line("the sea keeps fold- ing its white sheets".split(), [0, 0.5, 1.5, 2, 2.5, 3, 3.5, 4.5], [61, 63, 64, 63, 61, 59, 61, 63], [0.4, 0.9, 0.45, 0.45, 0.45, 0.45, 0.9, 2.2], vib=0.12)),
+            ("v4", 8, line("and we lean back in- to the wind".split(), [0, 0.25, 0.5, 1.5, 2.5, 3, 3.25, 4], [56, 57, 59, 61, 59, 57, 56, 56], [0.25, 0.25, 0.9, 0.9, 0.45, 0.25, 0.6, 2.6], fall=1.0)),
+            ("v5", 8, line("sand in the pa- ges of your book".split(), [0, 1, 1.25, 1.5, 2, 2.5, 2.75, 3.5], [64, 63, 61, 63, 61, 59, 61, 59], [0.9, 0.25, 0.25, 0.45, 0.45, 0.25, 0.6, 2.5])),
+            ("v6", 8, line("a dog runs cir- cles at the tide".split(), [0, 0.25, 1, 1.5, 2, 2.5, 2.75, 3.5], [59, 61, 63, 64, 63, 61, 59, 61], [0.25, 0.7, 0.45, 0.45, 0.45, 0.25, 0.6, 2.5], fall=0.5)),
+            ("v7", 8, line("you count the knots out loud to me".split(), [0, 0.5, 1, 1.5, 2.5, 3, 3.5, 4], [61, 61, 59, 61, 63, 64, 63, 61], [0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 0.45, 2.4])),
+            ("v8", 8, line("nine ten e- lev- en gone".split(), [0, 1, 2, 2.25, 2.75, 4], [63, 61, 59, 61, 63, 56], [0.9, 0.9, 0.25, 0.45, 0.9, 2.8], fall=1.0)),
+            ("ch1", 8, line("high- er than the kites".split(), [0, 0.75, 1.5, 2, 2.5], [64, 68, 66, 64, 68], [0.7, 0.7, 0.45, 0.45, 4.6], vib=0.15)),
+            ("ch2", 8, line("high- er than we'll ev- er be".split(), [0, 0.75, 1.5, 2, 2.5, 3, 3.5], [64, 68, 69, 68, 66, 64, 66], [0.7, 0.7, 0.45, 0.45, 0.45, 0.45, 3.8], vib=0.15)),
+            ("ch3", 8, line("don't let go".split(), [0, 1, 2], [69, 68, 66], [0.9, 0.9, 1.4])
+                + [N("~", 3.5, 0.5, 64), N("~", 4, 3, 63, vib=0.2)]),
+            ("ch4", 8, line("the sky is pull- ing on your sleeve".split(), [0, 0.25, 1, 1.5, 2, 2.5, 2.75, 3.5], [61, 64, 64, 66, 64, 63, 61, 59], [0.25, 0.7, 0.45, 0.45, 0.45, 0.25, 0.6, 4.0], fall=0.5)),
+            ("br", 8, line("we were nev- er meant to land".split(), [0, 0.25, 1, 1.5, 2, 3, 3.5], [56, 57, 59, 61, 59, 57, 56], [0.25, 0.6, 0.45, 0.45, 0.9, 0.45, 4.0], fall=1.0)),
+            ("echo", 4, line("high- er".split(), [0, 0.75], [52, 56], [0.7, 2.6], fall=0.5), {"voice": "bm_lewis"}),
+            *chops(64, ["high", "go", "kite", "oh", "ah", "mm"]),
+            ("hold", 4, [N("ooh", 0, 3.8, 64, vib=0.12)]),
+        ],
+    ),
+    # Bubble Wrap, Bb major at 100. A plain, conversational verse low in the
+    # voice (F3-Eb4) over Eb-F-Gm-Dm, a deadpan low male chant that adds a
+    # term each pass, a double-time chorus on Gm7-Eb-Bb/D-F up to G4, and a
+    # held ballad breakdown. The chops sit on Bb4 for chipmunk riffs.
+    "bubble-wrap-vox": dict(
+        title="Bubble Wrap Vox", voice="bf_emma", bpm=100, root=70, human=0.25,
+        parts=[
+            ("v1", 8, line("I wrapped my heart in bub- ble wrap".split(), [0, 0.25, 0.75, 1, 1.5, 2, 2.5, 3], [58, 60, 58, 62, 60, 58, 57, 58], [0.25, 0.45, 0.25, 0.45, 0.45, 0.45, 0.45, 1.5])),
+            ("v2", 8, line("and left it on your front step".split(), [0, 0.25, 0.75, 1, 1.5, 1.75, 2.25], [57, 58, 60, 60, 58, 57, 55], [0.25, 0.45, 0.25, 0.45, 0.25, 0.45, 1.8], fall=0.5)),
+            ("v3", 8, line("you nev- er signed for it".split(), [0, 0.5, 0.75, 1.25, 2, 2.25], [62, 63, 62, 60, 58, 60], [0.45, 0.25, 0.45, 0.7, 0.25, 1.5])),
+            ("v4", 8, line("so it's still sit- ting there".split(), [0, 0.25, 0.5, 1, 1.5, 2], [58, 58, 60, 62, 60, 57], [0.25, 0.25, 0.45, 0.45, 0.45, 2.2], fall=0.5)),
+            ("v5", 8, line("it rained a lit- tle on the box".split(), [0, 0.25, 0.75, 1, 1.5, 1.75, 2, 2.5], [62, 62, 60, 62, 63, 62, 60, 58], [0.25, 0.45, 0.25, 0.45, 0.25, 0.25, 0.45, 1.6])),
+            ("v6", 8, line("I watched it from the bus stop".split(), [0, 0.25, 0.75, 1, 1.5, 1.75, 2.25], [57, 58, 60, 58, 57, 55, 53], [0.25, 0.45, 0.25, 0.45, 0.25, 0.45, 1.8], fall=0.5)),
+            ("v7", 8, line("the light in your win- dow went out".split(), [0, 0.25, 0.75, 1, 1.25, 1.75, 2.25, 2.75], [58, 60, 62, 62, 63, 62, 60, 62], [0.25, 0.45, 0.25, 0.25, 0.45, 0.45, 0.45, 1.6])),
+            ("v8", 8, line("I'm not mad I'm just say- ing".split(), [0, 0.5, 1, 1.75, 2, 2.5, 2.75], [60, 60, 62, 58, 58, 57, 55], [0.45, 0.45, 0.7, 0.25, 0.45, 0.25, 1.6], fall=0.5)),
+            ("chant1", 4, line("frag- ile".split(), [0, 1], [50, 46], [0.7, 0.9]), {"voice": "bm_lewis"}),
+            ("chant2", 4, line("this side up".split(), [0, 1, 2], [50, 50, 55], [0.6, 0.6, 1.2]), {"voice": "bm_lewis"}),
+            ("chant3", 4, line("han- dle with care".split(), [0, 0.5, 1, 2], [50, 50, 50, 46], [0.45, 0.45, 0.7, 0.9]), {"voice": "bm_lewis"}),
+            ("chant4", 4, line("do not bend".split(), [0, 1, 2], [53, 50, 46], [0.7, 0.7, 0.9]), {"voice": "bm_lewis"}),
+            ("ch1", 8, line("pop pop noth- ing in- side".split(), [0, 0.5, 1.5, 2, 2.5, 2.75], [65, 65, 62, 63, 62, 60], [0.3, 0.45, 0.45, 0.45, 0.25, 2.2], fall=0.5)),
+            ("ch2", 8, line("press a lit- tle and it's there".split(), [0, 0.5, 0.75, 1.25, 1.75, 2, 2.5], [62, 62, 63, 65, 63, 62, 65], [0.45, 0.25, 0.45, 0.45, 0.25, 0.45, 2.8], vib=0.12)),
+            ("ch3", 8, line("pop pop I don't care".split(), [0, 0.5, 1.5, 2, 2.5], [65, 65, 67, 65, 63], [0.3, 0.45, 0.45, 0.45, 2.2], vib=0.15)),
+            ("ch4", 8, line("you can keep it if you want".split(), [0, 0.25, 0.75, 1.25, 1.5, 1.75, 2.25], [62, 62, 63, 62, 60, 58, 60], [0.25, 0.45, 0.45, 0.25, 0.25, 0.45, 2.6], fall=0.5)),
+            ("br1", 8, line("o- pen it slow".split(), [0, 1, 2, 3], [63, 65, 67, 65], [0.9, 0.9, 0.9, 4.5], vib=0.18)),
+            ("br2", 8, line("it's all I had to send".split(), [0, 0.5, 1, 2, 2.5, 3], [62, 63, 65, 63, 62, 60], [0.45, 0.45, 0.9, 0.45, 0.45, 4.2], scoop=0.5)),
+            *chops(70, ["pop", "up", "oh", "ah", "hey", "mm"]),
+            ("hold", 4, [N("ooh", 0, 3.8, 70, vib=0.12)]),
+        ],
+    ),
 }
 
 
@@ -159,10 +243,16 @@ def render(song, out):
     spb = 60 / bpm
     chunks, slices, cursor = [], [], 0
     with tempfile.TemporaryDirectory() as tmp:
-        for name, beats, notes in song["parts"]:
+        for k, (name, beats, notes, *opt) in enumerate(song["parts"]):
             spec = {"voice": song["voice"], "bpm": bpm, "bars": beats / 4, "lead": LEAD,
                     "formant": song.get("formant", 0.0), "clarity": song.get("clarity", 1.0),
                     "notes": notes}
+            # Optional song-wide "human" and per-part overrides (a second voice,
+            # a lower formant, more humanizing) as a fourth tuple element.
+            if song.get("human"):
+                spec.update(human=song["human"], seed=k)
+            if opt:
+                spec.update(opt[0])
             sp, wp = Path(tmp) / f"{name}.json", Path(tmp) / f"{name}.wav"
             sp.write_text(json.dumps(spec))
             for _ in range(2):  # one retry: a cold Kokoro load can fail transiently

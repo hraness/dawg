@@ -5,12 +5,22 @@
  * sheets a small model learns the style from. Groove starters live in styles/.
  */
 import { TrackScore } from "../score.ts";
+import { bubbleWrap } from "./bubble-wrap.ts";
 import { candyFault } from "./candy-fault.ts";
 import { redline } from "./redline.ts";
 import { glassGarden } from "./glass-garden.ts";
+import { kiteSeason } from "./kite-season.ts";
+import { nightSwim } from "./night-swim.ts";
 export type { DemoInfo } from "./types.ts";
 
-const definitions = [candyFault, redline, glassGarden] as const;
+const definitions = [
+  candyFault,
+  redline,
+  glassGarden,
+  nightSwim,
+  kiteSeason,
+  bubbleWrap,
+] as const;
 export const DEMOS = Object.freeze(definitions.map(({ info }) => info));
 const templates = new Map<string, TrackScore>();
 
