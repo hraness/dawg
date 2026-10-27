@@ -3,8 +3,8 @@
  * organ holds the chords under a slow breakbeat and a plucked bass; a dry,
  * low alto (G#3 to A4) sings the verses close and only climbs a few steps
  * for the chorus, a low male voice answering "higher" from under it. A
- * slide lead plays the hook between the verses, the bridge borrows A minor
- * over a bloom pad, and the last chorus doubles the drums into a backbeat
+ * slide lead plays the hook between the verses, the bridge falls through
+ * F#m7 to Bsus over a bloom pad, and the last chorus doubles the drums into a backbeat
  * under a fuzz-guitar wall and choir before everything stops on one organ
  * chord. Free-form: the song is written bar by bar on the composer, not on
  * the kit engine. No key change.
@@ -82,13 +82,12 @@ const Aadd9 = c(45, 52, 57, 59, 61);
 const EoverGs = c(44, 52, 56, 59, 64);
 const Csm = c(37, 52, 56, 61, 64);
 const B = c(47, 54, 59, 63, 66);
-// The bridge borrows A minor (A6 shape) from E minor: a colour, not a new key.
+// The bridge stays in E major: C#m7, Amaj7, F#m7, Bsus.
 const Amaj7 = c(45, 52, 56, 57, 61);
-const Am6 = c(45, 52, 57, 60, 66);
 const Bsus = c(47, 54, 59, 64, 66);
 const VERSE = [Emaj7, Csm7, Fsm7, Gsm7];
 const CHORUS = [Aadd9, EoverGs, Csm, B];
-const BRIDGE = [Csm7, Amaj7, Am6, Bsus];
+const BRIDGE = [Csm7, Amaj7, Fsm7, Bsus];
 const E = c(40, 52, 56, 59, 64);
 
 type Kind = "intro" | "verse" | "chorus" | "inter" | "bridge" | "final" | "end";
@@ -117,7 +116,7 @@ const BASS = {
   verse: "0.......0..1....",
   chorus: "0...0.2.0...0.1.",
   bridge: "0-------0-------",
-  final: "0.0.0.0.0.0.0.27",
+  final: "0.0.0.0.0.0.0.21",
 } as const;
 
 // The slide hook, four bars over the chorus chords: [bar, beat, pitch, beats].
@@ -151,7 +150,7 @@ export const kiteSeason: DemoDefinition = {
     title: "Kite Season",
     style: "Hyperpop",
     description:
-      "Seaside dream-pop in E major at 146, felt half-time: a combo organ over a slow breakbeat and plucked bass, a dry low alto that barely climbs for the chorus, a low male voice answering under it, a slide-lead hook between the verses, a bridge that borrows A minor, and a last chorus that doubles into a backbeat under a fuzz wall before stopping dead on one chord.",
+      "Seaside dream-pop in E major at 146, felt half-time: a combo organ over a slow breakbeat and plucked bass, a dry low alto that barely climbs for the chorus, a low male voice answering under it, a slide-lead hook between the verses, a bridge that falls through F#m to a suspended B, and a last chorus that doubles into a backbeat under a fuzz wall before stopping dead on one chord.",
     tempoBpm: BPM,
     key: "E",
     bars: BARS,
@@ -163,7 +162,7 @@ export const kiteSeason: DemoDefinition = {
       "a low male voice answering the hook from under the mix",
       "a combo organ holding the chords, a slide lead playing the hook",
       "half-time breakbeat that doubles into a backbeat for the last chorus",
-      "a bridge borrowing A minor over a bloom pad",
+      "a bridge on C#m7, Amaj7, F#m7 and Bsus over a bloom pad",
       "a fuzz-guitar wall and choir, then a dead stop on one organ chord",
     ],
     arrangement: SECTIONS.map(([name, , , bars]) => `${name} ${bars}`),

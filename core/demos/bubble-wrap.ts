@@ -82,12 +82,10 @@ const Dm7 = c(38, 57, 60, 62, 65);
 const Ebmaj7 = c(39, 55, 58, 62, 67);
 const BbOverD = c(38, 58, 62, 65, 70);
 const F = c(41, 57, 60, 65, 69);
-// V/V on the second chorus pass: a secondary dominant, not a new key.
-const C7 = c(36, 58, 60, 64, 67);
 const Cm7 = c(36, 55, 58, 60, 63);
 const Fsus = c(41, 58, 60, 65, 70);
 const VERSE = [Ebmaj9, Fadd9, Gm7, Dm7];
-const CHORUS = [Gm7, Ebmaj7, BbOverD, F, Gm7, Ebmaj7, BbOverD, C7];
+const CHORUS = [Gm7, Ebmaj7, BbOverD, F, Gm7, Ebmaj7, BbOverD, Fsus];
 const BREAK = [Ebmaj7, BbOverD, Cm7, Fsus];
 
 type Kind =
@@ -137,7 +135,7 @@ export const bubbleWrap: DemoDefinition = {
       "a deadpan low male chant, a word list that grows each pass",
       "stop-start blocks: hits and silences under the chant",
       "a double-time chorus break with plastic stabs and chipmunk chops",
-      "a verse loop on IV-V-vi-iii that never lands on I; V/V in the chorus",
+      "a verse loop on IV-V-vi-iii that never lands on I; a suspended V closing the chorus",
       "a false ending, then a ballad breakdown on pads and music box",
       "a last chorus that stops dead",
     ],

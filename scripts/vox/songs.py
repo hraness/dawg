@@ -181,8 +181,8 @@ SONGS = {
         ],
     ),
     # Kite Season, E major at 146 sung half-time and low (G#3-A4) in a dry
-    # alto. Verse E-C#m-F#m-G#m, chorus A-E/G#-C#m-B, the bridge borrowing
-    # A minor. Lines are two bars, written to the speech rhythm by hand:
+    # alto. Verse E-C#m-F#m-G#m, chorus A-E/G#-C#m-B, the bridge C#m7-Amaj7-
+    # F#m7-Bsus, all in key. Lines are two bars, written to the speech rhythm by hand:
     # pickups, long vowels on the stressed words, rests between phrases.
     "kite-season-vox": dict(
         title="Kite Season Vox", voice="af_heart", bpm=146, root=64, human=0.25,
