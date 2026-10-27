@@ -11,6 +11,10 @@ import { redline } from "./redline.ts";
 import { glassGarden } from "./glass-garden.ts";
 import { kiteSeason } from "./kite-season.ts";
 import { nightSwim } from "./night-swim.ts";
+import { glowStick } from "./glow-stick.ts";
+import { windowSeat } from "./window-seat.ts";
+import { lightOne } from "./light-one.ts";
+import { spareKey } from "./spare-key.ts";
 export type { DemoInfo } from "./types.ts";
 
 const definitions = [
@@ -20,6 +24,10 @@ const definitions = [
   nightSwim,
   kiteSeason,
   bubbleWrap,
+  glowStick,
+  windowSeat,
+  lightOne,
+  spareKey,
 ] as const;
 export const DEMOS = Object.freeze(definitions.map(({ info }) => info));
 const templates = new Map<string, TrackScore>();

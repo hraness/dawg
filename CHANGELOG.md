@@ -10,6 +10,11 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
   - **Night Swim:** D major at 122, a Balearic house groove with marimba and plucks, sung low with a low `bm_lewis` echo and a detuned double on the chorus.
   - **Kite Season:** E major at 146, felt in half time. Organ, a fuzz guitar wall, a gliding saw hook and glockenspiel over acoustic drums, and a dead stop on a held organ chord.
   - **Bubble Wrap:** Bb major at 100. Stop-start metallic hits, a rubbery bass and steel-pan answers under a deadpan low verse. A low chant lists parcel labels and grows each pass. The chorus flips to double time with plastic stabs and chipmunk pops, then comes a false ending and a ballad breakdown.
+- **Four more demo songs, each in a style the shelf did not have.** All four stay in one major key with no borrowed chords, and each sings a new `bf_emma` book.
+  - **Glow Stick:** Db major at 128, twee house-pop. Electric piano and voices carry a drumless intro. The verses are sung low over a plain four-on-the-floor with no bass. The bass arrives only for the chorus and pumps under the whole mix, with harp sweeps, a drumless break and strings on the last chorus.
+  - **Window Seat:** G major at 170, liquid drum and bass sung in half time. Felt piano and nylon guitar play over a ticking breakbeat. The chorus brings the full two-step break, a reese bass and a warm pad. An electric-piano break leads to a piano-only outro.
+  - **Light One:** F major at 122, cathedral pop. Church organ and tubular bells, a sixteenth-note pluck arpeggio, and a choir with an 808 in the chorus. The break is a small fugue: one subject passes from organ to pluck to bass to sung chops, each entry a few scale steps from the last.
+  - **Spare Key:** C major at 132, deadpan two-step garage. Low, nearly spoken verses sit over a skipping kick, swung hats and organ stabs. The chorus chants its title over a growling bass, answered by pitched chops of the same words.
 - **Vocal books that sound sung, not typed.** The three new books are written to speech rhythm, with pickups, rests and held stressed vowels, and their verses sit in a low register. `sing.py` takes an opt-in `human` setting (timing drift, flat landings, slow pitch wander), per-note `dyn` and `air`, and `"~"` melisma. A part can switch voice for a low answer or chant. `scripts/vox/cadence.py` prints a line's spoken rhythm as a starting point.
 
 ### Changed
@@ -18,6 +23,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Fixed
 
+- The `list_packs` detail for the studio pack no longer cuts off mid-JSON. It lists every vocal book's slices to the millisecond and has room for all of them.
 - **Pressing play no longer runs the playhead ahead of silent audio.** The transport used to start its clock at once while the engine rendered its first windows (2 to 8 seconds cold on the demos), so the playhead moved through silence and the song's opening was skipped. The clock now holds until the first frame is heard, and the engine prewarms that first window while stopped. A prewarmed play sounds within about 0.1 s.
 
 - **`sing.py` speech mode now times a take's words by aligning it to Kokoro.** On clips of two or three seconds, whisper's word offsets drifted by whole seconds. Sometimes the last word ran to 30 seconds, and every earlier word fell to zero length. Kokoro now says the same words, and DTW over MFCCs maps its word times onto the take. Run against a second Kokoro voice, the aligned book misses words at almost the same rate as Kokoro singing directly (0.19 against 0.175).

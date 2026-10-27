@@ -98,6 +98,26 @@
       "sha256": "c9b79428c5ca09bcc57391180707e7f19efb72d5f6f394a0660846909b864281",
       "seconds": 75.57679166666667,
       "bytes": 3627730
+    },
+    "glow-stick-vox": {
+      "sha256": "ec3f71282a4e2b93eb4541505b5d28b07b83a7f995060971888cfcfc32c949f1",
+      "seconds": 64.80425,
+      "bytes": 3110648
+    },
+    "window-seat-vox": {
+      "sha256": "29a5918b384da023834d1e5484878c8bde11037197d95485b2392d99ac4e2afb",
+      "seconds": 93.9705,
+      "bytes": 4510628
+    },
+    "light-one-vox": {
+      "sha256": "e1653d54d5248cd79da3aa5b1b146a061c2ade83225089398a53b40a61643b87",
+      "seconds": 69.95895833333333,
+      "bytes": 3358074
+    },
+    "spare-key-vox": {
+      "sha256": "b9b105f54a0c64d7f517489957208df537879a5355a2f5b5132fd61f794a85f3",
+      "seconds": 64.659,
+      "bytes": 3103676
     }
   }
 }

@@ -97,9 +97,9 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. The shelf holds six editable
+For a complete song, type `demo`. The shelf holds ten editable
 hyperpop songs for now: Candy Fault, Redline, Glass Garden, Night Swim,
-Kite Season and Bubble Wrap. They play the vocal as an instrument, with syllable riffs, glitch
+Kite Season, Bubble Wrap, Glow Stick, Window Seat, Light One and Spare Key. They play the vocal as an instrument, with syllable riffs, glitch
 stutters, reversals, a looped-vowel lead and a grain cloud, over
 syncopated stabs and changing beats. Each has production notes, named
 scenes, instruments, effects and automation; `guide hyperpop` explains

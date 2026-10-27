@@ -266,6 +266,104 @@ SONGS = {
             ("hold", 4, [N("ooh", 0, 3.8, 70, vib=0.12)]),
         ],
     ),
+    # Glow Stick, Db major at 128: twee house-pop. The verse talks low (Ab3-F4)
+    # over Bbm7-Gb | Db/F-Ab, the chorus opens to Ab4 over Gb-Ab-Fm-Bbm and
+    # its hook changes on the last repeat; the break is plain and drumless.
+    "glow-stick-vox": dict(
+        title="Glow Stick Vox", voice="bf_emma", bpm=128, speed=0.8, root=61, human=0.25,
+        parts=[
+            ("v1", 8, line("you found me in your coat a- gain".split(), [0, 0.25, 1, 1.25, 1.5, 2, 3, 3.5], [58, 61, 61, 60, 58, 61, 60, 58], [0.25, 0.7, 0.25, 0.25, 0.45, 0.9, 0.45, 2.6], fall=0.5)),
+            ("v2", 8, line("still in the wrap- per from last June".split(), [0, 0.5, 0.75, 1, 1.5, 2, 2.5, 3], [61, 60, 58, 61, 63, 61, 60, 56], [0.45, 0.25, 0.25, 0.45, 0.45, 0.45, 0.45, 2.4], fall=0.5)),
+            ("v3", 8, line("you said you don't keep things like me".split(), [0, 0.25, 1, 1.25, 1.75, 2.5, 3, 3.5], [61, 63, 61, 60, 61, 63, 65, 61], [0.25, 0.7, 0.25, 0.45, 0.7, 0.45, 0.45, 2.4])),
+            ("v4", 8, line("then you held me up to the light".split(), [0, 0.25, 0.5, 1.5, 1.75, 2.5, 2.75, 3], [56, 58, 61, 60, 58, 56, 58, 56], [0.25, 0.25, 0.9, 0.25, 0.7, 0.25, 0.25, 2.8], fall=1.0)),
+            ("v5", 8, line("the floor is shak- ing in the hall".split(), [0, 0.25, 1, 1.5, 1.75, 2.5, 2.75, 3], [61, 61, 63, 65, 63, 61, 60, 61], [0.25, 0.7, 0.45, 0.25, 0.7, 0.25, 0.25, 2.6])),
+            ("v6", 8, line("your friends are danc- ing on the stairs".split(), [0, 0.25, 0.75, 1.5, 1.75, 2.5, 2.75, 3], [60, 61, 63, 61, 60, 58, 60, 56], [0.25, 0.45, 0.7, 0.25, 0.7, 0.25, 0.25, 2.4], fall=0.5)),
+            ("v7", 8, line("I'm green in- side your o- pen palm".split(), [0, 0.5, 1.5, 1.75, 2.25, 2.75, 3, 3.5], [61, 63, 61, 63, 65, 63, 61, 61], [0.45, 0.9, 0.25, 0.45, 0.45, 0.25, 0.45, 2.4])),
+            ("v8", 8, line("I'll stay as bright as you al- low".split(), [0, 0.5, 1, 1.5, 2.5, 2.75, 3, 3.5], [63, 63, 65, 68, 65, 63, 61, 63], [0.45, 0.45, 0.45, 0.9, 0.25, 0.25, 0.45, 2.6], vib=0.12)),
+            ("ch1", 8, line("bend me and I'll glow".split(), [0, 0.75, 1.5, 2, 3.5], [66, 65, 63, 65, 68], [0.7, 0.7, 0.5, 0.7, 2.6], vib=0.15)),
+            ("ch2", 8, line("I'll be bright for you".split(), [0, 0.5, 1, 2.5, 3], [63, 65, 68, 65, 61], [0.45, 0.45, 1.2, 0.45, 2.6], fall=0.5)),
+            ("ch3", 8, line("bend me and I'll glow".split(), [0, 0.75, 1.5, 2, 3.5], [66, 65, 63, 65, 70], [0.7, 0.7, 0.5, 0.7, 2.6], vib=0.15)),
+            ("ch4", 8, line("bend me till I'm gone".split(), [0, 0.75, 1.5, 2, 3.5], [68, 66, 65, 63, 61], [0.7, 0.7, 0.5, 0.7, 2.6], fall=1.0)),
+            ("br1", 8, line("it's on- ly ev- er once".split(), [0, 0.5, 1, 2, 2.5, 3], [58, 61, 60, 58, 58, 56], [0.45, 0.45, 0.9, 0.45, 0.45, 4.4], air=0.3)),
+            ("br2", 8, line("and I want it to be you".split(), [0, 0.25, 0.75, 1.25, 1.5, 2, 2.5], [60, 61, 63, 61, 60, 63, 61], [0.25, 0.45, 0.45, 0.25, 0.45, 0.45, 4.6], scoop=0.5)),
+            ("last", 12, line("bend me till I'm gone".split(), [0, 0.75, 1.5, 2, 3.5], [68, 66, 65, 63, 65], [0.7, 0.7, 0.45, 0.9, 1.4])
+                + [N("~", 5, 1, 63), N("~", 6, 5, 61, vib=0.15)]),
+            *chops(61, ["glow", "oh", "ah", "hey", "mm"]),
+            ("hold", 4, [N("ooh", 0, 3.8, 61, vib=0.12)]),
+        ],
+    ),
+    # Window Seat, G major at 170 sung half-time: breakbeat dream-pop. Verses
+    # sit low (G3-E4) over Am7-Cmaj7-Em7-D, two bars of 170 to a line; the
+    # chorus is four long words a phrase over G-D/F#-Em7-Cmaj7, up to B4.
+    "window-seat-vox": dict(
+        title="Window Seat Vox", voice="bf_emma", bpm=170, speed=0.8, root=67, human=0.25,
+        parts=[
+            ("v1", 16, line("the bus is warm the lights go by".split(), [0, 1, 2, 3, 5, 6, 7, 8], [60, 60, 62, 64, 62, 60, 59, 57], [0.9, 0.9, 0.9, 1.8, 0.9, 0.9, 0.9, 5], fall=0.5)),
+            ("v2", 16, line("I draw a door in- side the fog".split(), [0, 1, 2, 3, 5, 6, 7, 8], [59, 60, 62, 64, 64, 62, 60, 62], [0.9, 0.9, 0.9, 1.8, 0.9, 0.9, 0.9, 5])),
+            ("v3", 16, line("a lit- tle door for you to use".split(), [0, 0.5, 1, 2, 4, 5, 6, 7], [64, 64, 62, 64, 66, 67, 66, 64], [0.45, 0.45, 0.9, 1.8, 0.9, 0.9, 0.9, 6])),
+            ("v4", 16, line("it fades be- fore I'm home a- gain".split(), [0, 1, 2, 3, 4, 6, 7, 8], [62, 60, 59, 60, 62, 59, 57, 55], [0.9, 0.9, 0.9, 0.9, 1.8, 0.9, 0.9, 6], fall=1.0)),
+            ("v5", 16, line("I count the trees a- long the line".split(), [0, 1, 2, 3, 5, 6, 7, 8], [60, 62, 64, 67, 66, 64, 62, 64], [0.9, 0.9, 0.9, 1.8, 0.9, 0.9, 0.9, 5])),
+            ("v6", 16, line("my head a- gainst the cold win- dow".split(), [0, 1, 2, 3, 4, 5, 6, 7], [59, 60, 62, 64, 62, 64, 62, 60], [0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 0.9, 6], fall=0.5)),
+            ("v7", 16, line("I'm half a- sleep and half with you".split(), [0, 1, 2, 3, 5, 6, 7, 8], [64, 64, 62, 64, 66, 67, 69, 67], [0.9, 0.9, 0.9, 1.8, 0.9, 0.9, 0.9, 5], vib=0.12)),
+            ("v8", 16, line("and both of them are fine with me".split(), [0, 0.5, 1, 2, 3, 4, 6, 7], [62, 64, 66, 67, 66, 64, 62, 62], [0.45, 0.45, 0.9, 0.9, 0.9, 1.8, 0.9, 6], vib=0.12)),
+            ("ch1", 16, line("win- dow seat".split(), [0, 1.5, 2], [71, 69, 67], [1.2, 0.5, 4.5], vib=0.15)),
+            ("ch2", 16, line("I'll draw you in the fog".split(), [0, 1, 3, 4, 5, 6], [66, 67, 69, 67, 66, 64], [0.9, 1.8, 0.9, 0.9, 0.9, 4], fall=0.5)),
+            ("ch3", 16, line("win- dow seat".split(), [0, 1.5, 2], [71, 72, 71], [1.2, 0.5, 4.5], vib=0.15)),
+            ("ch4", 16, line("come draw me in the fog".split(), [0, 1, 3, 4, 5, 6], [69, 71, 69, 67, 66, 67], [0.9, 1.8, 0.9, 0.9, 0.9, 4], fall=1.0)),
+            ("br1", 16, line("I don't want to get home".split(), [0, 1, 2, 3, 4, 6], [59, 60, 62, 60, 59, 57], [0.9, 0.9, 0.9, 0.9, 1.8, 4], air=0.3)),
+            ("br2", 16, line("just ride with me a- while".split(), [0, 1, 2, 3, 4, 5], [62, 64, 66, 67, 66, 64], [0.9, 0.9, 0.9, 0.9, 0.9, 4], scoop=0.5)),
+            ("last", 24, line("come draw me in the fog".split(), [0, 1, 3, 4, 5, 6], [69, 71, 69, 67, 66, 69], [0.9, 1.8, 0.9, 0.9, 0.9, 3.5])
+                + [N("~", 10, 2, 67), N("~", 12, 10, 66, vib=0.15)]),
+            *chops(67, ["oh", "ah", "seat", "hey", "mm"]),
+            ("hold", 8, [N("ah", 0, 7.8, 67, vib=0.12)]),
+        ],
+    ),
+    "light-one-vox": dict(
+        title="Light One Vox", voice="bf_emma", bpm=122, speed=0.8, root=65, human=0.25,
+        parts=[
+            ("v1", 8, line("the door was o- pen so I came".split(), [0, 0.5, 1, 1.5, 2, 3, 3.5, 4], [57, 57, 60, 62, 60, 57, 55, 57], [0.45, 0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 2.6], fall=0.5)),
+            ("v2", 8, line("I put a coin in- side the tin".split(), [0, 0.5, 1, 1.5, 2.5, 3, 3.5, 4], [55, 57, 58, 60, 58, 57, 55, 57], [0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 0.45, 2.6])),
+            ("v3", 8, line("I'm not the kind to kneel or pray".split(), [0, 0.5, 1, 1.5, 2, 3, 3.5, 4], [60, 60, 62, 64, 62, 60, 58, 57], [0.45, 0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 2.6])),
+            ("v4", 8, line("but you would like the qui- et here".split(), [0, 0.5, 1, 1.5, 2, 2.5, 3, 4], [57, 58, 60, 62, 60, 58, 57, 55], [0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.9, 2.6], fall=0.5)),
+            ("v5", 8, line("the wax is warm a- gainst my thumb".split(), [0, 0.5, 1, 1.5, 2, 3, 3.5, 4], [57, 57, 60, 62, 62, 60, 57, 60], [0.45, 0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 2.6])),
+            ("v6", 8, line("a lit- tle flame for ev- ery year".split(), [0, 0.5, 1, 1.5, 2.5, 3, 3.5, 4], [55, 57, 58, 60, 62, 60, 58, 57], [0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 0.45, 2.6], fall=0.5)),
+            ("v7", 8, line("the bells are count- ing out the noon".split(), [0, 0.5, 1, 1.5, 2, 3, 3.5, 4], [60, 62, 64, 65, 64, 62, 60, 62], [0.45, 0.45, 0.45, 0.45, 0.9, 0.45, 0.45, 2.6])),
+            ("v8", 8, line("I'm count- ing all the days with you".split(), [0, 0.5, 1, 1.5, 2, 2.5, 3, 4], [62, 64, 65, 64, 62, 60, 62, 60], [0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.9, 2.6], fall=0.5)),
+            ("ch1", 8, line("light one for me".split(), [0, 1, 1.5, 2], [69, 72, 70, 69], [0.9, 0.45, 0.45, 4.2], vib=0.15)),
+            ("ch2", 8, line("when I'm too far a- way".split(), [0, 0.5, 1, 2, 2.5, 3], [67, 65, 67, 69, 67, 65], [0.45, 0.45, 0.9, 0.45, 0.45, 3.4], fall=0.5)),
+            ("ch3", 8, line("light one for me".split(), [0, 1, 1.5, 2], [69, 72, 74, 72], [0.9, 0.45, 0.45, 4.2], vib=0.15)),
+            ("ch4", 8, line("I'll light one for you".split(), [0, 0.5, 1, 1.5, 2], [72, 70, 69, 67, 65], [0.45, 0.45, 0.45, 0.45, 2.6], fall=1.0)),
+            ("br1", 8, line("you don't have to be- lieve".split(), [0, 0.5, 1, 1.5, 2, 2.5], [60, 62, 64, 65, 64, 62], [0.45, 0.45, 0.45, 0.45, 0.45, 4.0], air=0.3)),
+            ("br2", 8, line("you just have to come in".split(), [0, 0.5, 1, 1.5, 2, 3], [62, 64, 65, 64, 62, 60], [0.45, 0.45, 0.45, 0.45, 0.9, 4.0], scoop=0.5)),
+            ("last", 12, line("light one for you".split(), [0, 1, 1.5, 2], [69, 72, 70, 72], [0.9, 0.45, 0.45, 1.4])
+                + [N("~", 4, 1.5, 70), N("~", 6, 5, 69, vib=0.15)]),
+            *chops(65, ["light", "oh", "ah", "one", "mm"]),
+            ("hold", 8, [N("ah", 0, 7.8, 65, vib=0.12)]),
+        ],
+    ),
+    "spare-key-vox": dict(
+        title="Spare Key Vox", voice="bf_emma", bpm=132, speed=0.8, root=60, human=0.25,
+        parts=[
+            ("v1", 8, line("I've still got your spare key".split(), [0, 0.5, 1, 1.5, 2.5, 3], [57, 57, 57, 59, 60, 57], [0.4, 0.4, 0.4, 0.9, 0.45, 2.6])),
+            ("v2", 8, line("it's on the ring with mine".split(), [0.5, 1, 1.5, 2, 2.5, 3], [57, 57, 59, 57, 55, 55], [0.4, 0.4, 0.4, 0.4, 0.4, 2.6], fall=0.5)),
+            ("v3", 8, line("I don't use it ob- vi- ous- ly".split(), [0, 0.5, 1, 1.5, 2.5, 3, 3.25, 3.5], [57, 57, 59, 57, 60, 59, 57, 55], [0.4, 0.4, 0.4, 0.9, 0.4, 0.25, 0.25, 2.6])),
+            ("v4", 8, line("I just check that it's there".split(), [0, 0.5, 1, 1.5, 2, 2.5], [55, 57, 57, 59, 57, 55], [0.4, 0.4, 0.4, 0.4, 0.4, 2.6], fall=0.5)),
+            ("v5", 8, line("your new place has a code".split(), [0, 0.5, 1, 1.5, 2, 2.5], [59, 59, 59, 60, 62, 59], [0.4, 0.4, 0.4, 0.4, 0.9, 2.6])),
+            ("v6", 8, line("your sis- ter told me that".split(), [0.5, 1, 1.5, 2, 2.5, 3], [57, 59, 57, 55, 57, 55], [0.4, 0.4, 0.4, 0.4, 0.4, 2.6], fall=0.5)),
+            ("v7", 8, line("so this one o- pens no- thing now".split(), [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], [57, 57, 59, 60, 59, 57, 59, 57], [0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 2.6])),
+            ("v8", 8, line("and still it weighs a ton".split(), [0, 0.5, 1, 1.5, 2, 2.5], [55, 57, 59, 60, 59, 57], [0.4, 0.4, 0.4, 0.9, 0.4, 2.6], fall=1.0)),
+            ("ch1", 8, line("my spare key my spare key".split(), [0, 0.5, 1.75, 3, 3.5, 4.75], [64, 67, 64, 64, 67, 64], [0.4, 1.1, 0.9, 0.4, 1.1, 2.2])),
+            ("ch2", 8, line("o- pens no- thing".split(), [0, 0.5, 1, 1.5], [62, 60, 62, 64], [0.45, 0.45, 0.45, 3.4], vib=0.12)),
+            ("ch3", 8, line("my spare key my spare key".split(), [0, 0.5, 1.75, 3, 3.5, 4.75], [64, 67, 64, 64, 69, 67], [0.4, 1.1, 0.9, 0.4, 1.1, 2.2])),
+            ("ch4", 8, line("I keep it an- y- way".split(), [0, 0.5, 1, 1.5, 2, 2.5], [64, 62, 60, 62, 64, 60], [0.45, 0.45, 0.45, 0.45, 0.45, 3.4], fall=0.5)),
+            ("br1", 8, line("I could give it back".split(), [0, 0.5, 1, 1.5, 2], [57, 59, 60, 59, 57], [0.45, 0.45, 0.45, 0.45, 3.6], air=0.3)),
+            ("br2", 8, line("but then where would I go".split(), [0, 0.5, 1, 1.5, 2, 2.5], [59, 60, 62, 60, 59, 57], [0.45, 0.45, 0.45, 0.45, 0.45, 3.6], air=0.3)),
+            ("last", 12, line("I keep it an- y- way".split(), [0, 0.5, 1, 1.5, 2, 2.5], [64, 62, 60, 62, 64, 62], [0.45, 0.45, 0.45, 0.45, 0.45, 1.4])
+                + [N("~", 4, 1.5, 64), N("~", 6, 5, 60, vib=0.15)]),
+            *chops(60, ["key", "oh", "ah", "spare", "mm"]),
+            ("hold", 8, [N("mm", 0, 7.8, 60, vib=0.1)]),
+        ],
+    ),
 }
 
 
