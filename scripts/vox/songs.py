@@ -112,7 +112,7 @@ SONGS = {
     ),
     # Glass Garden, A major at 128. Verse A-E-F#m-Dm, chorus D-E-C#m-F#m.
     "glass-garden-vox": dict(
-        title="Glass Garden Vocal", voice="af_sky", bpm=128, formant=1.0, clarity=1.4, root=69,
+        title="Glass Garden Vocal", voice="bf_emma", bpm=128, speed=0.8, root=69,
         parts=[
             ("v1", 4, line("plant- ed some- thing in the light".split(), R1, [73, 73, 74, 73, 76, 74, 73], R1L, fall=1.0)),
             ("v2", 4, line("watched it grow- ing through the night".split(), R2, [73, 73, 78, 76, 73, 69, 66], R2L)),
@@ -134,7 +134,7 @@ SONGS = {
     # Redline, F minor at 172, sung half-time over the breaks. Verse
     # Fm-Ab-Eb-Db, pre Db-Eb, chorus Fm-Db-Ab-Eb.
     "redline-vox": dict(
-        title="Redline Vocal", voice="af_heart", bpm=172, formant=1.0, clarity=1.6, root=68,
+        title="Redline Vocal", voice="bf_emma", bpm=172, speed=0.8, root=68,
         parts=[
             ("v1", 4, line("ne- on on the high- way".split(), E1, [72, 72, 68, 72, 75, 72], E1L)),
             ("v2", 4, line("cit- y in the mir- ror".split(), E2, [70, 70, 67, 70, 75, 70], E2L, fall=1.0)),
@@ -157,7 +157,7 @@ SONGS = {
     # cadence.py. Verse Gmaj9-F#m7-Em9-A, chorus Bm9-Gmaj7-D/F#-A. Parts are
     # their own lengths; the demo places each line, pickups included.
     "night-swim-vox": dict(
-        title="Night Swim Vocal", voice="af_bella", bpm=122, root=62, human=0.25,
+        title="Night Swim Vocal", voice="bf_emma", bpm=122, root=62, human=0.25,
         parts=[
             ("v1", 4, line("shoes in my hand at the gate".split(), [0, 0.5, 0.75, 1, 1.5, 1.75, 2], [62, 62, 62, 64, 62, 62, 59], [0.45, 0.2, 0.2, 0.45, 0.2, 0.2, 1.3], fall=0.5)),
             ("v2", 4, line("light on the wa- ter still warm".split(), [0, 0.5, 0.75, 1, 1.25, 1.75, 2.25], [64, 64, 62, 62, 59, 62, 64], [0.45, 0.2, 0.2, 0.2, 0.45, 0.45, 1.4])),
@@ -185,7 +185,7 @@ SONGS = {
     # F#m7-Bsus, all in key. Lines are two bars, written to the speech rhythm by hand:
     # pickups, long vowels on the stressed words, rests between phrases.
     "kite-season-vox": dict(
-        title="Kite Season Vox", voice="af_heart", bpm=146, root=64, human=0.25,
+        title="Kite Season Vox", voice="bf_emma", bpm=146, speed=0.8, root=64, human=0.25,
         parts=[
             ("v1", 8, line("string wound tight on a card- board spool".split(), [0, 0.5, 1, 2, 2.5, 2.75, 3.5, 4.5], [59, 59, 61, 63, 61, 59, 61, 56], [0.45, 0.45, 0.9, 0.45, 0.25, 0.7, 0.9, 2.2], fall=0.5)),
             ("v2", 8, line("your hands are cold so I hold the line".split(), [0, 0.25, 1, 1.5, 2.5, 3, 3.5, 4.5, 5], [59, 61, 59, 56, 59, 61, 63, 61, 59], [0.25, 0.7, 0.45, 0.9, 0.45, 0.45, 0.9, 0.45, 2.0])),
@@ -246,7 +246,7 @@ def render(song, out):
         for k, (name, beats, notes, *opt) in enumerate(song["parts"]):
             spec = {"voice": song["voice"], "bpm": bpm, "bars": beats / 4, "lead": LEAD,
                     "formant": song.get("formant", 0.0), "clarity": song.get("clarity", 1.0),
-                    "notes": notes}
+                    "speed": song.get("speed", 1.0), "notes": notes}
             # Optional song-wide "human" and per-part overrides (a second voice,
             # a lower formant, more humanizing) as a fourth tuple element.
             if song.get("human"):
