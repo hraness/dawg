@@ -12,6 +12,14 @@ import {
   voice,
   type Phrase,
 } from "./build.ts";
+import {
+  LINE_LEAD,
+  slot,
+  stutterTrack,
+  trackOf,
+  vocalTrack,
+  type VoxBank,
+} from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
 type Extra = Partial<NoteInput>;
@@ -203,6 +211,69 @@ const PROG = [
   ...["E", "B", "A", "E"], // 64 outro
 ] as const;
 const BARS = PROG.length;
+
+/** The sung book: every line of the topline, the overload's sung a half step up. */
+export const BOOK: VoxBank = {
+  sample: "candy-fault-vox",
+  root: 80,
+  syllables: ["pix", "me", "oh"],
+  heads: [],
+  lines: {
+    v1a: 7,
+    v1b: 7,
+    v1c: 7,
+    v1d: 6,
+    lift1: 7,
+    lift2: 8,
+    chA: 8,
+    chB1: 7,
+    chA2: 8,
+    chC1: 6,
+    v2a: 7,
+    v2b: 7,
+    v2c: 7,
+    v2d: 6,
+    chB2: 7,
+    chC2: 6,
+    br1: 24,
+    br2: 7,
+    chAo: 7,
+    chBo: 7,
+    chA2o: 8,
+    chCo: 9,
+    last: 14,
+  },
+};
+/** Where each book line's first syllable lands: [line, bar, beat, velocity]. */
+const SUNG: readonly (readonly [string, number, number, number])[] = [
+  ["v1a", 4, 0.5, 0.8],
+  ["v1b", 6, 0.5, 0.8],
+  ["v1c", 8, 0.5, 0.8],
+  ["v1d", 10, 0.5, 0.8],
+  ["lift1", 12, 0, 0.82],
+  ["lift2", 14, 0, 0.82],
+  ["chA", 15, 3.5, 0.85],
+  ["chB1", 17, 3.5, 0.85],
+  ["chA2", 19, 3.5, 0.85],
+  ["chC1", 22, 0, 0.85],
+  ["v2a", 28, 0.5, 0.8],
+  ["v2b", 30, 0.5, 0.8],
+  ["v2c", 32, 0.5, 0.8],
+  ["v2d", 34, 0.5, 0.8],
+  ["lift1", 36, 0, 0.82],
+  ["lift2", 38, 0, 0.82],
+  ["chA", 39, 3.5, 0.85],
+  ["chB2", 41, 3.5, 0.85],
+  ["chA2", 43, 3.5, 0.85],
+  ["chC2", 46, 0, 0.85],
+  ["br1", 48, 0.5, 0.78],
+  ["br2", 54, 0.5, 0.8],
+  ["chAo", 56, 0, 0.9],
+  ["chBo", 57, 3.5, 0.9],
+  ["chA2o", 59, 3.5, 0.9],
+  ["chCo", 62, 0, 0.9],
+  ["last", 64, 0.5, 0.82],
+];
 
 type Part =
   | "boot"
@@ -848,8 +919,13 @@ export type CandyLanes = Readonly<{
   vocalCrushBits: AutomationPoint[];
 }>;
 
-/** The candy instruments; `a` holds the lanes that follow a song's layout. */
-export function candyTracks(s: Composer, a: CandyLanes): void {
+/**
+ * The candy instruments; `a` holds the lanes that follow a song's layout. With
+ * a sung `book` the lead is that book's lines plus a stutter sampler (and
+ * `vocalFormant` shifts the stutters from 0); without one (the candy engine)
+ * it is the synth singer.
+ */
+export function candyTracks(s: Composer, a: CandyLanes, book?: VoxBank): void {
   s.track(
     // A short clicky kick; the 808 track owns everything under 60 Hz.
     voice("kick", "Rubber kick", "kit", 0.55, {
@@ -991,47 +1067,94 @@ export function candyTracks(s: Composer, a: CandyLanes): void {
       humanize: { timing: 2, velocity: 6, seed: 19 },
     }),
   );
-  s.track(
-    voice("vocal", "Candy singer", "sing", 0.76, {
-      sing: {
-        preset: "aah",
-        voice: "soprano",
-        formant: 2.5,
-        bright: 0.72,
-        articulate: 1,
-        breath: 0.06,
-        jitter: 0.25,
-        vib: 5.6,
-        vibmod: 0.14,
-        vibdelay: 0.3,
-        ring: 0.38,
-      },
-      filter: { type: "hpf", cutoff: 230, resonance: 0 },
-      // Close and present: a presence lift, a little air and a gentle
-      // compressor hold her level steady over the stack.
-      fx: {
-        crush: { bits: 16, coarse: 1, mix: 0 },
-        eq: { mid: 2, midfreq: 3000, high: 2, highfreq: 9000 },
-        compressor: {
-          threshold: -20,
-          ratio: 3,
-          attack: 0.006,
-          release: 0.12,
-          makeup: 4,
+  if (book) {
+    s.track(
+      vocalTrack(book, 1, {
+        id: "vocal",
+        name: "Candy singer",
+        fx: {
+          crush: { bits: 16, coarse: 1, mix: 0 },
+          eq: { mid: 2, midfreq: 3200, high: 4, highfreq: 8000 },
+          compressor: {
+            threshold: -24,
+            ratio: 4,
+            attack: 0.004,
+            release: 0.1,
+            makeup: 11,
+          },
+          duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
         },
-      },
-      delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
-      delayMixAutomation: a.vocalThrows,
-      fxAutomation: {
-        // Formant lifts through the pre-chorus peak; wobbles through the break.
-        "sing-formant": a.vocalFormant,
-        "crush-mix": a.vocalCrushMix,
-        "crush-bits": a.vocalCrushBits,
-      },
-      reverb: room,
-      humanize: { timing: 6, velocity: 5, length: 4, seed: 16 },
-    }),
-  );
+        delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
+        delayMixAutomation: a.vocalThrows,
+        fxAutomation: {
+          "crush-mix": a.vocalCrushMix,
+          "crush-bits": a.vocalCrushBits,
+        },
+        reverb: room,
+      }),
+    );
+    // Her stutters: "pix" through the glitch break, "me" into each chorus.
+    s.track(
+      stutterTrack(book, 0.9, {
+        id: "pix",
+        name: "Pixel stutter",
+        pan: 0,
+        fx: {
+          ...orbit,
+          formant: { shift: 0, mix: 1 },
+          crush: { bits: 16, coarse: 1, mix: 0 },
+          eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+        },
+        fxAutomation: {
+          "formant-shift": a.vocalFormant,
+          "crush-mix": a.vocalCrushMix,
+          "crush-bits": a.vocalCrushBits,
+        },
+      }),
+    );
+  } else {
+    s.track(
+      voice("vocal", "Candy singer", "sing", 0.76, {
+        sing: {
+          preset: "aah",
+          voice: "soprano",
+          formant: 2.5,
+          bright: 0.72,
+          articulate: 1,
+          breath: 0.06,
+          jitter: 0.25,
+          vib: 5.6,
+          vibmod: 0.14,
+          vibdelay: 0.3,
+          ring: 0.38,
+        },
+        filter: { type: "hpf", cutoff: 230, resonance: 0 },
+        // Close and present: a presence lift, a little air and a gentle
+        // compressor hold her level steady over the stack.
+        fx: {
+          crush: { bits: 16, coarse: 1, mix: 0 },
+          eq: { mid: 2, midfreq: 3000, high: 2, highfreq: 9000 },
+          compressor: {
+            threshold: -20,
+            ratio: 3,
+            attack: 0.006,
+            release: 0.12,
+            makeup: 4,
+          },
+        },
+        delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
+        delayMixAutomation: a.vocalThrows,
+        fxAutomation: {
+          // Formant lifts through the pre-chorus peak; wobbles through the break.
+          "sing-formant": a.vocalFormant,
+          "crush-mix": a.vocalCrushMix,
+          "crush-bits": a.vocalCrushBits,
+        },
+        reverb: room,
+        humanize: { timing: 6, velocity: 5, length: 4, seed: 16 },
+      }),
+    );
+  }
   s.track(
     voice("harm", "Candy double", "sing", 0.55, {
       pan: 0.32,
@@ -1171,17 +1294,11 @@ const DEMO_LANES: CandyLanes = {
     0.07,
     0.34,
   ),
+  // Formant on her stutters: a lift through each "me", a wobble through the break.
   vocalFormant: [
-    ...lanes([0, 2.5], [15.5, 2.5], [15.95, 7], [16, 2.5]),
-    ...lanes([24, 2.5], [25, -2], [26, 6], [27, -1], [27.9, 5], [28, 2.5]),
-    ...lanes(
-      [39.5, 2.5],
-      [39.95, 7],
-      [40, 2.5],
-      [55, 2.5],
-      [55.6, 5.5],
-      [56, 2.5],
-    ),
+    ...lanes([0, 0], [15.6, 0], [15.9, 3], [16, 0]),
+    ...lanes([24, 0], [25, -3], [26, 3], [27, -2], [27.9, 2.5], [28, 0]),
+    ...lanes([39.6, 0], [39.9, 3], [40, 0]),
   ],
   vocalCrushMix: lanes([0, 0], [24, 0.2], [26, 0.6], [27.9, 0.7], [28, 0]),
   vocalCrushBits: lanes([0, 16], [24, 10], [27.9, 5], [28, 16]),
@@ -1192,7 +1309,7 @@ export const candyFault: DemoDefinition = {
     title: "Candy Fault",
     style: "Hyperpop",
     description:
-      "A sugar-rush hyperpop single: a pitched-up machine singer whose hook lands on 9ths and resolves, a chip pluck that finishes her lines, two interlocking chip arpeggios, a distorted 808 that slides between roots and pops an octave at phrase ends, a kick-less glitch break, a Rhodes bridge sung as a 7-6 chain over a falling bass, then a silent beat that slams the final chorus up a half step and lands it on the tonic.",
+      "A sugar-rush hyperpop single: a bright sung lead whose hook lands on 9ths and resolves, a chip pluck that finishes her lines, two interlocking chip arpeggios, a distorted 808 that slides between roots and pops an octave at phrase ends, a kick-less glitch break, a Rhodes bridge sung as a 7-6 chain over a falling bass, then a silent beat that slams the final chorus up a half step and lands it on the tonic.",
     tempoBpm: 156,
     key: "E",
     bars: BARS,
@@ -1247,7 +1364,7 @@ export const candyFault: DemoDefinition = {
       ["Last pixel", 64, 4],
     ] as const)
       s.section(name, start, bars);
-    candyTracks(s, DEMO_LANES);
+    candyTracks(s, DEMO_LANES, BOOK);
     const hit = (
       track: string,
       bar: number,
@@ -1279,19 +1396,6 @@ export const candyFault: DemoDefinition = {
           Math.min(0.13, step * 0.9),
         );
       }
-    };
-    const sing = (track: string, line: Line, transpose = 0, gain = 1) => {
-      for (const [bar, phrase] of line)
-        for (const [beat, pitch, length, velocity = 0.7, lyric] of phrase) {
-          const long = length >= 1.4;
-          s.note(track, bar, beat, pitch + transpose, length, velocity * gain, {
-            ...(lyric ? { lyric } : {}),
-            ...(length >= 0.85 && lyric !== "_" ? scoop(-80, 0.1) : {}),
-            ...(long && pitch >= 75
-              ? { vibrato: { rate: 5.8, depth: 32, delay: 0.28 } }
-              : {}),
-          });
-        }
     };
     /** A line sung exactly as written (no scoop, no vibrato). */
     const plain = (track: string, line: Line, gain: number) => {
@@ -2154,16 +2258,43 @@ export const candyFault: DemoDefinition = {
     }
 
     // ── topline ───────────────────────────────────────────────────────────
-    sing("vocal", VERSE_ONE);
-    sing("vocal", lift(12));
-    sing("vocal", CHORUS_ONE);
-    sing("vocal", VERSE_TWO);
-    sing("vocal", lift(36));
-    sing("vocal", CHORUS_TWO);
-    sing("vocal", BRIDGE);
-    sing("vocal", OVERLOAD, 0, 1.1);
-    sing("vocal", LAST);
-    // The glitch break stutters the hook's last word.
+    const vox = trackOf(s, "vocal");
+    const sung = (line: string, bar: number, beat: number, velocity: number) =>
+      s.note(
+        "vocal",
+        bar,
+        beat - LINE_LEAD,
+        slot(vox, line),
+        BOOK.lines![line]! + LINE_LEAD,
+        velocity,
+      );
+    for (const [line, bar, beat, velocity] of SUNG)
+      if (line !== "chAo") sung(line, bar, beat, velocity);
+    // The glitch break stutters the hook's last word; "me" stutters into
+    // each chorus; the overload's "pix pix" breaks into "pixels". Chops are
+    // sung on the book root (G#), so cents set each pitch.
+    const pix = trackOf(s, "pix");
+    const chop = (
+      name: string,
+      bar: number,
+      beat: number,
+      count: number,
+      step: number,
+      pitch: number,
+      from: number,
+      to: number,
+    ) => {
+      for (let i = 0; i < count; i++)
+        s.note(
+          "pix",
+          bar,
+          beat + i * step,
+          slot(pix, `s_${name}`),
+          Math.max(step * 0.9, 0.12),
+          from + ((to - from) * i) / Math.max(1, count - 1),
+          { cents: (pitch - BOOK.root) * 100 },
+        );
+    };
     for (const [bar, beat, count, step, pitch] of [
       [24, 0, 4, 0.25, 83],
       [24, 2, 6, 0.125, 83],
@@ -2172,9 +2303,9 @@ export const candyFault: DemoDefinition = {
       [26, 2.5, 6, 0.125, 83],
       [27, 0, 8, 1 / 16, 83],
     ] as const)
-      stutter("vocal", bar, beat, count, step, [pitch], 0.88, 0.42, {
-        lyric: "pix",
-      });
+      chop("pix", bar, beat, count, step, pitch, 0.88, 0.42);
+    for (const bar of [15, 39]) chop("me", bar, 2.5, 4, 0.25, 81, 0.6, 0.85);
+    chop("pix", 62, 2.25, 2, 0.25, 84, 0.75, 0.85);
     shadow(lift(12).slice(2), "third", 0.62);
     shadow(lift(36).slice(2), "third", 0.62);
     shadow(CHORUS_ONE, "third", 0.6);
@@ -2234,7 +2365,6 @@ export const candyFault: DemoDefinition = {
       "chords",
       "arp",
       "arp2",
-      "vocal",
       "harm",
       "high",
       "chops",
@@ -2293,6 +2423,10 @@ export const candyFault: DemoDefinition = {
     powerDown(27 * BAR + 3 * TPB, 28 * BAR, false);
     // A whole-mix silent beat before Overload: nothing starts or rings in it.
     powerDown(56 * BAR - TPB, 56 * BAR, true);
+    // The overload's first line starts on the downbeat; only its quarter-beat
+    // consonant lead sits inside the silent beat.
+    for (const [line, bar, beat, velocity] of SUNG)
+      if (line === "chAo") sung(line, bar, beat, velocity);
     return s.finish();
   },
 };

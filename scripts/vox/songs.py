@@ -210,6 +210,37 @@ SONGS = {
     # voice (F3-Eb4) over Eb-F-Gm-Dm, a deadpan low male chant that adds a
     # term each pass, a double-time chorus on Gm7-Eb-Bb/D-F up to G4, and a
     # held ballad breakdown. The chops sit on Bb4 for chipmunk riffs.
+    "candy-fault-vox": dict(
+        # Candy Fault's topline note for note; the final chorus lines are sung
+        # a half step up (the song lifts at bar 56) so the book never re-pitches.
+        title="Candy Fault Vox", voice="bf_emma", bpm=156, speed=0.8, root=80,
+        parts=[
+            ("v1a", 7, line("pink light on low bat- ter- y".split(), [0, 0.5, 1.5, 2, 3, 3.5, 4], [68, 68, 66, 68, 71, 69, 68], [0.421, 0.7, 0.421, 0.9, 0.421, 0.45, 1.7], vib=0.12)),
+            ("v1b", 7, line("I keep you in my cache".split(), [0, 0.5, 1.5, 2, 2.5, 3.5], [64, 69, 68, 71, 73, 71], [0.4, 0.7, 0.421, 0.421, 0.421, 1.9], vib=0.12)),
+            ("v1c", 7, line("sug- ar on the cir- cuit board".split(), [0, 0.5, 1, 1.5, 2, 3, 3.5], [68, 68, 71, 73, 76, 75, 71], [0.4, 0.4, 0.421, 0.421, 0.9, 0.45, 1.8], vib=0.12)),
+            ("v1d", 6, line("ev- ery kiss a lit- tle crash".split(), [0, 0.5, 1, 2, 2.5, 3, 3.5], [71, 73, 75, 73, 71, 73, 75], [0.4, 0.4, 0.9, 0.421, 0.421, 0.45, 1.5], vib=0.12)),
+            ("lift1", 7, line("turn it up un- til it breaks".split(), [0, 0.5, 1, 2, 2.5, 3, 4], [73, 73, 76, 73, 76, 78, 78], [0.4, 0.4, 0.9, 0.4, 0.4, 0.421, 1.6], vib=0.12)),
+            ("lift2", 8, line("hold on tight to me".split(), [0, 1, 2, 3.5, 4], [76, 78, 80, 78, 81], [0.7, 0.7, 1.2, 0.45, 2.4], vib=0.12)),
+            ("chA", 8, line("we glow ~ in the sta- tic oh ~".split(), [0, 0.5, 1, 2, 2.5, 3, 4, 4.5, 5.5], [71, 78, 76, 73, 75, 76, 75, 73, 71], [0.45, 0.5, 1, 0.4, 0.4, 0.9, 0.45, 1, 1])),
+            ("chB1", 7, line("sweet ~ as a short cir- cuit".split(), [0, 1, 1.5, 2, 2.5, 3.5, 4.5], [78, 76, 73, 76, 80, 78, 76], [1, 0.5, 0.4, 0.4, 0.9, 0.85, 1.5], vib=0.12)),
+            ("chA2", 8, line("we glow ~ in the sta- tic oh ~ oh".split(), [0, 0.5, 1, 2, 2.5, 3, 4, 4.5, 5.25, 6], [71, 78, 76, 73, 75, 76, 75, 73, 71, 78], [0.45, 0.5, 1, 0.4, 0.4, 0.9, 0.45, 0.75, 0.5, 1])),
+            ("chC1", 6, line("break me in- to pix- els ~".split(), [0, 0.75, 1.5, 2, 2.5, 3, 4.5], [80, 80, 78, 76, 83, 80, 78], [0.7, 0.6, 0.4, 0.4, 0.45, 1.5, 0.5])),
+            ("v2a", 7, line("blue screen in the morn- ing light".split(), [0, 0.5, 1.5, 2, 3, 3.5, 4], [68, 68, 66, 68, 71, 69, 68], [0.421, 0.7, 0.421, 0.9, 0.421, 0.45, 1.7], vib=0.12)),
+            ("v2b", 7, line("you're buf- fer- ing my heart".split(), [0, 0.5, 1.5, 2, 2.5, 3.5], [64, 69, 68, 71, 73, 71], [0.4, 0.7, 0.421, 0.421, 0.421, 1.9], vib=0.12)),
+            ("v2c", 7, line("can- dy coat- ed er- ror code".split(), [0, 0.5, 1, 1.5, 2, 3, 3.5], [68, 68, 71, 73, 76, 75, 71], [0.4, 0.4, 0.421, 0.421, 0.9, 0.45, 1.8], vib=0.12)),
+            ("v2d", 6, line("I don't want it to re- start".split(), [0, 0.5, 1, 2, 2.5, 3, 3.5], [69, 71, 74, 71, 69, 71, 74], [0.4, 0.4, 0.9, 0.421, 0.421, 0.45, 1.5], vib=0.12)),
+            ("chB2", 7, line("su- gar rush on a live wire".split(), [0, 1, 1.5, 2.5, 3, 3.5, 4.5], [78, 76, 73, 76, 78, 80, 76], [1, 0.45, 0.9, 0.4, 0.4, 0.85, 1.5], vib=0.12)),
+            ("chC2", 6, line("burn me sweet- er high- er ~".split(), [0, 0.75, 1.5, 2, 2.5, 3, 4.5], [80, 80, 78, 76, 83, 80, 78], [0.7, 0.6, 0.4, 0.4, 0.45, 1.5, 0.5])),
+            ("br1", 24, line("slow down ~ let ~ the ~ col- ors run ~".split(), [0, 1, 4.5, 7, 8.5, 11, 12.5, 15, 16.5, 19, 20.5], [73, 73, 71, 71, 69, 69, 68, 68, 66, 66, 64], [1, 3.5, 2.5, 1.5, 2.5, 1.5, 2.5, 1.5, 2.5, 1.5, 2.5], vib=0.12)),
+            ("br2", 7, line("hold the light till it's un- done".split(), [0, 0.5, 1, 2, 2.5, 3, 4.5], [69, 71, 73, 73, 76, 76, 75], [0.4, 0.4, 1, 0.4, 0.4, 1.5, 1.4], vib=0.12)),
+            ("chAo", 7, line("we glow ~ in the sta- tic oh ~".split(), [0, 0.5, 0.9, 1.5, 2, 2.5, 3.5, 4, 5], [72, 79, 77, 74, 76, 77, 76, 74, 72], [0.4, 0.4, 0.6, 0.4, 0.4, 0.9, 0.45, 1, 1])),
+            ("chBo", 7, line("sweet ~ as a short cir- cuit".split(), [0, 1, 1.5, 2, 2.5, 3.5, 4.5], [79, 77, 74, 77, 81, 79, 77], [1, 0.5, 0.4, 0.4, 0.9, 0.85, 1.5], vib=0.12)),
+            ("chA2o", 8, line("we glow ~ in the sta- tic oh ~ oh".split(), [0, 0.5, 1, 2, 2.5, 3, 4, 4.5, 5.25, 6], [72, 79, 77, 74, 76, 77, 76, 74, 72, 79], [0.45, 0.5, 1, 0.4, 0.4, 0.9, 0.45, 0.75, 0.5, 1])),
+            ("chCo", 9, line("break me in- to pix- els ~ ~".split(), [0, 0.75, 1.5, 2, 2.75, 3, 4.5, 6.5], [81, 81, 79, 77, 84, 81, 79, 77], [0.7, 0.6, 0.4, 0.221, 0.2, 1.5, 2, 1.5], vib=0.12)),
+            ("last", 14, line("we glow in the sta- tic oh".split(), [0, 0.5, 4, 4.5, 5, 6, 7.5], [69, 72, 74, 76, 77, 76, 77], [0.45, 1.4, 0.4, 0.4, 1, 0.45, 5.5], vib=0.12)),
+            *chops(80, ["pix", "me", "oh"]),
+        ],
+    ),
     "bubble-wrap-vox": dict(
         title="Bubble Wrap Vox", voice="bf_emma", bpm=100, root=70, human=0.25,
         parts=[

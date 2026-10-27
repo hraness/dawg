@@ -8,7 +8,7 @@ order: 0
 Six complete, editable hyperpop songs with original patterns and
 sounds, all offline. Open a song's notes to explore its production.
 
-- Candy Fault · an abstract synth singer over glitch breaks
+- Candy Fault · E major sugar rush, a sung lead over glitch breaks
 - Redline · F minor drum-and-bass, words over a classic vocoder
 - Glass Garden · A major, tresillo blooms, syllable arps, grain voice
 - Night Swim · D major house, marimba and plucks, a low sung verse
