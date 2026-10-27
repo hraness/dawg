@@ -89,6 +89,27 @@ describe("loop renderer", () => {
     }
   });
 
+  test("a prewarm survives a play's cancel and fills the worker's cache", async () => {
+    const worker = new LoopRenderer({ sampleRate: 8_000 });
+    const inline = new LoopRenderer({ sampleRate: 8_000, worker: false });
+    try {
+      const warm = worker.warm(score(60));
+      // A play cancels superseded foreground renders, not the prewarm.
+      worker.cancelPending();
+      const warmed = await warm;
+      expect(warmed?.pcm.length).toBeGreaterThan(0);
+      const played = await worker.render(score(60));
+      expect(played.pcm).toEqual(warmed!.pcm);
+      // The play read the prewarmed loop instead of rendering it again.
+      expect(played.renderMs).toBeLessThan(warmed!.renderMs);
+      // Never on the calling thread.
+      expect(await inline.warm(score(60))).toBeUndefined();
+    } finally {
+      worker.dispose();
+      inline.dispose();
+    }
+  });
+
   test("stopping during inline sample loading skips the stale DSP render", async () => {
     let finish!: (bank: Awaited<ReturnType<SampleLibrary["load"]>>) => void;
     const load = spyOn(SampleLibrary.prototype, "load").mockImplementationOnce(

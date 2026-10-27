@@ -601,8 +601,9 @@ test("non-covering monitor replies fail once instead of recursively refilling", 
 /**
  * Play a long song against a renderer that synthesizes slower than real time
  * on one core (`cost` wall seconds per rendered second), on a virtual clock,
- * and report how long sound took to start and how many frames went silent
- * after it did.
+ * and report how long sound took to start, which song frame it started on
+ * (windows hold a ramp of their frame / 100), and how many frames went
+ * silent after it did. `cue` starts with `engine.cue` (a held transport).
  */
 async function simulate(options: {
   cost: number;
@@ -610,6 +611,7 @@ async function simulate(options: {
   beat: number;
   seconds: number;
   edits?: number[];
+  cue?: boolean;
 }) {
   const total = 120 * RATE;
   let now = 0;
@@ -655,8 +657,12 @@ async function simulate(options: {
           cancel: () => reject(new RenderCancelledError("render cancelled")),
           finish: () => {
             finished = true;
+            const pcm = new Int16Array((end - start) * 2);
+            for (let index = 0; index < pcm.length; index++)
+              pcm[index] = 1 + Math.floor((start + (index >> 1)) / 100);
             resolve({
               ...block(start, end - start, 1000, total),
+              pcm,
               renderMs: work,
             });
           },
@@ -668,10 +674,14 @@ async function simulate(options: {
     renderWorkers: options.workers,
   });
   let started: number | undefined;
+  let startFrame: number | undefined;
+  let heardMs: number | undefined;
   let silent = 0;
   try {
     const score = createScore({ ...song().toJSON(), bars: 60 });
-    void engine.play(score, options.beat);
+    if (options.cue)
+      void engine.cue(score, options.beat).then((ms) => (heardMs = ms));
+    else void engine.play(score, options.beat);
     const edits = [...(options.edits ?? [])];
     for (; now < options.seconds * 1000; now += 20) {
       if (edits.length && now >= edits[0]! * 1000) {
@@ -679,6 +689,8 @@ async function simulate(options: {
         void engine.play(createScore({ ...score.toJSON() }));
       }
       finished = false;
+      // Count what a starting player writes as it starts, too.
+      const before = chunks.length;
       for (const job of due.filter((job) => job.at <= now)) {
         due.splice(due.indexOf(job), 1);
         job.finish();
@@ -689,11 +701,12 @@ async function simulate(options: {
       await new Promise((resolve) => setImmediate(resolve));
       for (let wait = 0; wait < 500 && finished && !engine.playerStarts; wait++)
         await Bun.sleep(1);
-      const before = chunks.length;
       engine.pump();
       for (const chunk of chunks.slice(before)) {
-        if (started === undefined && chunk.some((sample) => sample !== 0))
+        if (started === undefined && chunk.some((sample) => sample !== 0)) {
           started = now;
+          startFrame = (chunk[0]! - 1) * 100;
+        }
         if (started !== undefined)
           for (let index = 0; index < chunk.length; index += 2)
             if (chunk[index] === 0) silent++;
@@ -704,7 +717,7 @@ async function simulate(options: {
     render.mockRestore();
     cancel.mockRestore();
   }
-  return { startedMs: started, silentFrames: silent };
+  return { startedMs: started, startFrame, heardMs, silentFrames: silent };
 }
 
 test("a song that renders slower than real time per core streams without gaps", async () => {
@@ -725,4 +738,44 @@ test("edits to a streamed song keep playing the old version until the new one co
     edits: [12, 30],
   });
   expect(run.silentFrames).toBe(0);
+});
+
+test("a cued start plays from the held beat and says when it is heard", async () => {
+  // The transport holds at beat 120 (60 s) while the first windows render.
+  // Unheld, the engine renders ahead to where a running playhead will be
+  // by then, so the song's first seconds are skipped while the playhead
+  // runs through silence; cued, sound starts on the beat itself and `cue`
+  // reports when, so the playhead can start with it.
+  const held = 60 * RATE;
+  const unheld = await simulate({
+    cost: 0.75,
+    workers: 3,
+    beat: 120,
+    seconds: 12,
+  });
+  expect(unheld.startFrame! - held).toBeGreaterThan(RATE);
+  const run = await simulate({
+    cost: 0.75,
+    workers: 3,
+    beat: 120,
+    seconds: 30,
+    cue: true,
+  });
+  expect(run.startedMs).toBeDefined();
+  expect(run.startedMs!).toBeLessThan(unheld.startedMs!);
+  expect(Math.abs(run.startFrame! - held)).toBeLessThanOrEqual(100);
+  expect(run.heardMs).toBe(run.startedMs!);
+  expect(run.silentFrames).toBe(0);
+  // An edit before the sound starts joins the start, held beat and all.
+  const edited = await simulate({
+    cost: 0.75,
+    workers: 3,
+    beat: 120,
+    seconds: 30,
+    cue: true,
+    edits: [1],
+  });
+  expect(Math.abs(edited.startFrame! - held)).toBeLessThanOrEqual(100);
+  expect(edited.heardMs).toBe(edited.startedMs!);
+  expect(edited.silentFrames).toBe(0);
 });

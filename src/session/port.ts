@@ -60,6 +60,13 @@ export type MetaWriteResult = {
 export type WindowPlayer = {
   /** Start at `beat`, or swap a playing loop in place (gapless engine). */
   play(score: TrackScore, beat?: number): Promise<void>;
+  /**
+   * Start at `beat` while the transport holds there; resolves with the
+   * monotonic ms `beat` is heard at (see `AudioEngine.cue`).
+   */
+  cue?(score: TrackScore, beat: number): Promise<number | undefined>;
+  /** Render ahead what a play from `beat` needs first (best effort). */
+  prewarm?(score: TrackScore, beat?: number): Promise<void>;
   stop(): void;
   /** Stops and releases the render worker; the player is done for good. */
   dispose(): Promise<void>;

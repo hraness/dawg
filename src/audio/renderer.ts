@@ -49,6 +49,8 @@ export type MonitorJob = Readonly<{
 type Waiter = {
   resolve: (render: LoopRender) => void;
   reject: (error: Error) => void;
+  /** A prewarm (`warm`): `cancelPending` leaves it running. */
+  warm?: boolean;
 };
 
 type Slot = {
@@ -134,16 +136,44 @@ export class LoopRenderer {
     monitorFrame?: number,
     job?: MonitorJob,
   ): Promise<LoopRender> {
+    return this.renderWith(score, monitorFrame, job, false);
+  }
+
+  /**
+   * Render ahead of a play (`AudioEngine.prewarm`) on the foreground
+   * worker: it starts the worker, decodes the song's samples and fills the
+   * worker's caches. `cancelPending` leaves it running, so a play that
+   * asks for the same window queues behind it and reads the cache instead
+   * of restarting a cold worker. Off-thread only; resolves undefined when
+   * renders would run on the calling thread.
+   */
+  public async warm(
+    score: TrackScore,
+    monitorFrame?: number,
+    job?: MonitorJob,
+  ): Promise<LoopRender | undefined> {
+    if (this.disposed || !this.offThread || job?.background) return undefined;
+    return this.renderWith(score, monitorFrame, job, true);
+  }
+
+  private async renderWith(
+    score: TrackScore,
+    monitorFrame: number | undefined,
+    job: MonitorJob | undefined,
+    warm: boolean,
+  ): Promise<LoopRender> {
     if (this.disposed) throw new Error("renderer disposed");
     const epoch = this.epoch;
     for (const slot of this.candidates(job)) {
       try {
-        return await this.renderInWorker(slot, score, monitorFrame, job);
+        return await this.renderInWorker(slot, score, monitorFrame, job, warm);
       } catch (error) {
         if (this.disposed) throw error;
         if (!(error instanceof WorkerLostError)) throw error;
       }
     }
+    // A prewarm never blocks the calling thread.
+    if (warm) throw new WorkerLostError("render worker unavailable");
     return this.renderInline(score, epoch, monitorFrame, job);
   }
 
@@ -151,7 +181,10 @@ export class LoopRenderer {
   public cancelPending(): void {
     this.epoch += 1;
     const foreground = this.slots[0];
-    if (foreground && foreground.pending.size > 0)
+    if (
+      foreground &&
+      [...foreground.pending.values()].some((waiter) => !waiter.warm)
+    )
       this.failSlot(
         foreground,
         new RenderCancelledError("render cancelled"),
@@ -239,12 +272,13 @@ export class LoopRenderer {
     score: TrackScore,
     monitorFrame?: number,
     job?: MonitorJob,
+    warm = false,
   ): Promise<LoopRender> {
     const worker = this.ensureWorker(slot);
     const id = this.nextId;
     this.nextId += 1;
     return new Promise<LoopRender>((resolve, reject) => {
-      slot.pending.set(id, { resolve, reject });
+      slot.pending.set(id, { resolve, reject, ...(warm ? { warm } : {}) });
       const request: RenderRequest = {
         id,
         monitorFrame,
