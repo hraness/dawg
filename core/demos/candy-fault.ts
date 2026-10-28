@@ -216,11 +216,17 @@ const PROG = [
   ...["E", "B", "A", "E"], // 64 outro
 ] as const;
 const BARS = PROG.length;
+/**
+ * The score is written in E (lifting to F) but sounds a 4th lower, in B
+ * (lifting to C), where her book is sung: verses around D#4, the hook
+ * around B4.
+ */
+export const KEY_SHIFT = -5;
 
 /** The sung book: every line of the topline, the overload's sung a half step up. */
 export const BOOK: VoxBank = {
   sample: "candy-fault-vox",
-  root: 80,
+  root: 75,
   syllables: ["pix", "me", "oh"],
   heads: [],
   lines: {
@@ -1077,11 +1083,12 @@ export function candyTracks(s: Composer, a: CandyLanes, book?: VoxBank): void {
       vocalTrack(book, 1, {
         id: "vocal",
         name: "Candy singer",
-        // Her words stay clean and 4 dB hotter than the shelf's: the crush
-        // sweeps through the break stay on her stutters, never on a sung line.
+        // Her words stay clean and inside the track: the low cut keeps her to
+        // her band, the crush sweeps through the break stay on her stutters,
+        // never on a sung line.
         fx: {
-          eq: { mid: 2, midfreq: 3200, high: 4, highfreq: 8000 },
-          compressor: { ...VOCAL_COMP, makeup: 20, attack: 0.015 },
+          eq: { low: -6, lowfreq: 200, mid: 3, midfreq: 4000, high: 4, highfreq: 8000 },
+          compressor: { ...VOCAL_COMP, makeup: 12, attack: 0.015 },
           duck: VOCAL_DUCK,
         },
         delay: { beats: 0.75, feedback: 0.25, mix: 0.04, pingpong: true },
@@ -1307,7 +1314,7 @@ export const candyFault: DemoDefinition = {
     description:
       "A sugar-rush hyperpop single: a bright sung lead whose hook lands on 9ths and resolves, a chip pluck that finishes her lines, two interlocking chip arpeggios, a distorted 808 that slides between roots and pops an octave at phrase ends, a kick-less glitch break, a Rhodes bridge sung as a 7-6 chain over a falling bass, then a silent beat that slams the final chorus up a half step and lands it on the tonic.",
     tempoBpm: 156,
-    key: "E",
+    key: "B",
     bars: BARS,
     highlightBar: 56,
     trackId: "chops",
@@ -1337,11 +1344,11 @@ export const candyFault: DemoDefinition = {
       "Last pixel 4",
     ],
     mixNotes: [
-      "The 808 follows the kick but phrases across the bar: one verse bar in four holds its root, the octave pop comes only before the phrase-end IV, vi and I are reached by step, IV from a half step below, and it rests on beat three under 'oh'; in the bridge it walks down alone, E to F#, under the Rhodes.",
+      "The 808 follows the kick but phrases across the bar: one verse bar in four holds its root, the octave pop comes only before the phrase-end IV, vi and I are reached by step, IV from a half step below, and it rests on beat three under 'oh'; in the bridge it walks down alone, B to C#, under the Rhodes.",
       "The singer is pitched bright with a formant lift, compressed with a presence lift so she stays on top of the Overload stack; a softer double sings thirds below (in the bridge, the 10th above the walking bass, so her 7-6 and its 4-3 resolve together) and a thin octave-up double joins every line of the final chorus; dotted-eighth delay throws catch the last word of each line.",
       "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines, owns the fourth bar of each chorus phrase, and answers verse two an octave above her.",
       "The pre-chorus supersaw sits close under the singer (A3 to D#5) with its top voice climbing A4 B4 C#5 D#5 into the drop; the chorus opens the stack to E3..B4 so her line stays clear, with octave stabs above her from chorus one (two a bar, then four) and a held top voice in the Overload; the Rhodes voicings in the verses top out under her lowest notes.",
-      "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. Every phrase end gets its own fill (a tom climb in chorus one, a hats-only glitch fill in chorus two's dropout bar, a 32nd ratchet in the Overload), and the drums leave a half-bar hole under the Overload's stuttered 'pix-els' before the landing. After one beat of silence the final chorus jumps from E to F, detunes the supersaw from pretty to harsh and stutters the hook; its last bar turns to the tonic on beat three under a crash, her held F# becoming a 9th that resolves, and the song powers down with the 808 and the last chip fragment diving an octave.",
+      "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. Every phrase end gets its own fill (a tom climb in chorus one, a hats-only glitch fill in chorus two's dropout bar, a 32nd ratchet in the Overload), and the drums leave a half-bar hole under the Overload's stuttered 'pix-els' before the landing. After one beat of silence the final chorus jumps from B to C, detunes the supersaw from pretty to harsh and stutters the hook; its last bar turns to the tonic on beat three under a crash, her held C# becoming a 9th that resolves, and the song powers down with the 808 and the last chip fragment diving an octave.",
     ],
   }),
   build() {
@@ -2268,7 +2275,7 @@ export const candyFault: DemoDefinition = {
       if (line !== "chAo") sung(line, bar, beat, velocity);
     // The glitch break stutters the hook's last word; "me" stutters into
     // each chorus; the overload's "pix pix" breaks into "pixels". Chops are
-    // sung on the book root (G#), so cents set each pitch.
+    // sung on the book root (D#), so cents set each pitch (written in E).
     const pix = trackOf(s, "pix");
     const chop = (
       name: string,
@@ -2288,7 +2295,7 @@ export const candyFault: DemoDefinition = {
           slot(pix, `s_${name}`),
           Math.max(step * 0.9, 0.12),
           from + ((to - from) * i) / Math.max(1, count - 1),
-          { cents: (pitch - BOOK.root) * 100 },
+          { cents: (pitch + KEY_SHIFT - BOOK.root) * 100 },
         );
     };
     for (const [bar, beat, count, step, pitch] of [
@@ -2423,6 +2430,12 @@ export const candyFault: DemoDefinition = {
     // consonant lead sits inside the silent beat.
     for (const [line, bar, beat, velocity] of SUNG)
       if (line === "chAo") sung(line, bar, beat, velocity);
+    // Every pitched part sounds a 4th below where it is written.
+    for (let i = 0; i < s.notes.length; i++) {
+      const n = s.notes[i]!;
+      if (LIFTED.has(n.trackId!))
+        s.notes[i] = { ...n, pitch: n.pitch! + KEY_SHIFT };
+    }
     return s.finish();
   },
 };

@@ -463,7 +463,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 75.57679166666667,
       bpm: 156,
       sha256:
-        "878084e846b3f978de69c7c44b3bc8776305d7272635f152517ba980828b1afe",
+        "2cea8cc8571b2eed31f87c645bb55e4e533be85edb16474b50d54a773000ce58",
       slices: [
         { name: "v1a", begin: 0.0, end: 0.036896 },
         { name: "v1b", begin: 0.036896, end: 0.073791 },
