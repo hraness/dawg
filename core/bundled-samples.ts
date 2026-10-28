@@ -251,7 +251,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 37.030833333333334,
       bpm: 128,
       sha256:
-        "3477813651808e2c12fba979bd1651d7b9739f148f14a4cc04940209d5dff9b2",
+        "37d6487f368e7142870a87a2d903ad44050fb5864dd82e35cda4daa1a0636a56",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053798 },
         { name: "v2", begin: 0.053798, end: 0.107595 },
@@ -268,7 +268,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
         { name: "ch3", begin: 0.746837, end: 0.851268 },
         { name: "glass", begin: 0.851268, end: 0.86709 },
         { name: "bloom", begin: 0.86709, end: 0.882913 },
-        { name: "gold", begin: 0.882913, end: 0.898735 },
+        { name: "glow", begin: 0.882913, end: 0.898735 },
         { name: "grow", begin: 0.898735, end: 0.914558 },
         { name: "ah", begin: 0.914558, end: 0.93038 },
         { name: "ooh", begin: 0.93038, end: 0.946202 },

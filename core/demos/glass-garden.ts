@@ -40,7 +40,7 @@ const { r1, r1l, r2, r2l, l4, l4l } = RHYTHM;
 export const BOOK: Book = {
   sample: "glass-garden-vox",
   root: 69,
-  syllables: ["glass", "bloom", "gold", "grow", "ah", "ooh"],
+  syllables: ["glass", "bloom", "glow", "grow", "ah", "ooh"],
   ends: {
     v1: 3,
     v2: 3,
@@ -60,59 +60,59 @@ export const BOOK: Book = {
     v1: sungLine(
       "plant- ed some- thing in the light",
       r1,
-      [73, 73, 74, 73, 76, 74, 73],
+      [61, 61, 62, 61, 64, 62, 61],
       r1l,
     ),
     v2: sungLine(
       "watched it grow- ing through the night",
       r2,
-      [73, 73, 78, 76, 73, 69, 66],
+      [61, 61, 66, 64, 61, 59, 57],
       r2l,
     ),
     v3: sungLine(
       "ev- ery flow- er made of glass",
       r1,
-      [73, 73, 76, 73, 71, 69, 73],
+      [61, 61, 64, 61, 59, 57, 61],
       r1l,
     ),
     v4: sungLine(
       "hold it close but not too fast",
       r2,
-      [71, 71, 73, 71, 69, 68, 71],
+      [59, 59, 61, 59, 57, 56, 59],
       r2l,
     ),
-    v5: sungLine("rain on the roof", l4, [76, 73, 69, 73], l4l),
-    v6: sungLine("drops of the truth", l4, [69, 73, 78, 76], l4l),
-    v7: sungLine("I'll make it new", l4, [69, 73, 76, 81], l4l),
-    v8: sungLine("grow out of you", l4, [78, 76, 73, 78], l4l),
+    v5: sungLine("rain on the roof", l4, [64, 61, 57, 61], l4l),
+    v6: sungLine("green in the glass", l4, [57, 61, 66, 64], l4l),
+    v7: sungLine("I give it time", l4, [57, 61, 64, 69], l4l),
+    v8: sungLine("so it can grow", l4, [66, 64, 61, 66], l4l),
     pre1: sungLine(
       "care- ful care- ful now",
       [0, 0.5, 1, 1.5, 2],
-      [76, 73, 76, 73, 71],
+      [64, 61, 64, 61, 59],
       [0.5, 0.5, 0.5, 0.5, 1.8],
     ),
     pre2: sungLine(
       "let it bloom and grow",
       [0, 0.5, 1, 2, 2.5],
-      [74, 76, 78, 76, 80],
+      [62, 64, 66, 64, 68],
       [0.5, 0.5, 0.9, 0.5, 1.4],
     ),
     ch1: sungLine(
       "in my glass gar- den",
       [0, 0.5, 1, 2, 3],
-      [74, 78, 81, 78, 76],
+      [69, 71, 74, 69, 66],
       [0.5, 0.5, 0.9, 0.9, 3],
     ),
     ch2: sungLine(
-      "ev- ery- thing's gold- en",
+      "ev- ery pet- al glows",
       [0, 0.5, 1, 2, 2.5],
-      [73, 76, 80, 78, 81],
+      [64, 68, 73, 71, 68],
       [0.5, 0.5, 0.9, 0.5, 3.5],
     ),
     ch3: sungLine(
       "don't you ev- er let the sun- light go",
       [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4],
-      [76, 76, 80, 76, 80, 81, 80, 76, 78],
+      [68, 68, 71, 68, 71, 73, 71, 68, 66],
       [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 3],
     ),
   },
@@ -456,12 +456,12 @@ export const KIT: Omit<KitOptions, "bpm"> = {
     harm: 0.16,
   },
   extra: {
-    // The breathy book reads quiet: more makeup and a presence lift put the
-    // words about 10 dB over the bed where consonants live.
+    // The breathy book reads quiet: a presence lift and a little more makeup
+    // keep the consonants clear while the low cut keeps the voice in its band.
     vox: {
       fx: {
-        eq: { mid: 5, midfreq: 2500, high: 5, highfreq: 8000 },
-        compressor: { ...VOCAL_COMP, makeup: 24, attack: 0.015 },
+        eq: { low: -6, lowfreq: 200, mid: 3, midfreq: 4000, high: 4, highfreq: 8000 },
+        compressor: { ...VOCAL_COMP, makeup: 22, attack: 0.015 },
         duck: VOCAL_DUCK,
       },
     },
@@ -582,7 +582,7 @@ export const glassGarden: DemoDefinition = {
       BOOK,
       5,
       "0.2.4.2.5.4.7.6.",
-      ["glass", "bloom", "gold", "grow"],
+      ["glass", "bloom", "glow", "grow"],
       0.55,
     );
     // Verse answers, in the second verse only: the first leaves its gaps
@@ -596,7 +596,7 @@ export const glassGarden: DemoDefinition = {
       ]);
       glitch(s, song, BOOK, bar + 5, "......5.4.3.2-1-", [
         "glass",
-        "gold",
+        "glow",
         "ooh",
       ]);
     }
@@ -622,7 +622,7 @@ export const glassGarden: DemoDefinition = {
         BOOK,
         bar + 7,
         "97.5.86.4.75.3.2",
-        ["gold", "glass"],
+        ["glow", "glass"],
         0.55,
       );
     }
@@ -634,8 +634,8 @@ export const glassGarden: DemoDefinition = {
     s.note("sing", gh, 3, 74, 1, 0.6, { lyric: "gar-" });
     singStutter(s, gh + 1, 0, 8, 0.25, [78, 74, 81, 78], "den", 0.5, 0.65);
     s.note("sing", gh + 1, 2, 76, 2, 0.6, { lyric: "ooh" });
-    singStutter(s, gh + 2, 0, 12, 0.25, [76, 73, 81, 76], "gold", 0.45, 0.75);
-    s.note("sing", gh + 3, 0, 80, 1.5, 0.65, { lyric: "gold-" });
+    singStutter(s, gh + 2, 0, 12, 0.25, [76, 73, 81, 76], "glow", 0.45, 0.75);
+    s.note("sing", gh + 3, 0, 80, 1.5, 0.65, { lyric: "glow-" });
     s.note("sing", gh + 3, 1.5, 83, 2.25, 0.7, { lyric: "en" });
     glitch(
       s,
@@ -652,7 +652,7 @@ export const glassGarden: DemoDefinition = {
       BOOK,
       gh + 3,
       "4.5.6.4.6.5.2...",
-      ["gold", "grow", "ah"],
+      ["glow", "grow", "ah"],
       0.55,
     );
     // A held breath before the last chorus.
