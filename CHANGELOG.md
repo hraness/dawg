@@ -22,6 +22,13 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Fixed
 
+- **Sung words are easier to make out on every demo.** The lead vocal used to sit 4 to 19 dB under the rest of the song while it sang. Chops, stutters, the vocoder, doubles and the synth singer sang over the words, and reverb plus wide delay throws smeared each line into the next. The demos now share one vocal mix in `core/demos/hyperpop.ts`:
+  - The lead sits about 6 to 14 dB over the rest in the consonant band (300-4000 Hz) and ducks the bed 6 dB under each line.
+  - Layers that share its timbre play about 4 dB lower.
+  - Its reverb and echo are short and dry, and delay throws land only after a line's last word.
+  - Candy Fault's break crush moved off the sung lines onto its stutters. Its notes and form are unchanged.
+  - The Redline, Glass Garden and Candy Fault books take the clearest of several takes line by line. Lines that every take misheard now read their words slower on the same notes (a per-part `speed` in `songs.py`).
+  - Whisper's word recall on the full mixes rose from 0.14-0.63 to 0.51-0.83 (Glass Garden 0.14 to 0.72, Window Seat 0.39 to 0.66, Kite Season 0.43 to 0.83).
 - The `list_packs` detail for the studio pack no longer cuts off mid-JSON. It lists every vocal book's slices to the millisecond and has room for all of them.
 - **Pressing play no longer runs the playhead ahead of silent audio.** The transport used to start its clock at once while the engine rendered its first windows (2 to 8 seconds cold on the demos), so the playhead moved through silence and the song's opening was skipped. The clock now holds until the first frame is heard, and the engine prewarms that first window while stopped. A prewarmed play sounds within about 0.1 s.
 

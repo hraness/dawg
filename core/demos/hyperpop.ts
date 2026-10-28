@@ -474,6 +474,55 @@ export function slot(track: TrackInput, name: string): number {
   return found;
 }
 
+/**
+ * The words come first. While a line sings, the lead sits about 2 dB over
+ * everything else and about 8 dB over it in 300-4000 Hz, where consonants
+ * live (a commercial mix measured the same way: +2.3 / +8.2). The bed on
+ * orbit 2 dips 6 dB under each line, and the verb and echo stay short and
+ * low so no word smears into the next.
+ */
+export const VOCAL_COMP = {
+  threshold: -24,
+  ratio: 4,
+  attack: 0.004,
+  release: 0.1,
+  makeup: 16,
+} as const;
+/** Echoes of the lead keep the old, softer makeup. */
+export const LAYER_COMP = { ...VOCAL_COMP, makeup: 8 } as const;
+export const VOCAL_DUCK = {
+  orbit: 2,
+  depth: 0.5,
+  attack: 0.6,
+  onset: 0.08,
+  hold: true,
+} as const;
+export const VOCAL_VERB = { mix: 0.08, size: 0.5, fade: 1.4, lowpass: 9000 };
+export const VOCAL_ECHO = {
+  beats: 0.75,
+  feedback: 0.25,
+  mix: 0.04,
+  pingpong: true,
+};
+/**
+ * Delay throws on the lead: peak wet mix. Throw only after a line's last
+ * word, and at this level the tail is gone before the next line starts.
+ */
+export const THROW_PEAK = 0.18;
+/**
+ * Layers that share the lead's timbre (chops, stutters, doubles, the synth
+ * singer and harmony, the voiced lead and grains) play at this share of
+ * their level, about 4.4 dB lower, so they never compete with a word.
+ */
+export const UNDER_WORDS = 0.6;
+
+/** The lead's insert chain. A quiet book raises `compressor.makeup` only. */
+export const LEAD_FX = {
+  eq: { mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
+  compressor: VOCAL_COMP,
+  duck: VOCAL_DUCK,
+};
+
 /** The lead vocal: every sung line as a oneshot, on top of the mix. */
 export function vocalTrack(
   book: VoxBank,
@@ -483,20 +532,9 @@ export function vocalTrack(
   return voice("vox", "Lead vocal", "sampler", level, {
     sampler: { mode: "oneshot", voices: lineVoices(book) },
     filter: { type: "hpf", cutoff: 170, resonance: 0 },
-    fx: {
-      eq: { mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
-      compressor: {
-        threshold: -24,
-        ratio: 4,
-        attack: 0.004,
-        release: 0.1,
-        makeup: 8,
-      },
-      // While a line sings, the bed on orbit 2 sits about 2.5 dB lower.
-      duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
-    },
-    delay: { beats: 0.75, feedback: 0.42, mix: 0.05, pingpong: true },
-    reverb: { mix: 0.16, size: 0.6, fade: 2.2, lowpass: 11000 },
+    fx: LEAD_FX,
+    delay: VOCAL_ECHO,
+    reverb: VOCAL_VERB,
     ...extra,
   });
 }
@@ -507,7 +545,7 @@ export function doubleTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("dbl", "Chipmunk double", "sampler", level, {
+  return voice("dbl", "Chipmunk double", "sampler", level * UNDER_WORDS, {
     sampler: {
       mode: "oneshot",
       voices: lineVoices(book, { shift: 12, formant: 5 }),
@@ -535,7 +573,7 @@ export function chopTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("chops", "Vocal chops", "sampler", level, {
+  return voice("chops", "Vocal chops", "sampler", level * UNDER_WORDS, {
     sampler: {
       mode: "keyed",
       voices: Object.fromEntries(
@@ -588,7 +626,7 @@ export function stutterTrack(
       clip: 1,
       fadeTime: 0.015,
     };
-  return voice("stut", "Glitch vox", "sampler", level, {
+  return voice("stut", "Glitch vox", "sampler", level * UNDER_WORDS, {
     sampler: { mode: "oneshot", voices },
     pan: 0.12,
     filter: { type: "hpf", cutoff: 300, resonance: 0 },
@@ -610,7 +648,7 @@ export function voiceLeadTrack(
   extra: Partial<TrackInput> = {},
 ): TrackInput {
   const { begin, end, beat } = sliceOf(book, "hold");
-  return voice("vlead", "Voice lead", "sampler", level, {
+  return voice("vlead", "Voice lead", "sampler", level * UNDER_WORDS, {
     sampler: {
       mode: "keyed",
       voices: {
@@ -644,7 +682,7 @@ export function grainTrack(
   extra: Partial<TrackInput> = {},
 ): TrackInput {
   const { begin, end } = sliceOf(book, "hold");
-  return voice("vgrain", "Voice cloud", "granular", level, {
+  return voice("vgrain", "Voice cloud", "granular", level * UNDER_WORDS, {
     granular: {
       src: bundledSampleRef(book.sample),
       root: book.root,
@@ -679,7 +717,7 @@ export function singerTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("sing", "Synth singer", "sing", level, {
+  return voice("sing", "Synth singer", "sing", level * UNDER_WORDS, {
     sing: {
       preset: "aah",
       voice: "soprano",
@@ -707,7 +745,7 @@ export function harmonyTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("harm", "Synth double", "sing", level, {
+  return voice("harm", "Synth double", "sing", level * UNDER_WORDS, {
     pan: 0.3,
     sing: {
       preset: "aah",

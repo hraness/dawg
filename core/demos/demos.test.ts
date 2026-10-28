@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { scoreFromJSON, SCORE_LIMITS } from "../score.ts";
 import { arrangedBars, barsToSeconds } from "../sections.ts";
 import { DEMOS, createDemo } from "./index.ts";
+import { THROW_PEAK } from "./hyperpop.ts";
 
 // Longest run of consecutive bars after the intro where no kick lands; every
 // demo keeps a real break so the drop has somewhere to return from.
@@ -165,8 +166,13 @@ describe("complete demo songs", () => {
         Math.max(...notesOf("vox").map((note) => note.velocity)),
         demo.id,
       ).toBeLessThanOrEqual(0.95);
+      // Words throw short and low: never wetter than THROW_PEAK.
       expect(
-        vox?.delayMixAutomation?.some((point) => point.value >= 0.3),
+        vox?.delayMixAutomation?.some((point) => point.value >= 0.15),
+        demo.id,
+      ).toBe(true);
+      expect(
+        vox?.delayMixAutomation?.every((point) => point.value <= THROW_PEAK),
         demo.id,
       ).toBe(true);
       // The syllables as an instrument: a round-robin keyed riff, glitch

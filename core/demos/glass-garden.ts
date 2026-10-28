@@ -1,18 +1,18 @@
 /**
- * Glass Garden: bright, glassy hyperpop in A major at 128. A synth singer
- * carries every line with the recorded words blended under it, FM bells
+ * Glass Garden: bright, glassy hyperpop in A major at 128. The recorded
+ * words lead every line with a synth singer shimmering under them, FM bells
  * and syllable arps that bloom after each line, tresillo and four-floor
  * blooms, and a drumless greenhouse where the voice freezes and glitches.
  */
 import { Composer } from "./build.ts";
 import {
-  RHYTHM,
   dropout,
   flick,
   glitch,
   kitTracks,
   patch,
   ramps,
+  RHYTHM,
   riserLane,
   singPart,
   singStutter,
@@ -20,12 +20,16 @@ import {
   stutter,
   sungLine,
   thirdBelow,
+  THROW_PEAK,
   throws,
-  writeSong,
   type Book,
   type Chord,
   type KitOptions,
   type SongSection,
+  VOCAL_COMP,
+  VOCAL_DUCK,
+  VOCAL_ECHO,
+  writeSong,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -299,7 +303,7 @@ export const SECTIONS: readonly SongSection[] = [
     bells: BELLS_VERSE,
     line: LINE_VERSE,
     lines: ["v1", null, "v2", null, "v3", null, "v4", null],
-    words: 0.28,
+    words: 0.85,
   },
   {
     kind: "chorus",
@@ -314,7 +318,7 @@ export const SECTIONS: readonly SongSection[] = [
     stabShift: 12,
     line: LINE_CHORUS,
     lines: CHORUS_LINES,
-    words: 0.58,
+    words: 0.9,
     thirds: true,
   },
   {
@@ -343,7 +347,7 @@ export const SECTIONS: readonly SongSection[] = [
     bells: BELLS_VERSE,
     line: LINE_VERSE,
     lines: ["v5", null, "v6", null, "v7", null, "v8", null],
-    words: 0.3,
+    words: 0.85,
   },
   {
     kind: "chorus",
@@ -358,7 +362,7 @@ export const SECTIONS: readonly SongSection[] = [
     riff: RIFF_POST,
     line: LINE_CHORUS,
     lines: CHORUS_LINES,
-    words: 0.62,
+    words: 0.9,
     thirds: true,
   },
   {
@@ -413,7 +417,7 @@ export const SECTIONS: readonly SongSection[] = [
     riff: RIFF_POST2,
     line: LINE_CHORUS,
     lines: CHORUS_LINES,
-    words: 0.68,
+    words: 0.9,
     thirds: true,
   },
   {
@@ -448,10 +452,19 @@ export const KIT: Omit<KitOptions, "bpm"> = {
     arp: 0.18,
     chops: 0.8,
     vgrain: 0.32,
-    sing: 0.35,
-    harm: 0.26,
+    sing: 0.2,
+    harm: 0.16,
   },
   extra: {
+    // The breathy book reads quiet: more makeup and a presence lift put the
+    // words about 10 dB over the bed where consonants live.
+    vox: {
+      fx: {
+        eq: { mid: 5, midfreq: 2500, high: 5, highfreq: 8000 },
+        compressor: { ...VOCAL_COMP, makeup: 24, attack: 0.015 },
+        duck: VOCAL_DUCK,
+      },
+    },
     // Glassy: a high formant and plenty of air.
     sing: {
       sing: {
@@ -500,14 +513,14 @@ export const glassGarden: DemoDefinition = {
     title: "Glass Garden",
     style: "Hyperpop",
     description:
-      "Bright, glassy hyperpop in A major at 128: a synth singer carries every line with the recorded words blended under it, FM bells and syllable arps blooming after each line, tresillo and four-floor blooms on an offbeat octave bass, and a drumless greenhouse where the voice freezes into a grain pad and glitches.",
+      "Bright, glassy hyperpop in A major at 128: the recorded words lead every line with a synth singer shimmering under them, FM bells and syllable arps blooming after each line, tresillo and four-floor blooms on an offbeat octave bass, and a drumless greenhouse where the voice freezes into a grain pad and glitches.",
     tempoBpm: BPM,
     key: "A",
     bars: BARS,
     highlightBar: 24,
     trackId: "chops",
     features: [
-      "a synth singer on every line, the book's recorded words blended under it",
+      "the book's recorded words up front on every line, a synth singer under them",
       "a backing singer a diatonic third under every chorus line",
       "syllable arps that bloom up through the chord after every line",
       "an offbeat octave bass pumping under the blooms",
@@ -517,11 +530,11 @@ export const glassGarden: DemoDefinition = {
     ],
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
-      "the synth singer leads, close and compressed on a plate; the recorded words sit about 4 dB under it",
+      "the recorded words lead, about 8 dB over the mix where consonants live; the synth singer sits under them",
       "chorus stabs sit an octave above the singer's register",
-      "the bed dips about 4 dB while a line sings; the syllable arps tuck under the lines and open up in the blooms",
+      "the bed dips about 6 dB while a line sings; the syllable arps tuck under the lines and open up in the blooms",
       "bells ring above the arp so the syllables fill the middle",
-      "delay throws open on the last word of every sung line",
+      "short delay throws after the last word of every sung line",
       "kick pumps the whole bed on orbit 2",
     ],
   }),
@@ -660,7 +673,11 @@ export const glassGarden: DemoDefinition = {
     s.note("bells", out + 2, 0, 93, 4, 0.4, flick.dive(-1200, 0.6));
 
     // ---------------------------------------------------------- lanes
-    for (const id of ["vox", "sing"])
+    // The words throw short and low; the sung layers can throw wide.
+    patch(s, "vox", {
+      delayMixAutomation: throws(song.throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
+    });
+    for (const id of ["sing"])
       patch(s, id, {
         delayMixAutomation: throws(song.throwsAt, 0.06, 0.38, 1),
       });

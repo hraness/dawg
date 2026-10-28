@@ -15,15 +15,20 @@ import {
   grainTrack,
   hold,
   ladder,
+  LEAD_FX,
   LINE_LEAD,
   roll,
   slot,
   sounds,
   stab,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_COMP,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -141,12 +146,15 @@ export const windowSeat: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
+    // The book reads quiet in this mix: 3 dB more makeup puts the words
+    // about 7 dB over the bed where consonants live.
     const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.18, size: 0.65, fade: 2.2, lowpass: 8000 },
+      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 19 } },
     });
+
     // Chorus doubles: the lead a few cents sharp and flat, panned wide.
     const double = (id: string, cents: number, pan: number, seed: number) =>
-      vocalTrack(BOOK, 0.36, {
+      vocalTrack(BOOK, 0.36 * UNDER_WORDS, {
         id,
         name: cents > 0 ? "Double high" : "Double low",
         pan,
@@ -180,8 +188,10 @@ export const windowSeat: DemoDefinition = {
         filter: { type: "lpf", cutoff: 900, resonance: 0.1 },
         fx: { ...orbit },
       }),
-      preset("piano", "Felt piano", "felt-piano", 0.05, {
-        fx: { ...orbit },
+      // The piano is the bed's loudest voice in the words' band: quiet,
+      // with a dip at 2.5 kHz so consonants cut through it.
+      preset("piano", "Felt piano", "felt-piano", 0.022, {
+        fx: { ...orbit, eq: { mid: -4, midfreq: 2500 } },
         reverb: { mix: 0.24, size: 0.7, fade: 2.4, lowpass: 6500 },
         humanize: { timing: 6, velocity: 8, seed: 91 },
       }),
@@ -195,13 +205,14 @@ export const windowSeat: DemoDefinition = {
         fx: { ...orbit },
         reverb: { mix: 0.3, size: 0.85, fade: 3.2, lowpass: 6000 },
       }),
-      preset("rhodes", "Rhodes", "rhodes", 0.11, {
+      preset("rhodes", "Rhodes", "rhodes", 0.08, {
         pan: -0.15,
-        fx: { chorus: { rate: 0.5, depth: 0.5, mix: 0.35 } },
+        fx: { ...orbit, chorus: { rate: 0.5, depth: 0.5, mix: 0.35 } },
         reverb: { mix: 0.26, size: 0.75, fade: 2.6 },
       }),
       preset("flute", "Flute", "flute-pipes", 0.16, {
         pan: -0.25,
+        fx: { ...orbit },
         delay: { beats: 1.5, feedback: 0.3, mix: 0.18, pingpong: true },
         reverb: { mix: 0.32, size: 0.85, fade: 3 },
       }),
@@ -385,7 +396,7 @@ export const windowSeat: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.3, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "bass")
         s.tracks[i] = {

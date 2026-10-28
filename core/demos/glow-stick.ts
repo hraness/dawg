@@ -22,10 +22,13 @@ import {
   slot,
   sounds,
   stab,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -143,12 +146,11 @@ export const glowStick: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.14, size: 0.55, fade: 1.8, lowpass: 8500 },
-    });
+    const vox = vocalTrack(BOOK, 1);
+
     // Chorus doubles: the lead a few cents sharp and flat, panned wide.
     const double = (id: string, cents: number, pan: number, seed: number) =>
-      vocalTrack(BOOK, 0.4, {
+      vocalTrack(BOOK, 0.4 * UNDER_WORDS, {
         id,
         name: cents > 0 ? "Double high" : "Double low",
         pan,
@@ -413,7 +415,7 @@ export const glowStick: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.28, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "ep")
         s.tracks[i] = {

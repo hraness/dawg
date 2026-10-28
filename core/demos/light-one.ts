@@ -20,10 +20,13 @@ import {
   roll,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -142,12 +145,11 @@ export const lightOne: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.16, size: 0.7, fade: 2.4, lowpass: 8500 },
-    });
+    const vox = vocalTrack(BOOK, 1);
+
     // Chorus doubles: the lead a few cents sharp and flat, panned wide.
     const double = (id: string, cents: number, pan: number, seed: number) =>
-      vocalTrack(BOOK, 0.38, {
+      vocalTrack(BOOK, 0.38 * UNDER_WORDS, {
         id,
         name: cents > 0 ? "Double high" : "Double low",
         pan,
@@ -386,7 +388,7 @@ export const lightOne: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.28, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "arp")
         s.tracks[i] = {

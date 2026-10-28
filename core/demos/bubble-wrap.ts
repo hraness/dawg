@@ -20,10 +20,13 @@ import {
   LINE_LEAD,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -150,10 +153,9 @@ export const bubbleWrap: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.12, size: 0.5, fade: 1.6, lowpass: 9000 },
-    });
-    const chant = vocalTrack(BOOK, 0.85, {
+    const vox = vocalTrack(BOOK, 1);
+
+    const chant = vocalTrack(BOOK, 0.85 * UNDER_WORDS, {
       id: "chant",
       name: "Low chant",
       filter: { type: "lpf", cutoff: 4200, resonance: 0 },
@@ -405,7 +407,7 @@ export const bubbleWrap: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.3, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "pad")
         s.tracks[i] = {

@@ -19,14 +19,18 @@ import {
   grainTrack,
   hold,
   ladder,
+  LAYER_COMP,
   LINE_LEAD,
   roll,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -198,11 +202,11 @@ export const nightSwim: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.12, size: 0.5, fade: 1.8, lowpass: 9000 },
-    });
-    const echo = vocalTrack(BOOK, 0.8, {
+    const vox = vocalTrack(BOOK, 1);
+
+    const echo = vocalTrack(BOOK, 0.8 * UNDER_WORDS, {
       id: "echo",
+      fx: { compressor: LAYER_COMP },
       name: "Low echo",
       pan: -0.22,
       filter: { type: "lpf", cutoff: 3200, resonance: 0 },
@@ -212,7 +216,7 @@ export const nightSwim: DemoDefinition = {
     // Chorus doubles: the same lines a few cents sharp and flat, panned wide
     // and a hair late, through a chorus. They never duck the bed.
     const double = (id: string, cents: number, pan: number, seed: number) =>
-      vocalTrack(BOOK, 0.42, {
+      vocalTrack(BOOK, 0.42 * UNDER_WORDS, {
         id,
         name: cents > 0 ? "Double high" : "Double low",
         pan,
@@ -525,7 +529,7 @@ export const nightSwim: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.3, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "acid") s.tracks[i] = { ...t, filterAutomation: acidOpen };
       if (t.id === "pad")

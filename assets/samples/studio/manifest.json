@@ -70,12 +70,12 @@
       "bytes": 1516844
     },
     "glass-garden-vox": {
-      "sha256": "58706df68af0d72d6935ad7e235e206df974da464c4927fecb44473e99c4e80b",
+      "sha256": "3477813651808e2c12fba979bd1651d7b9739f148f14a4cc04940209d5dff9b2",
       "seconds": 37.030833333333334,
       "bytes": 1777524
     },
     "redline-vox": {
-      "sha256": "c0bc849da1d4c4f017881d5347646a88ebc4bfdd27680acc5fe53ddb189aa1b8",
+      "sha256": "2a6392c198701ab1ae529a76acf21030e0690a7316e362bd4304372030237d1e",
       "seconds": 27.557958333333332,
       "bytes": 1322826
     },
@@ -95,7 +95,7 @@
       "bytes": 4154444
     },
     "candy-fault-vox": {
-      "sha256": "c9b79428c5ca09bcc57391180707e7f19efb72d5f6f394a0660846909b864281",
+      "sha256": "878084e846b3f978de69c7c44b3bc8776305d7272635f152517ba980828b1afe",
       "seconds": 75.57679166666667,
       "bytes": 3627730
     },

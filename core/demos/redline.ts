@@ -19,13 +19,19 @@ import {
   steps,
   stutter,
   sungLine,
+  THROW_PEAK,
   throws,
-  writeSong,
   type Book,
   type Chord,
-  type Part,
   type KitOptions,
+  type Part,
   type SongSection,
+  UNDER_WORDS,
+  VOCAL_COMP,
+  VOCAL_DUCK,
+  VOCAL_ECHO,
+  VOCAL_VERB,
+  writeSong,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -384,7 +390,7 @@ export const SECTIONS: readonly SongSection[] = [
  * supersaw that plays the melody and two chord tones under it.
  */
 export const vocoderTrack = (src = "vox"): TrackInput =>
-  voice("voc", "Vocoder stack", "vocoder", 0.5, {
+  voice("voc", "Vocoder stack", "vocoder", 0.34 * UNDER_WORDS, {
     vocoder: {
       src,
       preset: "classic",
@@ -410,8 +416,8 @@ export const KIT: Omit<KitOptions, "bpm"> = {
   hats: "syn909",
   levels: {
     kick: 0.5,
-    snare: 0.54,
-    hats: 0.13,
+    snare: 0.4,
+    hats: 0.1,
     sub: 0.42,
     saw: 0.19,
     pad: 0.3,
@@ -420,8 +426,8 @@ export const KIT: Omit<KitOptions, "bpm"> = {
     bells: 0.15,
     lead: 0.2,
     vox: 1,
-    sing: 0.22,
-    harm: 0.26,
+    sing: 0.13,
+    harm: 0.17,
     dbl: 0.34,
     chops: 1,
     stut: 1,
@@ -460,9 +466,11 @@ export const KIT: Omit<KitOptions, "bpm"> = {
       },
       humanize: { timing: 3, velocity: 5, seed: 41 },
     },
-    // The kit's driven snare with its fizz shelved off: a crack, not a hiss.
+    // The kit's driven snare with its fizz shelved off and its crack
+    // carved out of the consonant band, pumped with the bed.
     snare: {
       fx: {
+        orbit: { orbit: 2 },
         distort: { type: "soft", drive: 2.6, tone: 5200, mix: 0.45 },
         compressor: {
           threshold: -16,
@@ -471,33 +479,22 @@ export const KIT: Omit<KitOptions, "bpm"> = {
           release: 0.09,
           makeup: 3,
         },
-        eq: { high: -4, highfreq: 8000 },
+        eq: { mid: -6, midfreq: 2500, high: -4, highfreq: 8000 },
       },
       reverb: { mix: 0.12, size: 0.35, fade: 0.8 },
       humanize: { timing: 2, velocity: 4, seed: 31 },
     },
-    // The words, close and bright, with a plate behind them.
+    hats: { fx: { orbit: { orbit: 2 } } },
+    // The words, close and bright, on top of everything: 4 dB more makeup
+    // than the other demos, and a slower attack lets each consonant through
+    // before the compressor grabs.
     vox: {
       fx: {
-        eq: { mid: 3, midfreq: 3000, high: 5, highfreq: 8000 },
-        compressor: {
-          threshold: -24,
-          ratio: 4,
-          attack: 0.004,
-          release: 0.1,
-          makeup: 8,
-        },
-        // A deeper pocket than the kit's: the bed sits about 4 dB
-        // lower while a line sings.
-        duck: {
-          orbit: 2,
-          depth: 0.4,
-          attack: 0.5,
-          onset: 0.06,
-          hold: true,
-        },
+        eq: { mid: 5, midfreq: 2500, high: 5, highfreq: 8000 },
+        compressor: { ...VOCAL_COMP, makeup: 20, attack: 0.015 },
+        duck: VOCAL_DUCK,
       },
-      reverb: { mix: 0.14, size: 0.55, fade: 1.8, lowpass: 12000 },
+      reverb: VOCAL_VERB,
     },
     // The synth singer as a high, breathy sheen over the words.
     sing: {
@@ -567,9 +564,9 @@ export const redline: DemoDefinition = {
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
       "the words lead; the vocoder sits about 10 dB under them, wide",
-      "the bed ducks about 4 dB while a line sings",
+      "the bed ducks about 6 dB while a line sings",
       "chorus stabs and arp sit an octave above the singer's register",
-      "delay throws open on the last word of every line",
+      "short delay throws after the last word of every line",
       "kick pumps the bed on orbit 2; the voice stays out of the pump",
     ],
   }),
@@ -682,7 +679,11 @@ export const redline: DemoDefinition = {
     s.note("pad", out + 2, 0, 53, 8, 0.4, flick.dive(-1200, 0.5));
 
     // ---------------------------------------------------------- lanes
-    for (const id of ["vox", "sing", "voc"])
+    // The words throw short and low; the sung layers can throw wide.
+    patch(s, "vox", {
+      delayMixAutomation: throws(song.throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
+    });
+    for (const id of ["sing", "voc"])
       patch(s, id, {
         delayMixAutomation: throws(song.throwsAt, 0.06, 0.38, 1),
       });

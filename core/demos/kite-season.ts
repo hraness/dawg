@@ -18,14 +18,20 @@ import {
   grainTrack,
   hold,
   ladder,
+  LAYER_COMP,
+  LEAD_FX,
   LINE_LEAD,
   roll,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_COMP,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -176,11 +182,15 @@ export const kiteSeason: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
+    // The book reads quiet in this mix: 3 dB more makeup puts the words
+    // about 7 dB over the bed where consonants live.
     const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.14, size: 0.6, fade: 2, lowpass: 8000 },
+      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 19 } },
     });
-    const echo = vocalTrack(BOOK, 0.8, {
+
+    const echo = vocalTrack(BOOK, 0.8 * UNDER_WORDS, {
       id: "echo",
+      fx: { compressor: LAYER_COMP },
       name: "Low answer",
       pan: 0.24,
       filter: { type: "lpf", cutoff: 3000, resonance: 0 },
@@ -447,7 +457,7 @@ export const kiteSeason: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.28, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "fuzz")
         s.tracks[i] = {

@@ -16,9 +16,14 @@ import {
   LINE_LEAD,
   slot,
   stutterTrack,
+  THROW_PEAK,
   trackOf,
-  vocalTrack,
   type VoxBank,
+  VOCAL_COMP,
+  VOCAL_DUCK,
+  VOCAL_ECHO,
+  VOCAL_VERB,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -1072,25 +1077,16 @@ export function candyTracks(s: Composer, a: CandyLanes, book?: VoxBank): void {
       vocalTrack(book, 1, {
         id: "vocal",
         name: "Candy singer",
+        // Her words stay clean and 4 dB hotter than the shelf's: the crush
+        // sweeps through the break stay on her stutters, never on a sung line.
         fx: {
-          crush: { bits: 16, coarse: 1, mix: 0 },
           eq: { mid: 2, midfreq: 3200, high: 4, highfreq: 8000 },
-          compressor: {
-            threshold: -24,
-            ratio: 4,
-            attack: 0.004,
-            release: 0.1,
-            makeup: 11,
-          },
-          duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
+          compressor: { ...VOCAL_COMP, makeup: 20, attack: 0.015 },
+          duck: VOCAL_DUCK,
         },
-        delay: { beats: 0.75, feedback: 0.28, mix: 0.08, pingpong: true },
+        delay: { beats: 0.75, feedback: 0.25, mix: 0.04, pingpong: true },
         delayMixAutomation: a.vocalThrows,
-        fxAutomation: {
-          "crush-mix": a.vocalCrushMix,
-          "crush-bits": a.vocalCrushBits,
-        },
-        reverb: room,
+        reverb: VOCAL_VERB,
       }),
     );
     // Her stutters: "pix" through the glitch break, "me" into each chorus.
@@ -1291,8 +1287,8 @@ const DEMO_LANES: CandyLanes = {
   arp2Volume: steps([0, 0.85], [56, 1]),
   vocalThrows: throws(
     [13, 17, 19, 21, 23, 37, 41, 43, 45, 47, 49, 51, 57, 59, 61, 63],
-    0.07,
-    0.34,
+    VOCAL_ECHO.mix,
+    THROW_PEAK,
   ),
   // Formant on her stutters: a lift through each "me", a wobble through the break.
   vocalFormant: [

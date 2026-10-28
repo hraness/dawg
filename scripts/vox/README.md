@@ -30,7 +30,7 @@ The later books (`night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`, `glow-s
 - **Per-note `dyn` and `air`**: `dyn` (0–1.5) sets loudness, and soft notes also get breathier; `air` (0–1) adds breath. A `"~"` syllable is melisma: the previous vowel moves to a new pitch, and its ending consonant waits for the last `"~"`.
 - **`cadence.py "<syl- la- bles>" <bpm> [beats] [voice] [grid]`** has Kokoro say the line and prints onsets and lengths for `line()`, scaled to fill `beats` and snapped to `grid`. It is a speech shape to start from, not a melody.
 
-A part can take a fourth item, a dict that overrides the song's settings for that part, such as `{"voice": "bm_lewis"}` for a low answer or chant.
+A part can take a fourth item, a dict that overrides the song's settings for that part, such as `{"voice": "bm_lewis"}` for a low answer or chant, or `{"speed": 0.6}` for a line whisper mishears: Kokoro reads the words slower and WORLD fits them to the same notes.
 
 ## Chart books
 
