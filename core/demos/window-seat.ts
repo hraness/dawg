@@ -9,6 +9,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   cell,
   chopTrack,
   dropout,
@@ -397,6 +398,12 @@ export const windowSeat: DemoDefinition = {
         s.tracks[i] = {
           ...t,
           delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
+        };
+      if (t.id === "pad")
+        s.tracks[i] = {
+          ...t,
+          filter: { type: "lpf", cutoff: 2400, resonance: 0.1 },
+          filterAutomation: filterArc(s.sections, 1200, 5000),
         };
       if (t.id === "bass")
         s.tracks[i] = {

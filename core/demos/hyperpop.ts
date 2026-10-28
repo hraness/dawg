@@ -109,8 +109,16 @@ export const sounds = {
         duck: { orbit: 2, depth, attack: pump(bpm), onset: 0.004 },
       },
     }),
-  /** A driven snare with a short room, cracking above the bed. */
-  snare: (level = 0.42, kit = "syn909", extra: Partial<TrackInput> = {}) =>
+  /**
+   * A driven snare with a short room, cracking above the bed. `body` lifts
+   * 250 Hz and 1.2 kHz for thin electronic kits; acoustic kits have their own.
+   */
+  snare: (
+    level = 0.42,
+    kit = "syn909",
+    extra: Partial<TrackInput> = {},
+    body = true,
+  ) =>
     voice("snare", "Snare", "kit", level, {
       kit,
       filter: { type: "hpf", cutoff: 160, resonance: 0 },
@@ -123,13 +131,24 @@ export const sounds = {
           release: 0.09,
           makeup: 3,
         },
+        ...(body
+          ? { eq: { low: 1.5, lowfreq: 250, mid: 2.5, midfreq: 1200 } }
+          : {}),
       },
       reverb: { mix: 0.1, size: 0.3, fade: 0.7 },
       humanize: { timing: 2, velocity: 4, seed: 31 },
       ...extra,
     }),
-  /** Closed and open hats, rim clicks (37) for the computery taps. */
-  hats: (level = 0.46, kit = "syn606", extra: Partial<TrackInput> = {}) =>
+  /**
+   * Closed and open hats, rim clicks (37) for the computery taps. `air` is
+   * the 8 kHz shelf: +4 keeps bright kits from hissing; dull kits want more.
+   */
+  hats: (
+    level = 0.46,
+    kit = "syn606",
+    extra: Partial<TrackInput> = {},
+    air = 4,
+  ) =>
     voice("hats", "Hats & clicks", "kit", level, {
       kit,
       pan: 0.12,
@@ -142,7 +161,7 @@ export const sounds = {
           release: 0.08,
           makeup: 7,
         },
-        eq: { high: 8, highfreq: 8000 },
+        eq: { high: air, highfreq: 8000 },
       },
       humanize: { timing: 5, velocity: 6, seed: 32 },
       ...extra,
@@ -1717,6 +1736,91 @@ export const riserLane = (builds: Song["builds"]): AutomationPoint[] =>
       ramps([from, 500], [to - 0.02, 7000], [to, 600]),
     ),
   );
+
+/** A section's job in the filter arc, read from its name. */
+export function arcKind(name: string): SectionKind {
+  const n = name.toLowerCase();
+  if (/^(intro|ignition|seed)/.test(n)) return "intro";
+  if (/verse/.test(n)) return "verse";
+  if (/^pre|chant/.test(n)) return "pre";
+  if (/chorus|drop/.test(n)) return "chorus";
+  if (/bloom|interlude|post/.test(n)) return "post";
+  if (/break|bridge|headlights|greenhouse|false end|fugue/.test(n))
+    return "break";
+  if (/redline|sunlight|build/.test(n)) return "build";
+  if (/outro|end$|taillights|glass$/.test(n)) return "outro";
+  throw new Error(`hyperpop: no filter-arc kind for section "${name}"`);
+}
+
+/**
+ * Every Night's filter moves, as a cutoff lane in Hz from `closed` (the
+ * verse floor) to `open` (the chorus ceiling). Verses sit low and open a
+ * little; a pre-chorus or build shuts, then sweeps open, steepest in its
+ * last bars; a section that runs straight into a chorus sweeps its last
+ * bars instead; choruses and drops are wide open, posts bright, breaks
+ * half shut, and the outro closes.
+ */
+export function filterArc(
+  sections: readonly Readonly<{
+    name: string;
+    startBar: number;
+    bars: number;
+  }>[],
+  closed: number,
+  open: number,
+): AutomationPoint[] {
+  const mid = Math.sqrt(closed * open);
+  const points: [number, number][] = [];
+  sections.forEach((p, i) => {
+    const kind = arcKind(p.name);
+    const next = sections[i + 1];
+    const end = p.startBar + p.bars;
+    const into = next !== undefined && arcKind(next.name) === "chorus";
+    const level = {
+      intro: closed * 0.75,
+      verse: closed,
+      pre: closed * 0.8,
+      build: closed * 0.6,
+      chorus: open,
+      post: open * 0.8,
+      break: mid * 0.8,
+      outro: open * 0.6,
+    }[kind];
+    points.push([p.startBar, level]);
+    if (kind === "pre" || kind === "build") {
+      // An exponential climb, the last bars doing most of the work.
+      for (let b = 1; b <= p.bars; b++) {
+        const t = (b / p.bars) ** 2;
+        points.push([
+          p.startBar + b - (b === p.bars ? 0.02 : 0),
+          level * (open / level) ** t,
+        ]);
+      }
+      return;
+    }
+    if (kind === "outro") {
+      points.push([end - 0.02, closed * 0.5]);
+      return;
+    }
+    const rest = kind === "verse" ? closed * 1.4 : level;
+    if (into && kind !== "chorus") {
+      const sweep = Math.min(4, Math.floor(p.bars / 2));
+      points.push([end - sweep, rest]);
+      for (let b = 1; b <= sweep; b++)
+        points.push([
+          end - sweep + b - (b === sweep ? 0.02 : 0),
+          rest * ((open * 0.8) / rest) ** ((b / sweep) ** 2),
+        ]);
+      return;
+    }
+    points.push([end - 0.02, rest]);
+  });
+  return ramps(
+    ...points.map(
+      ([bar, hz]) => [bar, Math.round(Math.min(14000, hz))] as const,
+    ),
+  );
+}
 
 /** Replace a track's fields once the song (and its lanes) is known. */
 export function patch(

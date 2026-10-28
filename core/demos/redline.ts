@@ -8,6 +8,7 @@
 import type { NoteInput, TrackInput } from "../score.ts";
 import { Composer, voice } from "./build.ts";
 import {
+  filterArc,
   dropout,
   flick,
   glitch,
@@ -732,6 +733,13 @@ export const redline: DemoDefinition = {
           [out, 0],
         ),
       },
+    });
+    // The stabs and arp follow the filter arc, read at each hit.
+    patch(s, "stabs", {
+      fxAutomation: { "synth-lpf": filterArc(s.sections, 1100, 6000) },
+    });
+    patch(s, "arp", {
+      fxAutomation: { "synth-lpf": filterArc(s.sections, 1600, 7000) },
     });
     patch(s, "pad", {
       filterAutomation: ramps(

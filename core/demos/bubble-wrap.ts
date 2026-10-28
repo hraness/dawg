@@ -10,6 +10,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -413,15 +414,7 @@ export const bubbleWrap: DemoDefinition = {
       if (t.id === "pad")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1600],
-            [15.9, 1600],
-            [16, 3200],
-            [24, 1600],
-            [36, 3200],
-            [44, 1600],
-            [54, 3600],
-          ),
+          filterAutomation: filterArc(s.sections, 1500, 5000),
         };
     });
     return s.finish();

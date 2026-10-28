@@ -11,6 +11,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -199,10 +200,13 @@ export const kiteSeason: DemoDefinition = {
     });
     for (const track of [
       sounds.kick(BPM, "acoustic", 0.45, 0.9),
-      sounds.snare(1, "acoustic", {
-        reverb: { mix: 0.22, size: 0.6, fade: 1.2 },
-      }),
-      sounds.hats(1, "lofi", { name: "Hats & rim" }),
+      sounds.snare(
+        1,
+        "acoustic",
+        { reverb: { mix: 0.22, size: 0.6, fade: 1.2 } },
+        false,
+      ),
+      sounds.hats(1, "lofi", { name: "Hats & rim" }, 8),
       preset("bass", "Plucked bass", "pluck-bass", 0.16, {
         fx: { ...orbit },
       }),
@@ -472,13 +476,7 @@ export const kiteSeason: DemoDefinition = {
       if (t.id === "organ")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1600],
-            [8, 2400],
-            [16, 3200],
-            [48, 1800],
-            [56, 3400],
-          ),
+          filterAutomation: filterArc(s.sections, 3000, 5000),
         };
     });
     return s.finish();

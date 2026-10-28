@@ -10,6 +10,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -421,13 +422,7 @@ export const glowStick: DemoDefinition = {
       if (t.id === "ep")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 2400],
-            [7.9, 2400],
-            [8, 5200],
-            [40, 2600],
-            [48, 6000],
-          ),
+          filterAutomation: filterArc(s.sections, 2200, 7500),
         };
     });
     return s.finish();

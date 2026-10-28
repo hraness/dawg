@@ -6,6 +6,7 @@
  */
 import { Composer } from "./build.ts";
 import {
+  filterArc,
   dropout,
   flick,
   glitch,
@@ -725,6 +726,13 @@ export const glassGarden: DemoDefinition = {
       fxAutomation: {
         "crush-mix": ramps([0, 0], [gh, 0], [gh + 3.9, 0.5], [gh + 4, 0]),
       },
+    });
+    // The stabs and arp follow the filter arc, read at each hit.
+    patch(s, "stabs", {
+      fxAutomation: { "synth-lpf": filterArc(s.sections, 1100, 6000) },
+    });
+    patch(s, "arp", {
+      fxAutomation: { "synth-lpf": filterArc(s.sections, 1600, 7000) },
     });
     patch(s, "pad", {
       filterAutomation: ramps(

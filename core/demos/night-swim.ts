@@ -12,6 +12,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -514,7 +515,7 @@ export const nightSwim: DemoDefinition = {
     ]);
 
     // Lanes: delay throws on the last word of every line; the acid opens
-    // across the break; the pad brightens in the choruses.
+    // across the break; the pad follows the filter arc.
     const acidOpen = lanes(
       [0, 700],
       [20, 1200],
@@ -536,19 +537,7 @@ export const nightSwim: DemoDefinition = {
       if (t.id === "pad")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1400],
-            [19.9, 1400],
-            [20, 2600],
-            [27.9, 2600],
-            [28, 1600],
-            [47.9, 1600],
-            [48, 2600],
-            [55.9, 2600],
-            [56, 1800],
-            [63.9, 1800],
-            [64, 3000],
-          ),
+          filterAutomation: filterArc(s.sections, 1300, 4200),
         };
     });
     return s.finish();

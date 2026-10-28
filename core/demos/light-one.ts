@@ -9,6 +9,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -394,15 +395,7 @@ export const lightOne: DemoDefinition = {
       if (t.id === "arp")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1800],
-            [8, 2600],
-            [16, 5200],
-            [24, 3000],
-            [32, 5200],
-            [40, 3600],
-            [56, 6000],
-          ),
+          filterAutomation: filterArc(s.sections, 1800, 7000),
         };
     });
     return s.finish();

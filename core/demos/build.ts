@@ -195,8 +195,9 @@ export class Composer {
       form: this.sections.map(({ name }) => ({ section: name })),
       master: {
         eq: { bell1: -1.2, bell1freq: 280, bell1q: 0.8 },
-        glue: { threshold: -16, ratio: 1.5, attack: 30, release: 220 },
-        width: { width: 1, mono: 120 },
+        glue: { threshold: -16, ratio: 2, attack: 20, release: 180 },
+        tape: { drive: 2, mix: 0.5 },
+        width: { width: 1.15, mono: 120 },
         limiter: { ceiling: -1, release: 160, lookahead: 5 },
         target: -14,
       },
