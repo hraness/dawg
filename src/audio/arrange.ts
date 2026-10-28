@@ -57,6 +57,7 @@ import {
   type WavCue,
 } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
+import { samplerNoteSeconds } from "./sampler.ts";
 import { applyMonitorMaster } from "./master.ts";
 import { WindowCache, windowCacheKey } from "./window-cache.ts";
 
@@ -627,6 +628,35 @@ function renderWindows(
   );
   const ring = Math.max(1, Math.ceil(overhang / fastBar));
   const ringTicks = Math.ceil((overhang / fastBar) * ticks);
+  // A one-shot sample rings to its own end, however short its note: the
+  // windows that end overlaps pull its start into their pre-roll.
+  const bank = options.samples;
+  const samplers = new Map(
+    score.tracks.filter((t) => t.sampler).map((t) => [t.id, t]),
+  );
+  const sounding = new Map<string, number>();
+  const soundsUntil = (note: Note) => {
+    const stop = note.startTick + note.durationTicks;
+    const track = samplers.get(note.trackId);
+    if (!bank || !track) return stop;
+    const key = `${note.trackId}:${note.pitch}:${note.velocity}:${note.durationTicks}`;
+    let seconds = sounding.get(key);
+    if (seconds === undefined) {
+      seconds = samplerNoteSeconds(
+        score,
+        track,
+        { ...note, startTick: 0 },
+        bank,
+        sampleRate,
+      );
+      sounding.set(key, seconds);
+    }
+    const end = tickAtSeconds(
+      timeline,
+      secondsAtTick(timeline, note.startTick) + seconds,
+    );
+    return Math.max(stop, end);
+  };
   const budget = Math.max(1, Math.floor(WINDOW_BUDGET_SECONDS / slowBar));
   const reach = budget - 1;
   const most = Math.max(1, Math.floor(WINDOW_SECONDS / slowBar));
@@ -657,7 +687,7 @@ function renderWindows(
     for (const note of all)
       if (
         note.startTick < startTick &&
-        note.startTick + note.durationTicks + ringTicks > startTick &&
+        soundsUntil(note) + ringTicks > startTick &&
         Math.floor(note.startTick / ticks) >= start - reach
       )
         pre = Math.min(pre, Math.floor(note.startTick / ticks));

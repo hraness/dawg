@@ -21,6 +21,7 @@ import {
   StemRenderer,
   withWavCues,
 } from "./wav.ts";
+import { sampleKey, type SampleBank } from "./samples.ts";
 import { budget } from "../../test/perf.ts";
 
 function song(bars = 8, tempoBpm = 120): TrackScore {
@@ -794,4 +795,69 @@ describe("windowed renders keep the piano pedals (0.6.1)", () => {
       rmsDb(single.pcm, 43, 46) - rmsDb(plain.pcm, 43, 46),
     ).toBeGreaterThan(10);
   }, 30_000);
+});
+
+describe("windowed one-shot samples", () => {
+  test("a hit's sample plays to its end across window seams", () => {
+    // 30 bars at 120 bpm is 60 s, so export renders in ~20 s windows. Each
+    // 25 s one-shot hit (a vocal phrase) outlasts its note by far and
+    // starts more than the 8 s pre-roll before a seam: it must play on
+    // through the seam, not stop there.
+    const rate = 8_000;
+    const frames = 25 * rate;
+    const mono = new Float32Array(frames).fill(0.5);
+    const sample = {
+      sha256: "a".repeat(64),
+      sampleRate: rate,
+      channels: 1,
+      frames,
+      mono,
+    };
+    const voices = { a: { src: "a.wav" }, b: { src: "b.wav" } };
+    const score = createScore({
+      bars: 30,
+      tempoBpm: 120,
+      tracks: [
+        {
+          id: "vox",
+          name: "vox",
+          instrument: "sampler",
+          sampler: { mode: "oneshot", voices },
+        },
+      ],
+      // Slots follow voice names: a is the first slot, b the next.
+      notes: [
+        {
+          id: "a",
+          trackId: "vox",
+          pitch: 36,
+          velocity: 1,
+          startTick: 0,
+          durationTicks: 120,
+        },
+        {
+          id: "b",
+          trackId: "vox",
+          pitch: 37,
+          velocity: 1,
+          startTick: 4 * 480 * 14,
+          durationTicks: 120,
+        },
+      ],
+    });
+    const samples: SampleBank = {
+      voices: new Map([
+        [sampleKey("vox", "a"), sample],
+        [sampleKey("vox", "b"), sample],
+      ]),
+      problems: [],
+    };
+    const out = renderArrangedPcm(score, { sampleRate: rate, samples });
+    const at = (second: number) =>
+      Math.abs(out.pcm[Math.round(second * rate) * 2]!);
+    // Hit a sounds 0-25 s, hit b 28-53 s; both cross a seam.
+    for (const second of [1, 19, 22, 24.5, 29, 45, 52.5])
+      expect(at(second)).toBeGreaterThan(1000);
+    expect(at(26.5)).toBeLessThan(50);
+  });
 });
