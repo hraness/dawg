@@ -25,7 +25,7 @@ const HYPER = ["redline", "glass-garden"];
 
 describe("complete demo songs", () => {
   test("hyperpop entries expose truthful form and duration metadata", () => {
-    expect(DEMOS).toHaveLength(10);
+    expect(DEMOS).toHaveLength(9);
     expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(DEMOS.length);
     expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(DEMOS.length);
     expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(2);
@@ -251,7 +251,7 @@ describe("complete demo songs", () => {
       DEMOS.filter((demo) => !HYPER.includes(demo.id))
         .map((demo) => demo.style)
         .sort(),
-    ).toEqual(Array(8).fill("Hyperpop"));
+    ).toEqual(Array(7).fill("Hyperpop"));
     const hyper = createDemo("candy-fault");
     expect(
       hyper.tracks.find((track) => track.id === "hook")?.fx?.distort,

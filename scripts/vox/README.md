@@ -1,6 +1,6 @@
 # Sung hook generator
 
-`songs.py` writes the twelve studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`, `night-swim-vox`, `kite-season-vox`, `candy-fault-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`, `spare-key-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
+`songs.py` writes the eleven studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`, `night-swim-vox`, `kite-season-vox`, `candy-fault-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
 
 1. [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) speaks the original lyric with word timestamps.
 2. The WORLD vocoder (pyworld) analyses it and splits each word into syllables at energy valleys.
@@ -24,7 +24,7 @@ The extra pins avoid three install traps: pyworld still imports `pkg_resources` 
 
 ## Sounding human
 
-The later books (`night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`, `spare-key-vox`) are written to speech rhythm rather than an even grid: small words short, the stressed last vowel held, pickups before the bar, rests between lines, and verses sung low. Three opt-in tools help:
+The later books (`night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`) are written to speech rhythm rather than an even grid: small words short, the stressed last vowel held, pickups before the bar, rests between lines, and verses sung low. Three opt-in tools help:
 
 - **`human`** (0–1, per song or per spec) adds a singer's timing drift, flat landings that settle onto the note, and a slow pitch wander. 0.25 is the books' setting.
 - **Per-note `dyn` and `air`**: `dyn` (0–1.5) sets loudness, and soft notes also get breathier; `air` (0–1) adds breath. A `"~"` syllable is melisma: the previous vowel moves to a new pitch, and its ending consonant waits for the last `"~"`.
