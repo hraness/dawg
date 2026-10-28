@@ -202,7 +202,8 @@ export const nightSwim: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1);
+    // The lead 3 dB under the shelf's level: inside the water, not over it.
+    const vox = vocalTrack(BOOK, 0.71);
 
     const echo = vocalTrack(BOOK, 0.8 * UNDER_WORDS, {
       id: "echo",

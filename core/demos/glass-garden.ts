@@ -460,7 +460,14 @@ export const KIT: Omit<KitOptions, "bpm"> = {
     // keep the consonants clear while the low cut keeps the voice in its band.
     vox: {
       fx: {
-        eq: { low: -6, lowfreq: 200, mid: 3, midfreq: 4000, high: 4, highfreq: 8000 },
+        eq: {
+          low: -6,
+          lowfreq: 200,
+          mid: 3,
+          midfreq: 4000,
+          high: 4,
+          highfreq: 8000,
+        },
         compressor: { ...VOCAL_COMP, makeup: 22, attack: 0.015 },
         duck: VOCAL_DUCK,
       },

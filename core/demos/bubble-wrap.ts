@@ -153,7 +153,8 @@ export const bubbleWrap: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1);
+    // The lead 1.5 dB under the shelf's level, conversational.
+    const vox = vocalTrack(BOOK, 0.84);
 
     const chant = vocalTrack(BOOK, 0.85 * UNDER_WORDS, {
       id: "chant",

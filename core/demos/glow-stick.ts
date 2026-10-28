@@ -146,7 +146,8 @@ export const glowStick: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1);
+    // The lead sits 7 dB under the shelf's level, inside the dense chorus.
+    const vox = vocalTrack(BOOK, 0.45);
 
     // Chorus doubles: the lead a few cents sharp and flat, panned wide.
     const double = (id: string, cents: number, pan: number, seed: number) =>

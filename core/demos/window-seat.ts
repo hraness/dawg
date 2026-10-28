@@ -146,10 +146,10 @@ export const windowSeat: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    // The book reads quiet in this mix: 3 dB more makeup puts the words
-    // about 7 dB over the bed where consonants live.
+    // The book reads quiet in this mix: 1 dB more makeup puts the words
+    // about 5 dB over the bed where consonants live.
     const vox = vocalTrack(BOOK, 1, {
-      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 19 } },
+      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 17 } },
     });
 
     // Chorus doubles: the lead a few cents sharp and flat, panned wide.

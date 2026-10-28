@@ -319,7 +319,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 69.95895833333333,
       bpm: 122,
       sha256:
-        "e1653d54d5248cd79da3aa5b1b146a061c2ade83225089398a53b40a61643b87",
+        "ea556064bcbb55ec5c509f4e84145ec09711e766c5c73f4154e820e0b7b26284",
       slices: [
         { name: "v1", begin: 0.0, end: 0.057997 },
         { name: "v2", begin: 0.057997, end: 0.115993 },
@@ -354,7 +354,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 93.9705,
       bpm: 170,
       sha256:
-        "29a5918b384da023834d1e5484878c8bde11037197d95485b2392d99ac4e2afb",
+        "218575ee6796d906b2bd231ba9fe66d2bd4550b336b6f3241be9ddf39d70253c",
       slices: [
         { name: "v1", begin: 0.0, end: 0.061033 },
         { name: "v2", begin: 0.061033, end: 0.122066 },
@@ -389,7 +389,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 64.80425,
       bpm: 128,
       sha256:
-        "ec3f71282a4e2b93eb4541505b5d28b07b83a7f995060971888cfcfc32c949f1",
+        "968bd4e425a5b4401c3c577ecd010bd155325650bf93a7f26f7d10c2450a1d55",
       slices: [
         { name: "v1", begin: 0.0, end: 0.059675 },
         { name: "v2", begin: 0.059675, end: 0.119349 },
@@ -503,7 +503,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 50.65083333333333,
       bpm: 146,
       sha256:
-        "57a46f728edf42e9acff5e97a45976b9ece6f2d30a28b9cae369bfd7f8447966",
+        "91790065d4c2259701f923f869e8d9d1e897a8d93cc3bf9f34a353d2b3da0331",
       slices: [
         { name: "v1", begin: 0.0, end: 0.066937 },
         { name: "v2", begin: 0.066937, end: 0.133874 },
@@ -538,7 +538,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 49.057375,
       bpm: 122,
       sha256:
-        "fb2de3b16e9e5988ab734ceb0825338c3db7b0f3d835d74a74107f094bb3148c",
+        "0a310cf014588e2f015eef872a0aaa5dbcfb2ba68af9ff2c5b10f1b434c2b8d8",
       slices: [
         { name: "v1", begin: 0.0, end: 0.042607 },
         { name: "v2", begin: 0.042607, end: 0.085213 },

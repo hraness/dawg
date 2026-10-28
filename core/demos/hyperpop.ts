@@ -517,8 +517,10 @@ export const THROW_PEAK = 0.18;
 export const UNDER_WORDS = 0.6;
 
 /** The lead's insert chain. A quiet book raises `compressor.makeup` only. */
+// The low cut keeps the voice in its 300-4000 Hz band: clear words without
+// riding over the whole mix.
 export const LEAD_FX = {
-  eq: { mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
+  eq: { low: -6, lowfreq: 200, mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
   compressor: VOCAL_COMP,
   duck: VOCAL_DUCK,
 };

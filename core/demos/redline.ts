@@ -66,7 +66,12 @@ export const BOOK: Book = {
     ch3: 5,
   },
   melody: {
-    v1: sungLine("win- dows down at mid- night", E1, [65, 65, 63, 65, 68, 65], E1L),
+    v1: sungLine(
+      "win- dows down at mid- night",
+      E1,
+      [65, 65, 63, 65, 68, 65],
+      E1L,
+    ),
     v2: sungLine("cit- y in the mir- ror", E2, [63, 63, 60, 63, 67, 63], E2L),
     v3: sungLine("turn the ra- di- o up", E1, [68, 68, 72, 68, 65, 68], E1L),
     v4: sungLine("no- bod- y can see us", E2, [67, 65, 63, 63, 65, 63], E2L),
@@ -480,7 +485,14 @@ export const KIT: Omit<KitOptions, "bpm"> = {
     // slower attack that lets each one through before the compressor grabs.
     vox: {
       fx: {
-        eq: { low: -6, lowfreq: 200, mid: 3, midfreq: 4000, high: 4, highfreq: 8000 },
+        eq: {
+          low: -6,
+          lowfreq: 200,
+          mid: 3,
+          midfreq: 4000,
+          high: 4,
+          highfreq: 8000,
+        },
         compressor: { ...VOCAL_COMP, makeup: 14, attack: 0.015 },
         duck: VOCAL_DUCK,
       },

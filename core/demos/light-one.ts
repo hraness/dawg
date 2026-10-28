@@ -145,7 +145,8 @@ export const lightOne: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1);
+    // The lead sits 5 dB under the shelf's level, inside the organ swell.
+    const vox = vocalTrack(BOOK, 0.56);
 
     // Chorus doubles: the lead a few cents sharp and flat, panned wide.
     const double = (id: string, cents: number, pan: number, seed: number) =>

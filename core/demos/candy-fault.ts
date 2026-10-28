@@ -1087,7 +1087,14 @@ export function candyTracks(s: Composer, a: CandyLanes, book?: VoxBank): void {
         // her band, the crush sweeps through the break stay on her stutters,
         // never on a sung line.
         fx: {
-          eq: { low: -6, lowfreq: 200, mid: 3, midfreq: 4000, high: 4, highfreq: 8000 },
+          eq: {
+            low: -6,
+            lowfreq: 200,
+            mid: 3,
+            midfreq: 4000,
+            high: 4,
+            highfreq: 8000,
+          },
           compressor: { ...VOCAL_COMP, makeup: 12, attack: 0.015 },
           duck: VOCAL_DUCK,
         },

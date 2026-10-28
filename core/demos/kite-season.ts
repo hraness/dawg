@@ -182,10 +182,10 @@ export const kiteSeason: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    // The book reads quiet in this mix: 3 dB more makeup puts the words
-    // about 7 dB over the bed where consonants live.
+    // The words about 5 dB over the bed where consonants live, and no
+    // louder than the whole beat.
     const vox = vocalTrack(BOOK, 1, {
-      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 19 } },
+      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 17 } },
     });
 
     const echo = vocalTrack(BOOK, 0.8 * UNDER_WORDS, {
