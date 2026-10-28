@@ -843,6 +843,27 @@ export function squizBuffer(
 }
 
 /**
+ * Seconds one note of a sampler track sounds, from its start to its voice's
+ * end: a one-shot hit rings its whole sample, far past its note length.
+ * Zero when the note plays no voice.
+ */
+export function samplerNoteSeconds(
+  score: TrackScore,
+  track: Track,
+  note: Note,
+  bank: SampleBank,
+  sampleRate: number,
+): number {
+  if (!track.sampler || bank.voices.size === 0) return 0;
+  const warp = sampleWarpFor(score, sampleRate);
+  const timing = { score, sampleRate, ...(warp ? { warp } : {}) };
+  let frames = 0;
+  for (const voice of planSamplerVoices(track, [note], bank, timing))
+    frames = Math.max(frames, voice.end - voice.start);
+  return frames / sampleRate;
+}
+
+/**
  * Seconds a sampler track rings past the loop end (bounded by the caller),
  * so loop renders fold whole samples onto the start.
  */

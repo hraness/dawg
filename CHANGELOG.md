@@ -18,6 +18,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Fixed
 
+- **Long one-shot samples no longer cut out partway through songs over 45 seconds.** Those songs render in windows of about 20 seconds, and a window only reached 8 seconds back for notes still sounding. A one-shot hit rings its whole sample however short its note, so a 15-second vocal phrase that started more than 8 seconds before a seam fell silent at the seam until the next hit. Windows now reach back to any sample still playing.
+
 - **Pressing play no longer runs the playhead ahead of silent audio.** The transport used to start its clock at once while the engine rendered its first windows (2 to 8 seconds cold on the demos), so the playhead moved through silence and the song's opening was skipped. The clock now holds until the first frame is heard, and the engine prewarms that first window while stopped. A prewarmed play sounds within about 0.1 s.
 
 - **`sing.py` speech mode now times a take's words by aligning it to Kokoro.** On clips of two or three seconds, whisper's word offsets drifted by whole seconds. Sometimes the last word ran to 30 seconds, and every earlier word fell to zero length. Kokoro now says the same words, and DTW over MFCCs maps its word times onto the take. Run against a second Kokoro voice, the aligned book misses words at almost the same rate as Kokoro singing directly (0.19 against 0.175).
