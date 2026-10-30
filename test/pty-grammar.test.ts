@@ -75,7 +75,15 @@ async function closeWithEsc(t: Session, screen: string): Promise<void> {
 test.skipIf(!supported)(
   "real PTY: one key grammar across the pickers at 80 columns",
   async () => {
-    const t = await launch(COLS, 24, {}, ["--track", "drums"]);
+    const t = await launch(
+      COLS,
+      24,
+      {
+        AI_GATEWAY_BASE_URL: "http://127.0.0.1:1/v1",
+        DAWG_MODELS_DEV_URL: "http://127.0.0.1:1/api.json",
+      },
+      ["--track", "drums"],
+    );
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("instrument kit\r");

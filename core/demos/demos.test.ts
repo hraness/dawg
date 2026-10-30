@@ -99,7 +99,7 @@ describe("complete demo songs", () => {
           (note) => note.startTick + note.durationTicks <= score.bars * 1920,
         ),
       ).toBe(true);
-      expect(score.master?.limiter?.ceiling).toBe(-1);
+      expect(score.master?.limiter?.ceiling).toBe(-1.1);
     }
     expect(engines.size).toBeGreaterThanOrEqual(9);
   });
@@ -168,7 +168,7 @@ describe("complete demo songs", () => {
       ).toBeLessThanOrEqual(0.95);
       // Words throw short and low: never wetter than THROW_PEAK.
       expect(
-        vox?.delayMixAutomation?.some((point) => point.value >= 0.15),
+        vox?.delayMixAutomation?.some((point) => point.value > 0.025),
         demo.id,
       ).toBe(true);
       expect(

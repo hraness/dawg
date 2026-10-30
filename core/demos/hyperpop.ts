@@ -494,11 +494,9 @@ export function slot(track: TrackInput, name: string): number {
 }
 
 /**
- * The words come first. While a line sings, the lead sits about 2 dB over
- * everything else and about 8 dB over it in 300-4000 Hz, where consonants
- * live (a commercial mix measured the same way: +2.3 / +8.2). The bed on
- * orbit 2 dips 6 dB under each line, and the verb and echo stay short and
- * low so no word smears into the next.
+ * Raw legacy-book conditioning. Composer.finish applies the current
+ * foreground balance, dry-word limits and output headroom in vocal-mix.ts;
+ * these constants alone do not describe the finished lead/bed balance.
  */
 export const VOCAL_COMP = {
   threshold: -24,
@@ -535,9 +533,8 @@ export const THROW_PEAK = 0.18;
  */
 export const UNDER_WORDS = 0.6;
 
-/** The lead's insert chain. A quiet book raises `compressor.makeup` only. */
-// The low cut keeps the voice in its 300-4000 Hz band: clear words without
-// riding over the whole mix.
+/** Legacy-book insert conditioning; final foreground gain belongs to vocal-mix.ts. */
+// Keep the low end clear while preserving the book's recorded character.
 export const LEAD_FX = {
   eq: { low: -6, lowfreq: 200, mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
   compressor: VOCAL_COMP,
@@ -1853,10 +1850,10 @@ export function kitTracks(s: Composer, book: Book, o: KitOptions): void {
     humanize: { timing, velocity: 7, seed },
     ...ex(id),
   });
-  // The voice is the lead instrument: the singer sits about 5 dB under the
-  // drums and the chops and stutters about 8, over a darker bed pumped
-  // harder than the kit's stand-alone defaults, the sub driven into
-  // harmonics so it reads on small speakers.
+  // These are the book and instrument conditioning levels. Composer.finish
+  // applies vocal-mix.ts foreground balance and pre-window output headroom;
+  // the final master then sets deliverable loudness. The sub keeps enough
+  // harmonics to read on small speakers.
   const sub: Partial<TrackInput> = {
     synth: {
       attack: 0.02,

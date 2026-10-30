@@ -11,6 +11,7 @@ import {
   type TrackScore,
 } from "../score.ts";
 import type { DemoInfo } from "./types.ts";
+import { foregroundVocalTracks, vocalMonitorGain } from "./vocal-mix.ts";
 
 export const TPB = 480;
 export const BAR = 4 * TPB;
@@ -189,7 +190,7 @@ export class Composer {
       ticksPerBeat: TPB,
       beatsPerBar: 4,
       calibration: 1,
-      tracks: this.tracks,
+      tracks: foregroundVocalTracks(this.tracks, this.info.id),
       notes: this.notes,
       sections: this.sections,
       form: this.sections.map(({ name }) => ({ section: name })),
@@ -198,7 +199,12 @@ export class Composer {
         glue: { threshold: -16, ratio: 2, attack: 20, release: 180 },
         tape: { drive: 2, mix: 0.5 },
         width: { width: 1.15, mono: 120 },
-        limiter: { ceiling: -1, release: 160, lookahead: 5 },
+        limiter: {
+          ceiling: -1.1,
+          gain: vocalMonitorGain(this.tracks),
+          release: 160,
+          lookahead: 5,
+        },
         target: -14,
       },
     });
