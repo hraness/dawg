@@ -39,6 +39,11 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Fixed
 
+- Demo vocals sit ahead of competing instruments and vocal layers, with drier
+  words, cleaner lead inserts and headroom before long-song rendering. The mix
+  pass preserves authored notes, lyrics, timing and vocal sample files. Newly
+  generated stock takes use a separately calibrated balance.
+
 - **Long one-shot samples no longer cut out partway through songs over 45 seconds.** Those songs render in windows of about 20 seconds, and a window only reached 8 seconds back for notes still sounding. A one-shot hit rings its whole sample however short its note, so a 15-second vocal phrase that started more than 8 seconds before a seam fell silent at the seam until the next hit. Windows now reach back to any sample still playing.
 
 - **Pressing play no longer runs the playhead ahead of silent audio.** The transport used to start its clock at once while the engine rendered its first windows (2 to 8 seconds cold on the demos), so the playhead moved through silence and the song's opening was skipped. The clock now holds until the first frame is heard, and the engine prewarms that first window while stopped. A prewarmed play sounds within about 0.1 s.

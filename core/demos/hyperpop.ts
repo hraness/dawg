@@ -1723,10 +1723,10 @@ export function kitTracks(s: Composer, book: Book, o: KitOptions): void {
     humanize: { timing, velocity: 7, seed },
     ...ex(id),
   });
-  // The voice is the lead instrument: the singer sits about 5 dB under the
-  // drums and the chops and stutters about 8, over a darker bed pumped
-  // harder than the kit's stand-alone defaults, the sub driven into
-  // harmonics so it reads on small speakers.
+  // These are the book and instrument conditioning levels. Composer.finish
+  // applies vocal-mix.ts foreground balance and pre-window output headroom;
+  // the final master then sets deliverable loudness. The sub keeps enough
+  // harmonics to read on small speakers.
   const sub: Partial<TrackInput> = {
     synth: {
       attack: 0.02,
