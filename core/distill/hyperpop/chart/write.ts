@@ -6,6 +6,7 @@
  * is summed over the rounds so every song carries its cost.
  */
 import { readFileSync } from "node:fs";
+import house from "../../../../workflows/house-v1.json";
 import type { TrackScore } from "../../../score.ts";
 import { GRAMMARS, KITS } from "../genome/genome.ts";
 import { ARP, BASS, LEAD, PAD, SINGERS, STAB } from "../genome/sounds.ts";
@@ -68,14 +69,14 @@ The craft (the performer and the critic measure it):
 2. Every section 8 bars or fewer. A hook section is a sung chorus, then a drop: the hook on the lead or chops for up to 8 bars.
 3. Develop every repeat: a second verse, chorus or drop adds or changes a layer, a feel, a stab grid, an arp order or a line. Write new tunes per section; at least 45% of the bars that carry a tune should bring one the song hasn't played.
 4. Sung lines carry expression: vibrato (~) or a fall (>) on line ends and held words, about one expressive mark for every one or two sung notes, counting the moves.
-5. Hold sung notes on chord tones or prepare the dissonance (mark a deliberate suspension or appoggiatura with !). Chords are roman numerals (lower case for minor, ° for diminished), one per bar or two split with a dash, and may add 7, maj7 or add9 for color. They are the mode's own, except that a major-mode song may borrow iv, bVI, bVII or bIII, or use II, III or VI as a secondary dominant, for a lift or a sting (the way the demos turn bittersweet for a bar). There are no key changes; the format cannot express them.
+5. Use the house profile's major scale throughout. Hold sung notes on chord tones or prepare a diatonic suspension (mark it with !). Chords are roman numerals, one per bar or two split with a dash, and may add diatonic 7, maj7 or add9 for color. No borrowed chords, secondary dominants, chromatic alterations, or modulation in the current house workflow.
 6. Place moves by ear: stutters on the song's own syllables in drops, a dropout that spotlights a line, a silence before the last chorus, a landing on the last drop, a riser or crush into a drop, a drift from pretty to harsh, a dive out of a break, a tape stop.
 7. The form and the sounds are the song's own. The gold charts share one form (intro, verse, pre, chorus, drop, twice, then bridge, break, last chorus, last drop, outro); don't copy it. Cold-open on the hook, run two verses back to back, put a post-chorus or a breakdown mid-song, end on a false ending or a new section, skip the pre or the bridge, use a 6-bar phrase. Pick the singer, stabs, counter and kit for this brief, not the gold charts' defaults.
 8. A bridge or break turns somewhere new: a canon or counter-melody in the singer's rests (the counter layer), a half-time feel, a fugue-like entry of the chops or lead against the singer, sometimes.
 9. Kick, snare and hat grids are 16 steps of digits (velocity / 10) and dots; the 808 locks to the kick. Stab grids are 16 steps; arp orders are 8 digits 0-4 over five chord tones. The whole song holds about 4000 notes: spend them on the hook sections, and keep verses, bridges and breaks lighter (the performer drops parts that don't fit).
 10. Words are singable, concrete and a little strange: one image per song, internet-age, sung in short syllables. Write syllables split with "- " (ne- on) and hold vowels with _.
 
-Hyperpop's range runs from bright bubblegum (major or lydian, chipmunk doubles, sparkling arps) through euphoric and driving (mixolydian or major, four-on-the-floor or breakbeat, a supersaw lead) to bittersweet (a major key that leans on vi and a borrowed iv, glassy pads, a little grit), and no darker: dorian or aeolian only when the brief asks for it, never phrygian, never sad and slow. Every song is as active and rich as the gold charts: drums drive every section but a short break, 140 to 180 bpm, the stabs, arps and chops busy, the hook on every voice. No ambient: no none or taps feels outside a break, no whisper-only singer. Match the brief within that range.
+The current product writes our bright, plastic, bittersweet house hyperpop. The canonical policy is ${JSON.stringify(house)}. Choose a distinct tempo within that range; slower songs still have active drums and detailed production. Stock bf_emma carries the actual original words in the lower verse register, with a lift for the chorus. Keep space between sung phrases and let the instrumental answer. No ambient beds or whisper-only substitute for a sung lead. Match the brief within that house style.
 
 Answer with the chart as one JSON object in a \`\`\`json fence and nothing else. It follows the Chart type below exactly.`;
 

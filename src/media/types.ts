@@ -41,6 +41,8 @@ export type BeatGrid = Readonly<{
  */
 export type MediaServices = Readonly<{
   runner: CommandRunner;
+  /** Explicit project agent read roots; external reference imports remain read-only. */
+  readRoots?: readonly string[];
   /** Injectable for tests; defaults to global fetch. */
   fetch?: typeof fetch;
   env?: Readonly<Record<string, string | undefined>>;

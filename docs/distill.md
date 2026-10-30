@@ -1,5 +1,10 @@
 # Distilled styles: hyperpop
 
+The current default `dawg make` uses the bundled `original-house` workflow and
+project-local stock bf_emma singing. See [Song studio](./song-studio.md) for
+checkpoint/resume and setup. This document explains the chart engine and the
+explicit legacy synthetic, local-genome and classic-sheet paths.
+
 A large model writes and polishes demo songs by hand. The distill framework
 turns what those demos do into a plan small enough for a local model, such as
 Gemma 4 26B-A4B, to fill in. The local model writes the plan, and dawg's own

@@ -1,5 +1,5 @@
 /**
- * TAPE end to end (op1-ux §6, §8.3): Ctrl-T opens every track across the
+ * TAPE end to end (op1-ux §6, §8.3): /tape on opens every track across the
  * bars, each gesture echoes and runs its typed range command, the clipboard
  * survives in `.dawg`, the mouse sets the loop, and Esc goes home. Also a
  * multi-pane case: another pane recording on a track shows `C●` in the
@@ -111,7 +111,7 @@ test.skipIf(!supported)(
     };
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
-      await t.type("\u0014", "tape");
+      await t.type("/tape on\r", "tape");
       for (const [cols, rows] of [
         [60, 20],
         [80, 24],
@@ -195,15 +195,15 @@ for (const [cols, rows] of [
         await t.send("section chorus 5-8\r");
         await t.send("track drums\r");
         await t.send("track bass\r");
-        // Every queued line has run before Ctrl-T: the notes land before the
+        // Every queued line has run before opening TAPE: notes land before the
         // sections, and bass is focused from launch, so neither the session
         // file nor the header says the sections and `track bass` ran.
         await t.settle("seven lines applied");
         expect((await session(t.cwd))?.score.notes.length).toBe(2);
         expect(t.vt.lines()[0]).toMatch(/· bass\b/);
 
-        // Ctrl-T: TAPE replaces the highway; the footer has the buttons.
-        await t.type("\u0014", "tape opened");
+        // Explicit legacy TAPE retains its manual editing footer.
+        await t.type("/tape on\r", "tape opened");
         await t.until(() => t.vt.text().includes("range: bass"), "tape");
         const text = t.vt.text();
         expect(text).toContain("▼");
@@ -350,10 +350,11 @@ for (const [cols, rows] of [
         await t.send(click(20, rowY));
         await t.until(() => t.vt.text().includes("›drums"), "row focus");
 
-        // Esc goes home: the highway is back, TAPE is gone.
+        // Esc returns to the default observer; manual TAPE controls are gone.
         await t.send("\u001b");
         await t.until(() => !t.vt.text().includes("range: "), "home");
-        expect(t.vt.text()).not.toContain(" paste ");
+        expect(t.vt.text()).not.toMatch(/\bcut\b.*\bpaste\b/);
+        expect(t.vt.text()).not.toContain("clipboard:");
       } finally {
         t.proc.kill();
       }
@@ -372,7 +373,7 @@ test.skipIf(!supported)(
     const head = () => t.vt.lines()[0] ?? "";
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
-      expect(t.vt.text()).toContain("Scene › alt-→");
+      expect(t.vt.text()).toContain("Next section");
       await t.until(() => head().includes(" 1.1 "), "at bar 1");
       await t.send("\u001b[1;3C");
       await t.until(() => !head().includes(" 1.1 "), "next scene");
@@ -392,7 +393,7 @@ test.skipIf(!supported)(
       // TAPE takes Alt-← → for scenes too.
       await t.send("\u001b[F\u007f\u007f\u007f");
       await t.until(() => !t.vt.text().includes("› xab"), "cleared");
-      await t.send("\u0014");
+      await t.send("/tape on\r");
       await t.until(() => t.vt.text().includes("range: "), "tape");
       await t.send("\u001b[1;3C");
       await t.until(() => !head().includes(" 1.1 "), "next scene on TAPE");
@@ -421,7 +422,7 @@ for (const env of [{}, { NO_COLOR: "1" }] as Record<string, string>[])
         // "chorus" is on screen from the section line already: wait for the
         // queued lines to run, not for a word.
         await t.settle("form set");
-        await t.type("\u0014", "tape opened");
+        await t.type("/tape on\r", "tape opened");
         await t.until(() => t.vt.text().includes("range: "), "tape");
         const ghost = "░";
         const sect = () =>
@@ -464,7 +465,7 @@ test.skipIf(!supported)(
       // `section verse` runs after the note: wait for the whole queue.
       await t.settle("five lines applied");
       expect(await bassNotes()).toEqual([0]);
-      await t.type("\u0014", "tape opened");
+      await t.type("/tape on\r", "tape opened");
       await t.until(() => t.vt.text().includes("range: bass"), "tape");
 
       // Loop the verse, shrink it to one bar with `[`, and copy it.
@@ -672,7 +673,7 @@ test.skipIf(!supported)(
     const both = () => `--- A\n${a.vt.text()}\n--- C\n${c.vt.text()}`;
 
     // A on TAPE: B sits on bass, C on drums.
-    a.terminal.write("\u0014");
+    a.terminal.write("/tape on\r");
     await until(() => a.vt.text().includes("range: "), "A on tape", both);
     const row = (name: string) =>
       a.vt.lines().find((line) => new RegExp(`^ \\d.${name}`).test(line)) ?? "";

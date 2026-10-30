@@ -79,6 +79,7 @@ afterAll(() => {
 
 function env(): Record<string, string> {
   return {
+    DAWG_SHOWME: "on",
     AI_GATEWAY_BASE_URL: `${origin}/v1`,
     DAWG_MODELS_DEV_URL: `${origin}/api.json`,
   };
@@ -188,7 +189,12 @@ test.skipIf(!supported)(
       "--track",
       "main",
     ]);
-    await typed.until(() => typed.vt.text().includes("try:"), "offline prompt");
+    await typed.until(
+      () =>
+        typed.state() !== undefined &&
+        typed.vt.text().includes("configure a model to generate"),
+      "offline prompt",
+    );
     for (const line of LINES) await typed.send(`${line}\r`);
     // Lines typed faster than they run queue; read the file once all ran.
     await typed.settle("typed lines applied");
@@ -290,7 +296,7 @@ test.skipIf(!supported)(
       .sort((a, b) => a - b);
     expect(ticks).toEqual([7680, 9600, 11520, 13440]);
     // TAPE draws the result: the loop bracket and bass in bars 5-8.
-    await t.send("\u0014");
+    await t.send("/tape on\r");
     await t.until(() => t.vt.text().includes("(loop)"), "tape loop");
     expect(t.vt.text()).toContain("bars 5–6 (loop)");
     expect(t.vt.text()).toMatch(/bass\s+····\s+┊···┊···┊···┊···▃···▃···▃···▃/);

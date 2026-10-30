@@ -377,6 +377,12 @@ export type VoxBank = Pick<Book, "sample" | "root" | "syllables"> &
   Readonly<{
     lines?: Readonly<Record<string, number>>;
     heads?: readonly string[];
+    /** An immutable project-local vocal take, independent of the demo catalog. */
+    entry?: Readonly<{
+      src: string;
+      sha256: string;
+      slices: readonly Readonly<{ name: string; begin: number; end: number }>[];
+    }>;
   }>;
 
 /** A sung note: beat from the part's downbeat, pitch, beats, syllable. */
@@ -423,7 +429,9 @@ const CHOP_LEAD = 0.08;
 const frac = (x: number) => Math.round(x * 1e6) / 1e6;
 
 const sliceOf = (book: VoxBank, name: string) => {
-  const slice = bundledSample(book.sample)?.slices.find((s) => s.name === name);
+  const slice = (book.entry ?? bundledSample(book.sample))?.slices.find(
+    (s) => s.name === name,
+  );
   if (!slice) throw new Error(`demo slice missing: ${book.sample}/${name}`);
   const line = book.lines?.[name];
   const beats =
@@ -432,11 +440,17 @@ const sliceOf = (book: VoxBank, name: string) => {
   return { ...slice, beat: (slice.end - slice.begin) / span };
 };
 
+/** Pin local takes just as bundled samples are pinned, without publishing them. */
+const bookSampleRef = (book: VoxBank): SampleRef =>
+  book.entry
+    ? { src: book.entry.src, sha256: book.entry.sha256 }
+    : bundledSampleRef(book.sample);
+
 /** A syllable window: from just before its vowel to the end of its slot. */
 function syllable(book: VoxBank, name: string, extra: Partial<SampleRef> = {}) {
   const { begin, end, beat } = sliceOf(book, name);
   return {
-    ...bundledSampleRef(book.sample),
+    ...bookSampleRef(book),
     begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
     end,
     clip: 1,
@@ -453,7 +467,7 @@ const lineVoices = (book: VoxBank, extra: Partial<SampleRef> = {}) =>
       return [
         part,
         {
-          ...bundledSampleRef(book.sample),
+          ...bookSampleRef(book),
           begin,
           end,
           fadeTime: 0.05,
@@ -574,7 +588,7 @@ export function stutterTrack(
     voices[`s_${name}`] = syllable(book, name);
     const { begin, end } = sliceOf(book, name);
     voices[`r_${name}`] = {
-      ...bundledSampleRef(book.sample),
+      ...bookSampleRef(book),
       begin,
       end,
       speed: -1,
@@ -615,7 +629,7 @@ export function voiceLeadTrack(
       mode: "keyed",
       voices: {
         hold: {
-          ...bundledSampleRef(book.sample),
+          ...bookSampleRef(book),
           root: book.root,
           begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
           end,
@@ -646,7 +660,7 @@ export function grainTrack(
   const { begin, end } = sliceOf(book, "hold");
   return voice("vgrain", "Voice cloud", "granular", level, {
     granular: {
-      src: bundledSampleRef(book.sample),
+      src: bookSampleRef(book),
       root: book.root,
       begin: frac(begin + (end - begin) * 0.2),
       end: frac(end - (end - begin) * 0.1),

@@ -13,8 +13,20 @@ export const AGENTS_MD_MAX_BYTES = 6 * 1024;
 
 const BLOCK = `# dawg project
 
-This folder is a dawg song. dawg (the terminal DAW) and you edit the same
-files; the open dawg window reloads when a file changes.
+This folder is a dawg song. The terminal is a player and chat; you own musical
+editing and the window shows committed tracks and a following horizontal piano roll.
+The open window reloads the same project files when they change.
+
+## Song workflows
+- Read \`dawg workflow list\` and \`dawg workflow read original-house\` before an original song.
+- The installed resources contain the canonical house profile, chart format and vocal guidance.
+- \`dawg make "<brief>"\` runs the durable original driver: chart, early instrumental, stock
+  bf_emma actual words, arrangement and a report. Its saved \`--from\` command resumes the chart.
+- \`dawg reference prepare <YouTube-URL-or-audio-file>\` preserves source/stems and timing evidence;
+  \`dawg reference recreate <manifest>\` re-sings actual transcribed/supplied words and retains A/B.
+- \`dawg vocals setup\` / \`dawg reference setup\` explain optional generation dependencies.
+- Keep song assets inside this project. Generating a song never edits DAWG's public catalog.
+- Saved, ready, buffered and audible are separate facts. Preserve listener pause, seek and pin.
 
 ## Layout
 - \`song.ts\`: tempo, meter, form and the track list (\`export default song({...})\`).

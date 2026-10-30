@@ -11,10 +11,11 @@ test.skipIf(!supported)(
   "real PTY: loading a demo closes the shelf and shows its arrangement from home or TAPE",
   async () => {
     const t = await launch(60, 20, {}, []);
-    const tracks = createDemo("glass-garden").tracks.length;
+    const firstTrack = createDemo("glass-garden").tracks[0]!.name;
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "initial prompt");
       for (const input of ["keyboard", "mouse"] as const) {
+        if (input === "mouse") await t.type("/tape on\r", "legacy arrangement");
         await t.type("/demos\r", "demo shelf");
         await t.type("glsgdn", "fuzzy demo search");
         await t.until(
@@ -35,10 +36,14 @@ test.skipIf(!supported)(
           );
         }
         await t.until(
-          () => t.vt.text().includes(`1/${tracks}`),
+          () =>
+            t.state()?.screen === "home" &&
+            t.vt.text().includes(firstTrack) &&
+            t.vt.text().includes("Tracks"),
           "visible arrangement",
         );
-        expect(t.vt.text()).toContain(" paste ");
+        expect(t.vt.text()).not.toMatch(/\bcut\b.*\bpaste\b/);
+        expect(t.vt.text()).not.toContain("clipboard:");
         expect(t.vt.text()).not.toContain("song notes");
         expect(t.vt.wrapsSinceClear).toBe(0);
         expect(t.vt.scrollsSinceClear).toBe(0);
@@ -63,6 +68,7 @@ test.skipIf(!supported)(
     try {
       await t.until(() => t.state() !== undefined, "ready");
       await t.type("/demo glass-garden\r", "load demo");
+      await t.type("/tape on\r", "open manual arrangement behind picker");
       await t.until(() => t.state()?.screen === "tape", "arrangement");
       await t.type("/sample library\r", "sample shelf");
       await t.type("glas", "fuzzy query");
@@ -200,7 +206,7 @@ test.skipIf(!supported)(
         "agent load",
       );
       await t.until(
-        () => t.state()?.screen === "tape" && !t.state()?.busy,
+        () => t.state()?.screen === "home" && !t.state()?.busy,
         "agent arrangement",
         10_000,
       );
@@ -209,7 +215,8 @@ test.skipIf(!supported)(
       expect(after.revision).toBe(before.revision + 1);
       expect(t.state()?.track).toBe(createDemo("glass-garden").tracks[0]!.id);
       expect(t.vt.lines()[0]).not.toContain("▶");
-      expect(t.vt.text()).toContain(" paste ");
+      expect(t.vt.text()).toContain("Tracks");
+      expect(t.vt.text()).not.toMatch(/\bcut\b.*\bpaste\b/);
       expect(t.state()?.overlay).toBeNull();
       await t.type("\u001a", "undo demo");
       expect((await loadSession(paths)).composition).toEqual(

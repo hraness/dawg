@@ -10,6 +10,72 @@ import {
 
 const ACTOR = `a_${"c".repeat(22)}`;
 
+describe("observed audio status frames", () => {
+  const status = {
+    pendingRevision: 8,
+    audibleRevision: 6,
+    buffered: [
+      { fromBeat: 0, toBeat: 8 },
+      { fromBeat: 12, toBeat: 20 },
+    ],
+    preparing: true,
+    buffering: false,
+  };
+  const parse = (value: unknown) =>
+    parseServerMessage(
+      JSON.stringify({ v: 1, type: "audio-status", status: value }),
+    );
+  test("round-trips separate pending/audible revisions and immutable available ranges", () => {
+    const parsed = parse(status);
+    expect(parsed).toEqual({ v: 1, type: "audio-status", status });
+    if (parsed.type !== "audio-status") throw new Error("wrong frame");
+    expect(Object.isFrozen(parsed.status)).toBe(true);
+    expect(Object.isFrozen(parsed.status.buffered[0])).toBe(true);
+  });
+  test("idle and buffering states need no invented ready revision", () => {
+    expect(
+      parse({
+        pendingRevision: null,
+        audibleRevision: null,
+        buffered: [],
+        preparing: false,
+        buffering: false,
+      }),
+    ).toMatchObject({ status: { audibleRevision: null } });
+    expect(
+      parse({
+        ...status,
+        preparing: false,
+        buffering: true,
+        error: "render unavailable",
+      }),
+    ).toMatchObject({
+      status: { buffering: true, error: "render unavailable" },
+    });
+  });
+  test("rejects unbounded, malformed and misleading readiness", () => {
+    for (const invalid of [
+      null,
+      [],
+      { ...status, audibleRevision: -1 },
+      { ...status, pendingRevision: 1.2 },
+      { ...status, preparing: "true" },
+      { ...status, buffered: [{ fromBeat: 8, toBeat: 4 }] },
+      {
+        ...status,
+        buffered: [
+          { fromBeat: 0, toBeat: 8 },
+          { fromBeat: 4, toBeat: 9 },
+        ],
+      },
+      { ...status, audibleRevision: null },
+      { ...status, buffered: Array(4097).fill({ fromBeat: 0, toBeat: 1 }) },
+      { ...status, error: "x".repeat(513) },
+    ])
+      expect(() => parse(invalid)).toThrow(ProtocolError);
+  });
+});
+
 describe("protocol revisions", () => {
   test("negotiates the highest shared revision", () => {
     expect(negotiateProtocol()).toBe(1);

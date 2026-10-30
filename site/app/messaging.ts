@@ -2,9 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * dawg's product messaging, word for word from the Hraness portfolio registry
- * (jungle/portfolio-projects.json, id `dawg`). The site has no generated
- * snapshot, so the registry's strings live here; change them there first.
+ * Site messaging follows the approved product record and README. Metadata,
+ * machine-readable summaries and visible copy share these strings.
  */
 export const productName = "dawg";
 export const productDomain = "dawg.sh";
@@ -12,24 +11,24 @@ export const productUrl = "https://dawg.sh";
 export const repoUrl = "https://github.com/hraness/dawg";
 
 export const productMessaging = {
-  category: "Terminal music workstation",
+  category: "Song studio for your terminal",
   tagline: "Make music in your terminal, dawg.",
   short:
-    "Terminal music workstation where you and an agent shape loops on a piano roll",
-  meta: "dawg is a terminal music workstation. Open windows on one local session, play notes through a streaming piano roll, and ask your agent to shape the next loop.",
+    "Generate songs with an agent, then listen and steer from a terminal player and chat",
+  meta: "dawg generates songs with an agent. Follow the tracks, listen to ready drafts and steer revisions from a local terminal player and chat.",
   medium:
-    "dawg is a terminal music workstation. Open several windows on one local session, keep a track in each, and ask your agent to shape the next loop while notes stream through the piano roll.",
-  long: "dawg is a music workstation that runs in your terminal. Notes stream down a piano roll toward the hit line as they play, every window you open shares one local session, and a prompt at the bottom lets you add notes, extend loops, move the transport, or ask an agent to write the next change. It brings the coding-agent loop to music: describe the groove you want, hear it, and refine it. Sessions stay on your machine, the score is a file you can read, and playback needs no account.",
+    "dawg generates songs with an agent and renders them locally. Describe a song, watch its tracks take shape, and listen while the agent keeps working.",
+  long: "dawg is a song studio with a terminal player and chat. Describe an original song or bring a reference; bundled workflows guide house hyperpop writing, reference study and stock bf_emma singing. The tracks overview opens first, and a horizontal piano roll follows the track being written. Ctrl-P pins the inspected track. The first ready musical draft starts automatically, while pause and seek stay under your control. Songs, vocal takes and workflow progress stay in your project. Saved songs play without an account, Python or network access; new generation and analysis use configured providers and local tools.",
   hero: {
     heading: "Make music in your terminal, dawg.",
     summary:
-      "dawg is a music workstation that runs in your terminal, with no account and no cloud, just sound. Notes stream down a piano roll as they play, every window shares one local session, and your agent writes the next loop beside you.",
+      "Describe a song, watch its tracks take shape, and hear the first ready draft. A horizontal piano roll follows the track being written; Ctrl-P pins it. Pause, seek and steer revisions from the player and chat.",
     primaryAction: "Install dawg",
     secondaryAction: "Watch it play",
   },
   blurb: {
     emoji: "🎵",
-    text: "dawg is a terminal music workstation. Open several windows on one local session, keep a track in each, ask your agent to shape the next loop, and watch the notes stream through the piano roll as they play. Sessions stay on your machine and playback needs no account.",
+    text: "dawg generates songs with an agent in a terminal player and chat. Follow the tracks, hear a ready draft and steer the next revision. Bundled workflows write house hyperpop and study references with stock bf_emma vocals. Saved songs stay local and play without an account.",
     cta: { label: "Ask your agent to set it up", url: "https://dawg.sh" },
   },
 } as const;

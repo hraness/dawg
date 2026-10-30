@@ -13,8 +13,7 @@ import { SiteHeader } from "./site-header";
 export const revalidate = 3600;
 
 /**
- * The four things a new player does first, in order. Each is one sentence
- * beside a real screen that replays the frames dawg drew while it was captured.
+ * Optional command controls, illustrated by existing real app captures.
  */
 const pillars = [
   {
@@ -25,8 +24,8 @@ const pillars = [
     screen: "play-mode",
     body: (
       <>
-        <kbd>Ctrl-P</kbd> turns the keyboard into a piano; <kbd>R</kbd> records
-        over the loop, counted in and snapped to the beat.
+        Open the optional <code>/play</code> keyboard piano; <kbd>R</kbd>
+        records over the loop, counted in and snapped to the beat.
       </>
     ),
   },
@@ -38,8 +37,8 @@ const pillars = [
     screen: "knobs",
     body: (
       <>
-        Four colored knobs sit under every sound: ↑↓ picks one, ←→ turns it, and
-        the same four shape a synth, a track or the mix.
+        The optional sound controls keep four colored knobs: ↑↓ picks one and ←→
+        turns it to shape a synth, a track or the mix.
       </>
     ),
   },
@@ -51,9 +50,8 @@ const pillars = [
     screen: "patch",
     body: (
       <>
-        <code>/patch</code> joins oscillators, filters and envelopes with
-        cables; eight built-in patches put their first four controls on the
-        knobs.
+        Open <code>/patch</code> for optional sound design with oscillators,
+        filters and envelopes; eight built-in patches expose four controls.
       </>
     ),
   },
@@ -61,12 +59,12 @@ const pillars = [
     id: "ask",
     clip: 4,
     label: "Ask",
-    heading: "Ask for what you want",
+    heading: "Inspect the agent's commands",
     screen: "showme",
     body: (
       <>
-        Type &ldquo;make the hats swing&rdquo; and the agent types each command
-        into your prompt; every change it makes undoes on its own.
+        Optional <code>/showme on</code> reveals command receipts. Normal chat
+        focuses on the music being written, and accepted changes stay undoable.
       </>
     ),
   },
@@ -83,10 +81,11 @@ const depths: readonly {
   since?: string;
 }[] = [
   {
-    title: "Groove starters",
+    title: "Bundled song workflows",
     body: (
       <>
-        <code>style warehouse 4 3</code>: four bars from one of sixteen.
+        Write house hyperpop, study references and re-sing supplied or
+        transcribed words with stock British bf_emma.
       </>
     ),
   },
@@ -103,8 +102,8 @@ const depths: readonly {
     title: "Demo songs",
     body: (
       <>
-        <code>demo</code> opens ten complete, editable songs, three of them
-        hyperpop with full original vocals.
+        <code>demo</code> opens six complete, editable hyperpop songs with
+        original vocals.
       </>
     ),
     since: "0.12.0",
@@ -113,8 +112,8 @@ const depths: readonly {
     title: "Sample library",
     body: (
       <>
-        Fourteen original sounds, including three vocal books and three sung
-        hooks; <code>sample chop</code> slices one.
+        Original sounds, vocal books and sung hooks; <code>sample chop</code>
+        slices one.
       </>
     ),
     since: "0.12.0",
@@ -123,8 +122,8 @@ const depths: readonly {
     title: "TAPE",
     body: (
       <>
-        <kbd>Ctrl-T</kbd>: every track across the bars, with copy, cut and paste
-        buttons.
+        <kbd>Ctrl-T</kbd> shows the tracks overview; <code>/tape</code> opens
+        optional copy, cut and paste controls.
       </>
     ),
   },
@@ -161,7 +160,7 @@ const depths: readonly {
     title: "WAV and MIDI out",
     body: (
       <>
-        <code>dawg render song.wav</code>, the same bytes every time.
+        <code>dawg render song.wav</code> renders the saved score and assets.
       </>
     ),
   },
@@ -169,28 +168,43 @@ const depths: readonly {
 
 const flow = [
   {
-    title: "One local session",
+    title: "Describe a song",
     body: (
       <>
-        Run <code>dawg</code> in a folder; the song lives in <code>.dawg/</code>
-        .
+        Run <code>dawg</code> in a folder and tell the agent what you want to
+        hear.
       </>
     ),
     code: "$ dawg",
   },
   {
-    title: "Several windows",
-    body: <>More terminals on the same folder, each with its own track.</>,
-    code: "$ dawg --track bass",
+    title: "Hear a ready draft",
+    body: (
+      <>
+        Playback starts when a musical draft is ready; your later pause stays in
+        control.
+      </>
+    ),
+    code: "Space · play / pause",
   },
   {
-    title: "Prompt and agent",
-    body: <>A command lands as one revision; a sentence goes to the agent.</>,
-    code: "› make the hats swing",
+    title: "Follow and steer",
+    body: (
+      <>
+        Follow the written track, pin it to inspect, and ask for the next
+        change.
+      </>
+    ),
+    code: "Ctrl-P · pin / unpin",
   },
   {
     title: "Sound out",
-    body: <>Gapless playback, and the same audio to a WAV.</>,
+    body: (
+      <>
+        Keep songs and vocal takes in your project; render the saved score to
+        WAV.
+      </>
+    ),
     code: "$ dawg render song.wav",
   },
 ] as const;
@@ -198,7 +212,7 @@ const flow = [
 const questions: readonly { q: string; a: ReactNode }[] = [
   {
     q: "Is it free, and do I need an account?",
-    a: "dawg is free and MIT licensed, and there is no account. Commands, playback, recording and rendering work offline; agent turns are billed by your gateway or OpenRouter account, or count against your subscription.",
+    a: "dawg is free and MIT licensed. Saved songs play and render locally without an account, Python or network access. New generation uses your configured agent provider; stock singing and reference analysis need their optional local tools and cached models.",
   },
   {
     q: "Which models does the agent use?",
@@ -210,11 +224,11 @@ const questions: readonly { q: string; a: ReactNode }[] = [
   },
   {
     q: "Can the agent wreck my song?",
-    a: "Every tool call is validated before it commits, and each accepted call is its own revision, so undo removes exactly that change. Esc stops a turn and keeps what landed.",
+    a: "Edits are checked before they commit and stay undoable. Escape cancels work while keeping completed changes and vocal takes. Your pause and seek choices stay in control while the agent works.",
   },
   {
     q: "Can I get the song out?",
-    a: "dawg render song.wav writes a WAV through the same renderer that plays, byte-identical across runs; dawg render song.mid writes MIDI. The project files are plain TypeScript in your folder.",
+    a: "dawg render song.wav writes a WAV from the saved score and assets; dawg render song.mid writes MIDI. Saved renders are repeatable, and generated vocal takes stay in your project. Fresh voice inference can produce different bytes.",
   },
   {
     q: "Coming from live coding or a DAW?",
@@ -318,7 +332,7 @@ export default async function Home() {
             <Screen
               id="hero"
               animate
-              caption="The real app: four tracks looping while the agent types its next command."
+              caption="The default studio: the agent writes chords while playback continues."
             />
           </div>
         </section>
@@ -331,12 +345,13 @@ export default async function Home() {
           <SectionHead
             id="highway-title"
             index="01"
-            label="The highway"
-            heading="Notes stream down toward the hit line."
+            label="Follow the song"
+            heading="Watch tracks become music."
           >
             <p>
-              Every track plays on one piano roll: a note slides down in its
-              track&rsquo;s color, crosses the line, and you hear it.
+              The tracks overview opens first. The horizontal piano roll follows
+              the track being written; <kbd>Ctrl-P</kbd> pins it. This optional
+              highway shows a score vertically.
             </p>
           </SectionHead>
           <div className="dawg-section__body">
@@ -360,12 +375,12 @@ export default async function Home() {
           <SectionHead
             id="ways-title"
             index="02"
-            label="Four ways in"
-            heading="Play, shape, patch, ask."
+            label="Optional controls"
+            heading="Open the advanced tools when you need them."
           >
             <p>
-              Every picture below is a capture of the app, replaying the frames
-              it drew.
+              These captures show command controls for recording, sound design
+              and inspecting agent edits.
             </p>
           </SectionHead>
           <div className="dawg-gallery">
@@ -402,11 +417,12 @@ export default async function Home() {
             id="how-title"
             index="03"
             label="How it works"
-            heading="One session. Many windows. One sound."
+            heading="Describe, listen and revise."
           >
             <p>
-              The first window starts a small local daemon for the folder; every
-              other window connects to it and hears the same clock.
+              The player shows musical progress and separates pending changes
+              from ready audio. Pause and seek remain available during
+              generation.
             </p>
           </SectionHead>
           <div className="dawg-section__body">

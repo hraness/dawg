@@ -77,7 +77,7 @@ test.skipIf(!supported)(
     const t = await launch(100, 30, {});
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
-      await t.type("\u0010", "enter play mode");
+      await t.type("/play on\r", "enter play mode");
       await t.type("/style r", "draft a command while playing keys");
       expect(t.vt.text()).not.toContain("rec armed");
       expect(t.vt.text()).toContain("/style r");

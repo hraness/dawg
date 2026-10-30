@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import {
+  AGENT_LIMITS,
   AGENT_SYSTEM_PROMPT,
   AgentTimeoutError,
   classifyAgentError,
@@ -410,9 +411,9 @@ describe("streaming agent turn", () => {
       180,
     );
 
-    // A turn whose requests outgrow 512 KiB in total ends with a budget error.
+    // Long song workflows still stop at the cumulative request-byte ceiling.
     const big = scriptedFetch(
-      Array.from({ length: 8 }, (_, i) => [
+      Array.from({ length: AGENT_LIMITS.maxSteps }, (_, i) => [
         ...toolCallChunks(0, `b${i}`, "explain", { text: "y".repeat(30_000) }),
         finishChunk("tool_calls"),
       ]),
@@ -425,7 +426,7 @@ describe("streaming agent turn", () => {
     });
     expect(capped).toMatchObject({ type: "error", code: "budget" });
     expect((capped as { message: string }).message).toContain("request budget");
-    expect(big.requests.length).toBeLessThan(8);
+    expect(big.requests.length).toBeLessThan(AGENT_LIMITS.maxSteps);
   });
 
   test("stops at the tool-call and step budgets", async () => {

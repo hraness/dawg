@@ -27,6 +27,7 @@ function invalid(message: string): never {
 export const SONG_TOOLS = Object.freeze([
   {
     name: "song_guide",
+    hidden: true,
     description:
       "Read-only. The song card guide, the hyperpop sheet playbook and a worked example sheet. Pass a brief and a seed to also get the constraints that seed draws for that brief, so the card's music can be written for them. Read it before compose_song or write_song.",
     parameters: {
@@ -73,6 +74,7 @@ export const SONG_TOOLS = Object.freeze([
   },
   {
     name: "write_song",
+    hidden: true,
     description:
       "Replace the current song with a complete hyperpop track compiled from a song sheet (see song_guide), in one undoable edit. Use when the user asks for a new song.",
     parameters: {
@@ -98,6 +100,7 @@ export const SONG_TOOLS = Object.freeze([
   },
   {
     name: "compose_song",
+    hidden: true,
     description:
       "Replace the current song with a newly composed hyperpop track: a seeded genome picks groove, harmony, sounds, form and moves, and your song card (see song_guide card_guide) supplies the words, mood and any axes the user named. Omit card for an instrumental-word sketch; pass seed to repeat a song. One undoable edit.",
     parameters: {

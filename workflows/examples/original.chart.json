@@ -1,0 +1,51 @@
+{
+  "title": "Porch Light Sketch",
+  "key": "D",
+  "mode": "major",
+  "bpm": 122,
+  "sounds": {
+    "pad": "glass",
+    "stab": "sugar",
+    "arp": "glasspluck",
+    "arp2": "musicbox",
+    "lead": "chip",
+    "counter": "bell",
+    "bass": "sub808",
+    "singer": "sung",
+    "kit": { "kick": "syn909", "snare": "syn909", "hats": "syn808" },
+    "design": {
+      "brightness": 0.6,
+      "grit": 0.15,
+      "space": 0.35,
+      "width": 0.6,
+      "echo": 0.2
+    }
+  },
+  "sections": [
+    {
+      "kind": "verse",
+      "name": "Verse sketch",
+      "bars": 4,
+      "chords": "I IV vi V",
+      "drums": "four",
+      "play": ["pad", "stabs", "sub"],
+      "sing": [
+        {
+          "bar": 0,
+          "rhythm": "x---x---x---x---",
+          "notes": "1 2 3 5>",
+          "words": "keep the light on"
+        },
+        {
+          "bar": 2,
+          "rhythm": "x---x---x---x---",
+          "notes": "6, 1 3 3>",
+          "words": "leave the door wide"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "A small original grammar example; develop a full varied song before delivery."
+  ]
+}

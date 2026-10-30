@@ -74,6 +74,7 @@ async function open(name: string, env: Record<string, string> = {}) {
   const scenario = SCENARIOS.find((s) => s.name === name)!;
   const t = await launch(100, 30, {
     ...(scenario.agent ? agentEnv(400) : {}),
+    ...scenario.env,
     ...env,
   });
   await scenario.open(t);

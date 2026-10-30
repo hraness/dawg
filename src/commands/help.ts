@@ -684,7 +684,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
   {
     group: "project · window",
     entries: [
-      { command: "/view focus|all", summary: "one track or every track" },
+      {
+        command: "/view tracks|<track>|pin|unpin|follow",
+        summary: "inspect music while the agent works",
+      },
       { command: "/transcript", summary: "scrollable log · Ctrl-O" },
       { command: "/theme default|high-contrast|mono", summary: "colors" },
       { command: "/motion on|off", summary: "animation" },
@@ -1234,7 +1237,7 @@ export const USAGE: Readonly<Record<string, string>> = {
     "resample <track>|orbit <n>|master [section <name>|bars a-b] [post] [grain] [as <id>] · resample lead · resample drums bars 1-2 grain · resample master section chorus",
   bounce: "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
   chop: "/chop <op> <file> [values] [--flags] · /chop cut break.wav 1.2s 3.4s · /chop pitch vox.wav -3 · /chop slice break.wav --method onset --track chops --pattern · /chop audition out.wav",
-  view: "/view focus | all",
+  view: "/view tracks | <track> | pin | unpin | follow",
   transcript: "/transcript",
   log: "/transcript",
   theme: "/theme default | high-contrast | mono",

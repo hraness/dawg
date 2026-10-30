@@ -2,9 +2,20 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
-## Unreleased
+## 0.38.0
 
 ### Added
+
+- A song studio focused on playback and chat. The existing track timeline is
+  the default overview; a horizontal piano roll follows agent-written tracks,
+  with pinning, horizontal inspection and responsive section seeking.
+- Durable, versioned original-song, reference-study and recreation workflows,
+  bundled house policy and instructions, and inspect/cancel/resume CLI tools.
+- Project-local British bf_emma singing with Kokoro and WORLD, pinned immutable
+  takes, cached replay, and explicit setup for optional inference dependencies.
+- Reference preparation from YouTube or local audio, editable melody, actual-word
+  stock singing, retained source vocals and aligned level-matched comparisons.
+  Accompaniment reconstruction uses the retained stems and transcription tools.
 
 - **Three new demo songs, each unlike the first three.**
   - **Night Swim:** D major at 122, a Balearic house groove with marimba and plucks, sung low with a low `bm_lewis` echo and a detuned double on the chorus.
@@ -13,6 +24,16 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Vocal books that sound sung, not typed.** The three new books are written to speech rhythm, with pickups, rests and held stressed vowels, and their verses sit in a low register. `sing.py` takes an opt-in `human` setting (timing drift, flat landings, slow pitch wander), per-note `dyn` and `air`, and `"~"` melisma. A part can switch voice for a low answer or chant. `scripts/vox/cadence.py` prints a line's spoken rhythm as a starting point.
 
 ### Changed
+
+- A coherent draft starts playing automatically. Pause, seek and pinned inspection
+  remain authoritative while work continues and across later edit requests.
+- Saved, preparing, buffering and actually audible revisions are reported
+  separately, including retained monitor coverage. Failed initial cues stay paused.
+- `dawg make` preserves authored chart and instrumental checkpoints before singing;
+  `--from` resumes them. Explicit synthetic and instrumental draft options remain.
+- New house songs follow one diatonic-major policy and preserve authored lower
+  vocal registers. Detailed manual editors remain explicit `/tape` and `/play`
+  entry points; generated songs and assets stay in the user's project.
 
 - **Every demo vocal book now sings in Kokoro's British `bf_emma` voice.** Redline, Glass Garden, Night Swim and Kite Season were re-sung to match Bubble Wrap. Candy Fault trades its synth singer for a new book, `candy-fault-vox`, that sings its topline note for note. The final chorus is sung a half step up there, so the lift needs no re-pitching, and the glitch-break "pix" stutters come from the book's chops. On Candy Fault, whisper now hears nearly every line of the mix, where it heard almost none from the synth singer. Clef scores its vocals 7.8 against 5.2, with polish level. Each book takes the clearest of several takes line by line. Redline, Glass Garden and Kite Season read their words at `speed: 0.8` before WORLD fits them to the melody, which keeps fast lines like "neon on the highway" from slurring. Whisper misses fewer words than with the old voices on Glass Garden (0.03 against 0.17) and Kite Season (0.10 against 0.11), and about as many on Night Swim (0.07 against 0.06) and Redline (0.21 against 0.21). `songs.py` takes a song-wide `speed`.
 
