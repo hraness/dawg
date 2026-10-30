@@ -13,6 +13,7 @@
  */
 
 import { paintTape, type TapeView } from "./tape.ts";
+import { paintPianoRoll, type PianoRollOptions } from "./piano-roll.ts";
 import { paintPatch, type PatchPaint } from "./patch.ts";
 import {
   ActivityFeed,
@@ -84,6 +85,13 @@ export type SyncState = "synced" | "syncing" | "conflict" | "offline" | "local";
 
 export interface AppView {
   score: TrackScoreSnapshot;
+  /** The song studio observes agent work; its only controls are listening and navigation. */
+  studio?: Readonly<{
+    view: "overview" | "track";
+    pinned: boolean;
+    status: string;
+    roll?: Omit<PianoRollOptions, "theme" | "capabilities" | "pinned">;
+  }>;
   /** Transport beat; when omitted it is derived from the snapshot. */
   beat?: number | undefined;
   model?: string | undefined;
@@ -984,18 +992,24 @@ function paintPrompt(
     const slashTypes = owner === "PLAY" || owner === "PATCH";
     const placeholder = owner
       ? `${owner.toLowerCase()} has input${slashTypes ? " · / type" : ""} · ctrl-g jump · ctrl-b back`
-      : view.tape
-        ? "type a command · space play · ? tape keys"
-        : placeholderHint({
-            seed: score.sessionId ?? "dawg",
-            agent: !view.agentOffline,
-            filled:
-              score.notes.length > 0 ||
-              (score.clips ?? []).length > 0 ||
-              (score.layers ?? []).some((layer) => layer.notes.length > 0),
-            drums: projectionFor(score).kind !== "pitch",
-            queue: mode === "queue",
-          });
+      : view.studio
+        ? view.agentOffline
+          ? "play your saved song · configure a model to generate"
+          : mode === "queue"
+            ? "describe the next change"
+            : "describe a song, a change, or a reference"
+        : view.tape
+          ? "type a command · space play · ? tape keys"
+          : placeholderHint({
+              seed: score.sessionId ?? "dawg",
+              agent: !view.agentOffline,
+              filled:
+                score.notes.length > 0 ||
+                (score.clips ?? []).length > 0 ||
+                (score.layers ?? []).some((layer) => layer.notes.length > 0),
+              drums: projectionFor(score).kind !== "pitch",
+              queue: mode === "queue",
+            });
     buffer.text(5, top + 1, truncate(placeholder, editorWidth - 1), faint);
   }
 
@@ -1010,20 +1024,30 @@ function paintPrompt(
     const navigationHints = NAVIGATION_ACTIONS.map(
       (action) => action.hint,
     ).join(" · ");
-    const hints = owner
-      ? ` ${navigationHints} · esc cancel/back `
-      : width >= 112
-        ? ` enter send · ctrl-j newline · ${navigationHints} · ctrl-z undo · ctrl-o log `
-        : width >= 80
-          ? ` enter send · ${navigationHints} · ctrl-z undo `
-          : width >= 52
-            ? ` ${navigationHints} · ? keys `
-            : "";
+    const hints =
+      view.studio && !owner
+        ? " enter send · esc cancel · space play · ctrl-o chat "
+        : owner
+          ? ` ${navigationHints} · esc cancel/back `
+          : width >= 112
+            ? ` enter send · ctrl-j newline · ${navigationHints} · ctrl-z undo · ctrl-o log `
+            : width >= 80
+              ? ` enter send · ${navigationHints} · ctrl-z undo `
+              : width >= 52
+                ? ` ${navigationHints} · ? keys `
+                : "";
     const right = footerStatus(view, view.score.sessionId);
     let spend = right ? ` ${right} ` : "";
     let spendWidth = displayWidth(spend);
     // Always leave a discoverable exit, including in a compact overlay.
-    const candidates = [hints, ` ${navigationHints} `, " ^G jump · ^B back "];
+    const candidates =
+      view.studio && !owner
+        ? [
+            hints,
+            " enter send · esc cancel · ctrl-o chat ",
+            " enter send · esc cancel ",
+          ]
+        : [hints, ` ${navigationHints} `, " ^G jump · ^B back "];
     let shown = candidates.find(
       (candidate) => displayWidth(candidate) + spendWidth + 6 <= width,
     );
@@ -1565,6 +1589,33 @@ function paintTooSmall(
   });
 }
 
+/** Keep the observer readable on a terminal that explicitly cannot draw Unicode. */
+function asciiStudioFrame(buffer: CellBuffer): void {
+  const symbols: Record<string, string> = {
+    "·": ".",
+    "…": "~",
+    "—": "-",
+    "–": "-",
+    "→": ">",
+    "←": "<",
+    "↑": "^",
+    "↓": "v",
+    "×": "x",
+    "✓": "+",
+    "✗": "x",
+    "♩": "q",
+  };
+  for (let y = 0; y < buffer.height; y++)
+    for (let x = 0; x < buffer.width; x++) {
+      const cell = buffer.get(x, y);
+      if (!cell || !/[^\x20-\x7e]/u.test(cell.ch)) continue;
+      const normalized =
+        symbols[cell.ch] ??
+        cell.ch.normalize("NFKD").replace(/[^\x20-\x7e]/g, "");
+      buffer.set(x, y, normalized[0] ?? "?", cell.style);
+    }
+}
+
 export function composeFrame(
   view: AppView,
   ui: UiState,
@@ -1579,6 +1630,7 @@ export function composeFrame(
   const hits = new HitMap();
   if (layout.tooSmall) {
     paintTooSmall(buffer, ui, { width, height }, view.score.playing === true);
+    if (view.studio && !ui.capabilities.unicode) asciiStudioFrame(buffer);
     return {
       buffer,
       cursor: undefined,
@@ -1719,6 +1771,19 @@ export function composeFrame(
           ...(panel !== undefined ? {} : { hits }),
         },
       );
+    else if (side && view.studio?.view === "track")
+      paintPianoRoll(
+        buffer,
+        { ...side, y: layout.highway.y, height: layout.highway.height },
+        view.score,
+        {
+          ...view.studio.roll,
+          theme: ui.theme,
+          capabilities: ui.capabilities,
+          pinned: view.studio.pinned,
+          status: view.studio.status,
+        },
+      );
     else if (side && view.tape)
       paintTape(
         buffer,
@@ -1790,6 +1855,7 @@ export function composeFrame(
     view.agentOffline ?? false,
   );
   const prompt = paintPrompt(buffer, view, ui, layout, width);
+  if (view.studio && !ui.capabilities.unicode) asciiStudioFrame(buffer);
   return {
     buffer,
     cursor: prompt.cursor,

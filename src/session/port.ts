@@ -13,6 +13,7 @@ import {
   type PresenceEntry,
   type TransportAction,
   type TransportState,
+  type AudioPlaybackStatus,
 } from "./protocol.ts";
 import type { MetaExpect, MetaPatch, SessionMeta } from "./meta.ts";
 import {
@@ -35,6 +36,7 @@ const MAX_INTENT_OPERATIONS = 256;
 export type PortUpdate<T> =
   | { type: "record"; record: SessionRecord<T> }
   | { type: "transport"; transport: TransportState }
+  | { type: "audio-status"; status: AudioPlaybackStatus }
   | { type: "presence"; clients: PresenceEntry[] }
   /** Name or lineage changed; the score revision did not. */
   | { type: "meta"; meta: SessionMeta }
@@ -85,6 +87,8 @@ export interface SessionPort<T> {
   readonly status: string;
   readonly player: WindowPlayer;
   readonly sync: SyncStatus;
+  /** Undefined on file fallback and when an older/disconnected daemon cannot observe it. */
+  readonly audioStatus?: AudioPlaybackStatus;
   /** Appends an event at `current.revision`; throws SessionConflictError when stale. */
   append(
     current: SessionRecord<T>,
@@ -212,6 +216,10 @@ class DaemonPort<T> implements SessionPort<T> {
     this.clientId = client.clientId;
   }
 
+  public get audioStatus(): AudioPlaybackStatus | undefined {
+    return this.client.audioStatus;
+  }
+
   private setSync(sync: SyncStatus): void {
     if (this.sync === sync) return;
     this.sync = sync;
@@ -291,6 +299,8 @@ class DaemonPort<T> implements SessionPort<T> {
       type: "transport",
       transport: toLocalTransport(this.client.transport, this.clockOffsetMs),
     });
+    if (this.client.audioStatus)
+      listener({ type: "audio-status", status: this.client.audioStatus });
     const onSync = (sync: SyncStatus) => listener({ type: "sync", sync });
     this.syncListeners.add(onSync);
     const unsubscribe = this.client.subscribe((update) => {

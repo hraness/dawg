@@ -481,8 +481,14 @@ describe("dawgd", () => {
     delete process.env.DAWG_AUDIO;
     try {
       const connected = await client(workspace, sessionId);
+      expect(connected.audioStatus).toMatchObject({
+        audibleRevision: null,
+        pendingRevision: null,
+        buffered: [],
+      });
       await connected.setTransport("play");
       await until(() => existsSync(`${out}.starts`));
+      await until(() => connected.audioStatus?.audibleRevision === 0);
       for (let index = 0; index < 3; index += 1) {
         await connected.sync();
         const result = await connected.apply({
@@ -492,14 +498,30 @@ describe("dawgd", () => {
           operations: [addNote(`live-${index}`, index * 240)],
         });
         expect(result.status).toBe("accepted");
-        await Bun.sleep(80);
+        await until(
+          () =>
+            connected.audioStatus?.audibleRevision ===
+            connected.record.revision,
+        );
+        expect(connected.audioStatus?.pendingRevision).toBeNull();
       }
+      const observer = await client(workspace, sessionId, "audio observer");
+      expect(observer.audioStatus?.audibleRevision).toBe(
+        connected.record.revision,
+      );
+      expect(observer.audioStatus?.buffered.length).toBeGreaterThan(0);
       await connected.setTransport("seek", { beat: 1 });
       await Bun.sleep(80);
       const size = (await readFile(`${out}.pcm`)).length;
       expect(size).toBeGreaterThan(0);
       await until(async () => (await readFile(`${out}.pcm`)).length > size);
       await connected.setTransport("pause");
+      await until(() => connected.audioStatus?.audibleRevision === null);
+      expect(connected.audioStatus).toMatchObject({
+        pendingRevision: null,
+        buffered: [],
+        preparing: false,
+      });
       const starts = (await readFile(`${out}.starts`, "utf8"))
         .trim()
         .split("\n");
@@ -507,6 +529,31 @@ describe("dawgd", () => {
       // Pausing closes the player's stdin, so the fake player exits.
       await until(() => !alive(Number(starts[0])));
       expect((await readFile(`${out}.pcm`)).length % 4).toBe(0);
+    } finally {
+      delete process.env.DAWG_AUDIO_PLAYER;
+      process.env.DAWG_AUDIO = "0";
+    }
+  });
+
+  test("a failed initial render leaves transport paused at its cued beat", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "dawgd-failed-cue-"));
+    workspaces.push(workspace);
+    // Valid stored score, rejected immediately by the renderer's 900 s bound.
+    const initial = createScore({ bars: 256, tempoBpm: 20 });
+    const { record } = await ensureSession(initial.toJSON(), { workspace });
+    const out = join(workspace, "player");
+    process.env.DAWG_AUDIO_PLAYER = `${process.execPath} ${FAKE_PLAYER} ${out}`;
+    delete process.env.DAWG_AUDIO;
+    try {
+      const connected = await client(workspace, record.sessionId);
+      await connected.setTransport("seek", { beat: 2 });
+      await connected.setTransport("play");
+      await until(() => Boolean(connected.audioStatus?.error));
+      await connected.setTransport("seek", { beat: 2 });
+      expect(connected.transport.playing).toBe(false);
+      expect(connected.transport.beat).toBe(2);
+      expect(connected.audioStatus?.audibleRevision).toBeNull();
+      expect(existsSync(`${out}.starts`)).toBe(false);
     } finally {
       delete process.env.DAWG_AUDIO_PLAYER;
       process.env.DAWG_AUDIO = "0";

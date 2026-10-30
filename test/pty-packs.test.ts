@@ -142,7 +142,7 @@ test.skipIf(!supported)(
       expect(t.vt.text()).not.toContain("personal use");
 
       // Play mode: voices sit on the keys (hat, kick, snare from A).
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
       await t.send("r");
       await t.until(() => t.vt.text().includes("rec armed"), "armed");

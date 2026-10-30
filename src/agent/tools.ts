@@ -97,6 +97,10 @@ import {
 } from "../commands/fx.ts";
 import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
+import { VOCAL_TOOLS } from "../vocals/tools.ts";
+import { SONG_TOOLS as STUDIO_SONG_TOOLS } from "../studio/tools.ts";
+import { WORKFLOW_TOOLS, type WorkflowHost } from "../workflows/index.ts";
+import { REFERENCE_TOOLS } from "../reference/index.ts";
 import { DISPATCH_TOOLS } from "./dispatch-tool.ts";
 import { INSPECT_TOOLS } from "./inspect-tools.ts";
 import { HISTORY_TOOLS, type TurnInfo } from "./history-tools.ts";
@@ -192,6 +196,13 @@ export type ScorePlan = Readonly<{
   trackId?: string;
 }>;
 
+export type ReplacePlan = Readonly<{
+  kind: "replace";
+  next: TrackScore;
+  summary: string;
+  trackId?: string;
+}>;
+
 export type ToolPlan =
   | Readonly<{
       /** Canonical library scores only; whole-song changes never rebase. */
@@ -226,6 +237,12 @@ export type ToolPlan =
       kind: "prepare";
       summary: string;
       run: (context: ActionContext) => Promise<ScorePlan>;
+    }>
+  | Readonly<{
+      /** An authored chart is compiled asynchronously, then committed with strict CAS. */
+      kind: "prepare-replace";
+      summary: string;
+      run: (context: ActionContext) => Promise<ReplacePlan>;
     }>
   /** A long-running local media job (download, stems, analysis, …). */
   | Readonly<{
@@ -274,6 +291,7 @@ export type WebHost = Readonly<{
 
 /** What an `action` plan receives from the host when it runs. */
 export type ActionContext = Readonly<{
+  workflows?: WorkflowHost;
   workspace?: WorkspaceHost;
   /** Untrusted content was seen this turn: code writes are refused. */
   untrusted?: boolean;
@@ -349,6 +367,10 @@ const beatSchema = (description: string) => ({
  * here; the agent loop, schemas, and validation pick it up automatically.
  */
 export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
+  ...WORKFLOW_TOOLS,
+  ...STUDIO_SONG_TOOLS,
+  ...VOCAL_TOOLS,
+  ...REFERENCE_TOOLS,
   {
     name: "add_notes",
     description:

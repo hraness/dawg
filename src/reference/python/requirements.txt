@@ -1,0 +1,2 @@
+-r ../../vocals/python/requirements.txt
+scipy==1.18.1

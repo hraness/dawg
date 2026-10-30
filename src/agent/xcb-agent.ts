@@ -5,6 +5,7 @@ import { CHORD_PROCESS } from "../../core/chords.ts";
 import {
   AGENT_LIMITS,
   MEDIA_PROMPT,
+  STUDIO_PROMPT,
   DISPATCH_PROMPT,
   classifyAgentError,
   executeCall,
@@ -24,7 +25,7 @@ import { SseBudgetError } from "./sse.ts";
 import { newTurnLedger, recordTurnEnd } from "./history-tools.ts";
 
 /** Steps per xcb turn. Each step is one full model call, so keep it small. */
-export const XCB_MAX_STEPS = 3;
+export const XCB_MAX_STEPS = AGENT_LIMITS.maxSteps;
 const MAX_PROMPT_CHARS = 8_000;
 const MAX_FEEDBACK_CHARS = 6_000;
 
@@ -48,6 +49,7 @@ export type TextAgentTurnOptions = Readonly<{
 }>;
 
 export const TEXT_AGENT_SYSTEM_PROMPT = [
+  STUDIO_PROMPT,
   "You are dawg, a loop composer inside a terminal music workstation.",
   "You edit the score by returning operations. Each op is validated and applied immediately, in order, as its own revision.",
   'Times are in beats from the loop start (0-based), while musicians count from 1: in 4/4 "beats 2 and 4" are beats 1 and 3 of each bar here, "the and of 1" is 0.5, and bar n starts at (n-1)×beats per bar. Keep notes inside loopBeats unless you extend the loop first.',
@@ -93,7 +95,7 @@ export function renderToolCatalog(
     .filter((tool) => !tool.hidden)
     .map(
       (tool) =>
-        `- ${tool.name}: ${tool.description}\n  args schema: ${JSON.stringify(tool.parameters)}`,
+        `- ${tool.name}: ${tool.description}\n  args schema: ${JSON.stringify(tool.parameters, (key, value) => (key === "description" && typeof value === "string" ? undefined : value))}`,
     )
     .join("\n");
 }

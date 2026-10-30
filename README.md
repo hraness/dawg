@@ -1,42 +1,17 @@
 # dawg
 
-dawg is a terminal music workstation. Open several windows on one local
-session, keep a track in each, and ask your agent to shape the next loop
-while notes stream through the piano roll.
+dawg generates songs with an agent and renders them locally. Describe a song,
+watch its tracks take shape, and listen while the agent keeps working.
 
-Notes stream down the piano roll toward the hit line as they play. A prompt
-at the bottom takes short commands (`tempo 120`, `reverb 0.4`, `loop 5-6`),
-each one its own undo step, and anything else goes to an agent that types
-the commands it runs so you learn them. Sessions stay on your machine in
-`.dawg/` in your folder, the song can be saved as TypeScript files you can
-read, and playback needs no account. The agent is optional.
+The terminal is a player and chat. Its overview shows every track across the
+song. While the agent writes a track, a horizontal piano roll follows the notes;
+pin a track to stay with it. Saved changes and audible changes have separate
+status, and playback starts automatically when a coherent draft is ready.
+Pause and seek stay under your control.
 
-```text
- ▶ 121 BPM · 2.3 · bass        Bb dorian · opus-5.5 · gateway · rev 1 · ○ local
-  Jump ^G   Back ^B   Pause   Menu ^K   Keys ^P   Guide   ‹ Scene   Scene ›
- ▏build         ▼                       ▏drop
-                     ┃       ┃    ┃         ┃      ┃ ┃┃     ┃
-   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┈ ┃ ┈ ┈▒┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃┃┈ ┈ ┈┃┃ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
-                     ┃     ╻ ▓              ┃      ┃ ┃┃     ┃▒
-   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┃ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃▒┈ ┈ ┈┃┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
-                           ┃                ┃      ┃ ┃▒     ┃
-   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ▒ ┃ ┈ ┈▒┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃┃┈ ┈ ┈┃┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
-                             ┃              ┃      ┃ ┃┃     ┃
-                     ┃  ┃    ▓              ┃      ┃ ┃┃     ┃
- 3 ──────────────────▒──┃──────────────────┃▒───┃──┃─▒┃───┃─▒───────────────────
-                        ▒                  ┃    ┃  ┃  ▒   ┃
-   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┈ ┈ ┈ ┈▒┈ ┈ ┈ ┈ ┃ ┈ ┈┃┈ ┃ ┈┃┈ ┈┃┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
-                        ▓                  ┃    ┃  ┃  ▒   ┃
- ▶ ──────────────────▒◆─━──────────────────▒────▒──▒──▒───▒─────────────────────
-   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
-
-   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈▫┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
-                          C2          C3          C4
- ✓ renamed · night drive   ✓ deep-house · Bb dorian · 121 BPM · 8 bars · 4 tra…
-╭─ NOW ────────────────────────────────────────────────────────────────────────╮
-│ ›  describe a change — “double the melody an octave up”                      │
-╰─ ^G jump · ^B back ──────────────────────────────────────────────────────────╯
-```
+Songs, vocal takes and resumable workflow records stay in your project. Saved
+songs play without an account, Python or network access. New stock singing uses
+British `bf_emma` with Kokoro and WORLD in an optional local Python environment.
 
 Docs: [dawg.sh/docs](https://dawg.sh/docs) (the same guides as `/guide`
 in the app) · [dawg vs Strudel](https://dawg.sh/vs/strudel) ·
@@ -66,82 +41,79 @@ mkdir my-song && cd my-song
 dawg
 ```
 
-The first launch creates `.dawg/` in the folder (add it to `.gitignore`)
-and later launches pick the same session up again. Then try:
+The first launch creates `.dawg/` in the folder and later launches resume the
+session. Add `.dawg/` to your project's `.gitignore`. Configure an agent once with
+`dawg model key`, or use an installed local model. Then describe an original song
+or the change you want. The current generation profile is our bright, detailed
+house hyperpop: diatonic major, conversational verses, lifting hooks and stock
+`bf_emma` singing the actual words.
 
-```text
-track drums
-pattern house
-track bass
-add C2 at 0 for 1
-tempo 120
+Space on an empty prompt plays or pauses. Ctrl-T shows all tracks; click a track
+to inspect it. Ctrl-P pins or unpins the inspected track. Page Up/Down inspect the
+piano roll's horizontal range; **Follow** returns to the moving cursor. Alt-Left
+and Alt-Right jump between sections. Enter sends a request, Escape cancels work
+while keeping accepted changes, and Ctrl-O opens the chat transcript.
+
+## Song workflows
+
+The installed package includes three versioned workflows, shared by the agent
+and the CLI:
+
+- `original-house` writes an original song, commits an early instrumental draft,
+  sings its words, develops the arrangement and saves a quality report.
+- `reference-study` extracts timing, production and form evidence from a reference.
+- `recreate-source` rebuilds a private editable study from YouTube or an audio
+  file, re-sings the actual transcribed or supplied lyrics with stock `bf_emma`,
+  and retains the source vocal for comparison.
+
+Ask for the workflow in chat, or inspect its instructions:
+
+```sh
+dawg workflow list
+dawg workflow read original-house
+dawg workflow status --json
+dawg make "plastic-hearted hyperpop about a phone left on a train"
 ```
 
-Each line lands as one revision and the status line says what changed
-(`✓ +1 bass note · rev 3→4 · ^z undo`). Space on an empty prompt plays and
-pauses; Ctrl-Z undoes any step.
+`dawg make` saves the authored chart and an instrumental checkpoint before vocal
+inference. A missing vocal backend prints setup and the exact `--from` command
+for resuming that chart. `--instrumental` makes an explicit draft; `--voice synth`
+replays the older synthetic-singer path. Inspect or configure stock singing with
+`dawg vocals setup` and `dawg vocals doctor --json`.
 
-Ctrl-G opens **Jump** from every editor: search for a track, scene, PLAY, TAPE,
-PATCH, knobs, sound, sample, parameter, guide, or command. Results say whether Enter opens a
-place or inserts a command for you to finish. Ctrl-B returns with the
-previous draft, cursor, search and selection. `/guide` (or F1, fn-F1 on
-most Mac keyboards) opens guides over your current editor; Escape closes the guide and returns you there. Escape
-first cancels local typing or a filter, then backs out, and keeps an
-unsubmitted prompt. Jump also includes Back and Home. Use those entries
-if your terminal reserves a shortcut (tmux commonly reserves Ctrl-B).
+For a local reference, pass a project file or an explicitly selected external file:
 
-For a ready groove, type `style` or open `/menu style`. Sixteen original
-starters cover Machines, Breaks, Pocket and Cycles, with drums first and
-separate bass, rhythm or pad parts where they fit. They leave the melody
-to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
-song in one undo step. Their style and artist listening cues describe
-rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
+```sh
+dawg reference prepare tracks/reference/downloads/source.wav --json
+```
 
-For a complete song, type `demo`. The shelf holds six editable
-hyperpop songs for now: Candy Fault, Redline, Glass Garden, Night Swim,
-Kite Season and Bubble Wrap. They play the vocal as an instrument, with syllable riffs, glitch
-stutters, reversals, a looped-vowel lead and a grain cloud, over
-syncopated stabs and changing beats. Each has production notes, named
-scenes, instruments, effects and automation; `guide hyperpop` explains
-the techniques. To write a new song in the same style, run
-`dawg make "<brief>"`. Claude Opus 5.5 writes the whole song as a chart
-(form, chords, tunes, words, sounds and moves), a critic sends back what
-falls short of the demos, and each round prints its cost, about $0.65–0.90
-a song. `--local` uses the local model and a seed instead (see [Distilled
-styles](./docs/distill.md)).
-`demo redline` loads one and opens TAPE; Space plays, Tab changes
-tracks, and `,` / `.` changes scenes. Loading is one undo step.
+Pass the printed manifest path to `dawg reference recreate <manifest> --json`.
+The CLI imports an external source read-only into the project. In chat, the agent
+uses project files or folders enabled with `/agent read-root add <folder>`.
+`prepare` also accepts a YouTube URL. It uses the actual separated vocal output,
+or a supplied isolated vocal. `recreate` accepts timed lyrics with `--lyrics`; if
+omitted, it needs a configured cached Whisper model. It retains the original and
+stock vocals as aligned, level-matched comparison files. The melody is editable;
+rebuild accompaniment from the retained stems with the agent's transcription and
+score tools. Pitch, timing, word coverage and tone are reported separately. A
+finished file audit does not establish a faithful performance.
 
-`sample library` opens fifteen original sounds that work offline,
-including four vocal books, three sung hooks, synthetic vocal phrases, vowels, hits and a
-riser. Preview a sound with `sample preview hold-on`, add it with
-`sample use hold-on`, or create playable slices with
-`sample chop stay-tonight 4`. The same library is available
-to the agent. See [Demo songs](./guides/demos.md) and
-[Sample library](./guides/sample-library.md).
+See [Song studio](./guides/song-studio.md) for commands, prerequisites and recovery.
+Workflow creation and inspection work offline; inference, downloads and separation
+need their configured backends. `dawg workflow start` creates a queued durable job
+for an agent/driver; `dawg make` runs the original-song driver.
 
-The agent runs on a local model by default. When a Gemma 4 GGUF and
-`llama-server` (`brew install llama.cpp`) are installed, dawg uses them
-offline and with no account. Otherwise, give it a model once with
-`dawg model key`: a key for Vercel AI Gateway or OpenRouter, or a Claude
-or ChatGPT/Codex subscription through [xcb](https://xcb.sh). Agent turns
-on those are billed by that account; everything else works offline.
+## Existing songs and advanced editing
 
-## Four ways to do anything
+`demo` opens the editable offline song shelf. `sample library` opens the original
+sample shelf. Agent requests such as “bring the words forward” or “make the second
+chorus busier” operate on the same score and remain undoable with Ctrl-Z.
 
-Every guide shows the same four ways, so you can pick the one you like:
-
-- **Ask.** Type a plain sentence ("make the hats swing") and the agent
-  edits the song, typing each command it runs so you learn them.
-- **Type it yourself.** Short commands such as `loop 5-6`, `reverb 0.4`
-  or `style warehouse 4`. `/help` lists them all.
-- **Menu.** Ctrl-K opens settings. Type to fuzzy-search names and
-  commands; arrows move and Enter chooses. A number opens a fader.
-- **Keys.** Ctrl-P turns the keyboard into a piano; Ctrl-T opens TAPE,
-  every track across the bars; `?` shows the keys for any screen.
-
-Open the same song in more than one terminal: each pane gets a letter
-and its own undo, and they share one transport (`guide panes`).
+The command and instrument reference remains available through `/help` and F1.
+Manual editors are explicit entry points: `/tape` opens the arrangement editor,
+`/play` opens musical typing, and Ctrl-K opens the parameter menu. They use the
+same saved score and renderer. Several terminal windows can share a local session
+and transport.
 
 ## Other ways to install
 
@@ -156,17 +128,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.37.0/hraness-dawg-0.37.0.tgz"
+bun add -g "@hraness/dawg@https://github.com/hraness/dawg/releases/download/v0.38.0/hraness-dawg-0.38.0.tgz"
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.37.0 --repo hraness/dawg
+gh release download v0.38.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.37.0.tgz --repo hraness/dawg
-bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.37.0.tgz"
+gh attestation verify hraness-dawg-0.38.0.tgz --repo hraness/dawg
+bun add -g "@hraness/dawg@$PWD/hraness-dawg-0.38.0.tgz"
 ```
 
 To run from source instead:
@@ -270,7 +242,7 @@ Type directly to fuzzy-search menu choices. Command suggestions appear as quiet,
 
 ## TAPE, knobs and panes
 
-Ctrl-T opens TAPE: every track across the bars, one row each, with sections and the loop bracket on top. Typing still goes to the prompt, so you can run any command or question without leaving TAPE. Its keys and footer buttons each run one typed command and echo it on the prompt (`\` loops the section here, the copy button runs `copy bass 5-6`, paste runs `copy bass 5-6 to 7`), so the screen teaches the typed form. The same edits as commands: `loop 5-6`, `copy bass 5-6 to 7 x2`, `move bass 5-6 to 9`, `clear bass 5-6`, `reverse bass 5-6`, `bars insert 2 at 9`, `jump 5.3`, `section split chorus at 13`, `form print`. `knobs` turns four knobs (● ▲ ■ ◆) on the sound, `mix`, master, tempo or an effect. Several terminals can share one session as panes: `panes` lists them, `pane tape` turns this one into a tape pane, `pin` keeps the drawer on one parameter and `follow b` mirrors pane B. `undo` undoes this pane's last edit; `undo all` anyone's. `audio out <name>` and `audio in <name>` pick devices on this machine (`audio test` plays a tone; `dawg doctor` shows the choice). `/help arrange`, `/help panes` and `/guide tape` teach each of these.
+`/tape` opens the optional arrangement editor: every track across the bars, one row each, with sections and the loop bracket on top. Typing still goes to the prompt, so you can run any command or question without leaving TAPE. Its keys and footer buttons each run one typed command and echo it on the prompt (`\` loops the section here, the copy button runs `copy bass 5-6`, paste runs `copy bass 5-6 to 7`), so the screen teaches the typed form. The same edits as commands: `loop 5-6`, `copy bass 5-6 to 7 x2`, `move bass 5-6 to 9`, `clear bass 5-6`, `reverse bass 5-6`, `bars insert 2 at 9`, `jump 5.3`, `section split chorus at 13`, `form print`. `knobs` turns four knobs (● ▲ ■ ◆) on the sound, `mix`, master, tempo or an effect. Several terminals can share one session as panes: `panes` lists them, `pane tape` turns this one into a tape pane, `pin` keeps the drawer on one parameter and `follow b` mirrors pane B. `undo` undoes this pane's last edit; `undo all` anyone's. `audio out <name>` and `audio in <name>` pick devices on this machine (`audio test` plays a tone; `dawg doctor` shows the choice). `/help arrange`, `/help panes` and `/guide tape` teach each of these.
 
 A NOW send runs ahead of work waiting as NEXT. Bracketed paste preserves multiline input.
 

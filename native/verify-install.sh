@@ -46,6 +46,21 @@ DAWG_BIN="${prefix}/bin/dawg" DAWG_OFFLINE="${prefix}/offline" bun -e '
   await mkdir(workspace, { recursive: true });
   const packs = new PackStore({ dir: resolve(workspace, "packs"), offline: true, fetch: globalThis.fetch });
   const samples = new SampleLibrary({ projectRoot: workspace, packs });
+  const { listWorkflows, readWorkflowResource } = await load("src/workflows/index.ts");
+  for (const workflow of listWorkflows()) {
+    for (const resource of [workflow.instructions, ...workflow.resources]) {
+      const body = await readWorkflowResource(workflow.id, resource);
+      if (!body.trim()) throw new Error(`empty installed workflow resource: ${resource}`);
+    }
+  }
+  const { VOCAL_HELPER, VOCAL_REQUIREMENTS, vocalHelperIdentity } = await load("src/vocals/index.ts");
+  const { access } = await import("node:fs/promises");
+  await access(VOCAL_HELPER);
+  await access(VOCAL_REQUIREMENTS);
+  await vocalHelperIdentity();
+  await access(new URL("src/reference/python/reference.py", root));
+  await access(new URL("src/reference/python/requirements.txt", root));
+  console.log("installed workflow resources and optional vocal/reference helper closure verified");
   for (const sample of BUNDLED_SAMPLES) await readBundledSample(sample.id, sample.sha256);
   const shelf = createScore({ tracks: BUNDLED_SAMPLES.map((sample) => ({
     id: sample.id, name: sample.title, instrument: "sampler",

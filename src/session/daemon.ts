@@ -8,7 +8,7 @@ import {
 } from "../../core/score.ts";
 import { DiffError, diffScores } from "../../core/diff.ts";
 import { TransportClock, transportMapFor } from "../audio/clock.ts";
-import { AudioEngine } from "../audio/engine.ts";
+import { AudioEngine, type AudioReadiness } from "../audio/engine.ts";
 import {
   SampleLibrary,
   hasSamplerTracks,
@@ -45,6 +45,7 @@ import {
   type PresenceEntry,
   type ServerMessage,
   type TransportState,
+  type AudioPlaybackStatus,
 } from "./protocol.ts";
 import {
   appendSessionEvent,
@@ -114,6 +115,7 @@ export class DawgDaemon {
   private sampleLibrary: SampleLibrary | undefined;
   private record!: SessionRecord<Composition>;
   private score!: TrackScore;
+  private readonly scoreRevisions = new WeakMap<TrackScore, number>();
   private digest = "";
   private seq = 0;
   /** Bumped by each start, so a superseded one never releases the clock. */
@@ -133,6 +135,12 @@ export class DawgDaemon {
     this.audio = new AudioEngine({
       lockPath: `${this.paths.record}.audio.lock`,
       projectRoot: options.workspace,
+      onReadiness: (status) =>
+        this.broadcast({
+          v: 1,
+          type: "audio-status",
+          status: this.audioState(status),
+        }),
       onStatus: (status) => {
         void this.log(`audio: ${status.message}`);
         // A player that keeps dying must not leave a silent "playing" transport.
@@ -353,6 +361,7 @@ export class DawgDaemon {
         record: this.record,
         digest: this.digest,
         transport: this.transportState(),
+        audioStatus: this.audioState(this.audio.readiness),
         protocol,
         caps: [...DAEMON_CAPS],
       });
@@ -645,6 +654,7 @@ export class DawgDaemon {
       };
     }
     this.score = next;
+    this.scoreRevisions.set(next, this.record.revision);
     this.digest = compositionDigest(this.record.composition);
     this.keys.set(message.key, this.record.revision);
     if (retryKey) this.seqs.set(retryKey, this.record.revision);
@@ -738,12 +748,35 @@ export class DawgDaemon {
   private async startTransport(): Promise<void> {
     const cue = ++this.transportCue;
     this.clock.cue();
-    const heardMs = await this.audio
-      .cue(this.score, this.clock.beatAt())
-      .catch(() => undefined);
-    if (cue !== this.transportCue || !this.clock.cued) return;
-    this.clock.play(heardMs ?? performance.now());
-    this.broadcastTransport();
+    try {
+      const heardMs = await this.audio.cue(this.score, this.clock.beatAt());
+      if (cue !== this.transportCue || !this.clock.cued) return;
+      this.clock.play(heardMs ?? performance.now());
+      this.broadcastTransport();
+    } catch (error) {
+      if (cue !== this.transportCue || !this.clock.cued) return;
+      this.clock.pause();
+      this.broadcastTransport();
+      await this.log(
+        `audio start failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private audioState(status: AudioReadiness): AudioPlaybackStatus {
+    const audibleRevision = status.audibleScore
+      ? (this.scoreRevisions.get(status.audibleScore) ?? null)
+      : null;
+    return Object.freeze({
+      pendingRevision: status.pendingScore
+        ? (this.scoreRevisions.get(status.pendingScore) ?? null)
+        : null,
+      audibleRevision,
+      buffered: audibleRevision === null ? [] : status.buffered,
+      preparing: status.preparing,
+      buffering: status.buffering,
+      ...(status.error ? { error: status.error } : {}),
+    });
   }
 
   private transportState(): TransportState {
@@ -797,6 +830,7 @@ export class DawgDaemon {
   private async reload(): Promise<void> {
     this.record = await loadSession<Composition>(this.paths);
     this.score = scoreFromJSON(this.record.composition);
+    this.scoreRevisions.set(this.score, this.record.revision);
     this.digest = compositionDigest(this.record.composition);
     this.keys.clear();
     this.seqs.clear();

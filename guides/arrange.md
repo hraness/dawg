@@ -30,7 +30,8 @@ Name sections and put them in order:
 
 ## Keys
 
-- Ctrl-T opens TAPE: every track across the bars
+- Ctrl-T returns to the tracks overview
+- `/tape` opens the optional timeline editor
 - `\` loops the section you are in
 
 ## Next

@@ -1,5 +1,18 @@
 #!/usr/bin/env bun
 import { commandCompletions } from "./tui/completion.ts";
+import { initialStudioState, reduceStudioState } from "../tui/studio-state.ts";
+import { pianoRollFirstBeat } from "../tui/piano-roll.ts";
+import { coherentDraftRange, DraftAutoplay } from "./studio/playback.ts";
+import {
+  equivalentPlaybackRevision,
+  waitForAudibleRegion,
+} from "./studio/preview.ts";
+import { audibleEventCount, missingPlaybackAssets } from "./studio/assets.ts";
+import {
+  WorkflowCoordinator,
+  type WorkflowJob,
+  type WorkflowHost,
+} from "./workflows/index.ts";
 import { NavigationHistory, navigationAction } from "../tui/navigation.ts";
 import { jumpItems, parseJumpChoice } from "./tui/jump.ts";
 import { TOPIC_ALIASES } from "./lang/glossary.ts";
@@ -71,6 +84,7 @@ import {
   monotonicEpochMs,
   type PaneView,
   type PresenceEntry,
+  type AudioPlaybackStatus,
 } from "./session/protocol.ts";
 import {
   formatSessionLine,
@@ -469,6 +483,8 @@ import { EuclidEditor, type EuclidContext } from "./tui/euclid.ts";
 import {
   ARROW_DOWN,
   ARROW_UP,
+  KEY_PAGE_UP,
+  KEY_PAGE_DOWN,
   closesKeys,
   HINTS,
   KEY_SCENE_STEP,
@@ -609,6 +625,7 @@ const SLASH_HANDLED: ReadonlySet<string> = new Set([
 
 /** Whether a bare command parses (no side effects): for typo suggestions. */
 function parsesLocally(text: string): boolean {
+  if (/^\/view(?:\s|$)/i.test(text.trim())) return true;
   return (
     /^\/?(?:jump|back|home)$/i.test(text.trim()) || commandParses(text, score)
   );
@@ -632,7 +649,7 @@ function wrapUsage(text: string, width: number, indent: string): string {
   lines.push(line);
   return lines.join(`\n${indent}`);
 }
-const HELP_TEXT = `dawg · local-first terminal music workstation
+const HELP_TEXT = `dawg · local song studio
 
 Usage:
   dawg [--new] [--session <name|id>] [--track <name>]
@@ -640,11 +657,16 @@ Usage:
   dawg sessions
   dawg history [filters] [--json] [--follow]  edits and comments (--help)
   ${wrapUsage(RENDER_USAGE.replace(/^usage: /, ""), 76, "               ")}
-  dawg make "<brief>"  a hyperpop song from the local model (--help)
+  dawg make "<brief>"  original hyperpop, project-local bf_emma (--help)
+  dawg workflow list|read|start|status|cancel|resume
+                       durable song jobs (--help)
+  dawg vocals setup|doctor|sing  optional stock singing (--help)
+  dawg reference prepare|recreate|setup  YouTube/audio studies (--help)
   dawg init [dir]      song.ts, tracks/<slug>/track.ts and .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg docs --agent [page]  agent docs: tool reference, recipes (--help)
   dawg <command> --help  sessions history render make init check docs media
+                       workflow vocals reference
                        model
   dawg doctor          audio backend, native sink and devices
   dawg dev [options]   the editor in dev mode: log rows in history (--dev)
@@ -660,6 +682,7 @@ Display options:
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter next · Ctrl-Q now / next
   Ctrl-G jump · Ctrl-B back · /guide guides · Esc cancel/back (draft retained)
+  Ctrl-T tracks · Ctrl-P pin/unpin · Page Up/Down inspect piano roll
   Alt-Left / Alt-Right on an empty prompt step the scene
   Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Ctrl-C exit
   Space on an empty prompt toggles playback
@@ -766,6 +789,49 @@ if (process.argv[2] === "media") {
       process.cwd(),
       stdout,
       process.stderr,
+    ),
+  );
+}
+if (process.argv[2] === "vocals") {
+  const { runVocalsCommand } = await import("./vocals/cli.ts");
+  const abort = new AbortController();
+  process.once("SIGINT", () => abort.abort());
+  process.exit(
+    await runVocalsCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
+      abort.signal,
+    ),
+  );
+}
+if (process.argv[2] === "workflow") {
+  const { runWorkflowCommand } = await import("./workflows/cli.ts");
+  const abort = new AbortController();
+  process.once("SIGINT", () => abort.abort());
+  process.exit(
+    await runWorkflowCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
+      { signal: abort.signal },
+    ),
+  );
+}
+if (process.argv[2] === "reference") {
+  const { runReferenceCommand } = await import("./reference/cli.ts");
+  const abort = new AbortController();
+  process.once("SIGINT", () => abort.abort());
+  process.once("SIGTERM", () => abort.abort());
+  process.exit(
+    await runReferenceCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
+      abort.signal,
     ),
   );
 }
@@ -1303,7 +1369,7 @@ const showMe: {
   notes: NoteScheduler;
   clear?: ReturnType<typeof setTimeout> | undefined;
 } = {
-  level: parseShowMe(process.env.DAWG_SHOWME ?? "") ?? "on",
+  level: parseShowMe(process.env.DAWG_SHOWME ?? "") ?? "off",
   commands: [],
   notes: new NoteScheduler(() => score.tempoBpm),
 };
@@ -1323,6 +1389,20 @@ const faderSeq = new Map<string, number>();
 let liveSampleBank: SampleBank | undefined;
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
+let studio = initialStudioState;
+let studioWritingBeat: number | undefined;
+let studioStatus = "Describe a song, or paste a YouTube URL or audio-file path";
+const draftAutoplay = new DraftAutoplay();
+const studioScoreRevisions = new WeakMap<TrackScore, number>();
+studioScoreRevisions.set(score, record.revision);
+const workflowCoordinator = new WorkflowCoordinator(process.cwd());
+let studioJob: WorkflowJob | undefined;
+workflowCoordinator.subscribe((event) => {
+  studioJob = event.job;
+  const stage = event.job.stages.find((stage) => stage.id === event.stageId);
+  if (stage)
+    studioStatus = `${stage.title} · ${stage.progress ?? stage.status}`;
+});
 /** Export-rate loudness is optional work: wait for idle and yield to input. */
 const exportMeter = new IdleMeasurement<TrackScore, LoudnessView>(1000, () =>
   requestFrame(),
@@ -1477,14 +1557,15 @@ function snapshot(
   value: TrackScore,
   beat: number,
   activity?: string,
+  trackId = requestedTrack,
 ): TrackScoreSnapshot {
-  const focused = value.tracks.find((track) => track.id === requestedTrack);
+  const focused = value.tracks.find((track) => track.id === trackId);
   const table =
     focused && !isDrumInstrument(focused.instrument)
       ? resolveTuning(value.tuning, focused.tuning, value.key)
       : undefined;
   const notes = value.notes
-    .filter((note) => note.trackId === requestedTrack)
+    .filter((note) => note.trackId === trackId)
     .map((note) => {
       const tag =
         focused && !isDrumInstrument(focused.instrument)
@@ -1503,7 +1584,7 @@ function snapshot(
       };
     });
   // 0.7 clips: the clip row; peaks load off the frame path, then redraw.
-  const clips = clipSnapshots(value, requestedTrack);
+  const clips = clipSnapshots(value, trackId);
   if (clips)
     void loadClipPeaks(process.cwd(), focused).then((changed) => {
       if (changed) requestFrame();
@@ -1512,9 +1593,8 @@ function snapshot(
     notes,
     ...(clips ? { clips } : {}),
     trackName:
-      value.tracks.find((track) => track.id === requestedTrack)?.name ??
-      requestedTrack,
-    trackId: requestedTrack,
+      value.tracks.find((track) => track.id === trackId)?.name ?? trackId,
+    trackId,
     sessionId: record.sessionId,
     revision: shownRevision(record),
     bpm: value.time?.tempo
@@ -1538,11 +1618,11 @@ function snapshot(
     activity,
     ...(focused?.instrument === "vocal" ? { vocal: true } : {}),
     ...drumSnapshotFields(
-      value.tracks.find((track) => track.id === requestedTrack)?.instrument,
+      value.tracks.find((track) => track.id === trackId)?.instrument,
       notes,
     ),
     ...samplerSnapshotFields(
-      value.tracks.find((track) => track.id === requestedTrack),
+      value.tracks.find((track) => track.id === trackId),
       notes,
     ),
     ...(table && table.linear && table.size !== 12
@@ -1551,12 +1631,7 @@ function snapshot(
     pitchTrace: pitchTraceFor(requestedTrack, value),
     layers:
       tui.highwayView === "all"
-        ? highwayLayers(
-            value.tracks,
-            value.notes,
-            value.ticksPerBeat,
-            requestedTrack,
-          )
+        ? highwayLayers(value.tracks, value.notes, value.ticksPerBeat, trackId)
         : undefined,
   };
 }
@@ -1580,6 +1655,24 @@ function renderOnce(
 }
 
 function appView(value: TrackScore, beat: number): AppView {
+  const studioOn = !play?.on && !tape.on && !patchView.on;
+  const playback = studioPlaybackStatus();
+  const audibleRevision = playback?.audibleRevision;
+  const listening =
+    playback?.error ??
+    (playback?.buffering
+      ? "buffering"
+      : playback?.preparing
+        ? "rendering changes"
+        : undefined);
+  const audioLabel =
+    audibleRevision !== null && audibleRevision !== undefined
+      ? `r${shownRevision(record, audibleRevision)} audible`
+      : "audio not started";
+  studio = reduceStudioState(studio, {
+    type: "tracks",
+    trackIds: value.tracks.map((track) => track.id),
+  });
   tui.completionSource =
     play?.on || tape.on || patchView.on
       ? undefined
@@ -1589,10 +1682,45 @@ function appView(value: TrackScore, beat: number): AppView {
             sections: score.sections,
           });
   return {
-    score: snapshot(value, beat),
+    score: snapshot(
+      value,
+      beat,
+      undefined,
+      studioOn ? (studio.focusedTrackId ?? requestedTrack) : requestedTrack,
+    ),
+    studio: studioOn
+      ? {
+          view: studio.view,
+          pinned: studio.pinned,
+          status: [studioStatus, listening].filter(Boolean).join(" · "),
+          roll: {
+            beat: scoreBeatAt(value, beat),
+            writingBeat:
+              agentTurn && studio.focusedTrackId === studio.writtenTrackId
+                ? studioWritingBeat
+                : undefined,
+            firstBeat: studio.firstBeat,
+            audibleRevision:
+              audibleRevision === null
+                ? null
+                : audibleRevision === undefined
+                  ? undefined
+                  : shownRevision(record, audibleRevision),
+            sections: value.sections.map((section) => ({
+              name: section.name,
+              startBeat:
+                barStartTick(value, section.startBar) / value.ticksPerBeat,
+              durationBeats:
+                (barStartTick(value, section.startBar + section.bars) -
+                  barStartTick(value, section.startBar)) /
+                value.ticksPerBeat,
+            })),
+          },
+        }
+      : undefined,
     // The highway shows score time: inside the looped section or form pass.
     beat: scoreBeatAt(value, beat),
-    arrange: arrangeStripView(value, beat),
+    arrange: studioOn ? undefined : arrangeStripView(value, beat),
     // `opus-5.5 · gateway`, `sonnet · claude`; hidden when offline.
     model:
       providerName && providerName !== "offline" ? providerName : undefined,
@@ -1612,9 +1740,15 @@ function appView(value: TrackScore, beat: number): AppView {
     types: typesIndicator,
     play: play?.on ? play.header() : undefined,
     tape:
-      tape.on && !play?.on && !patchView.on
-        ? currentTapeView(value, beat)
-        : undefined,
+      studioOn && studio.view === "overview"
+        ? {
+            ...currentTapeView(value, beat),
+            observer: true,
+            hint: `r${shownRevision(record)} saved · ${audioLabel}${listening ? ` · ${listening}` : ""} · ${studioStatus}`,
+          }
+        : tape.on && !play?.on && !patchView.on
+          ? currentTapeView(value, beat)
+          : undefined,
     patch: patchView.on && !play?.on ? currentPatchPaint(value) : undefined,
     loudness: masterLoudness(value),
   };
@@ -1918,10 +2052,17 @@ async function runInteractive(): Promise<void> {
       rev: record.revision,
       track: requestedTrack,
       screen: paneView().screen,
+      studio: {
+        view: studio.view,
+        pinned: studio.pinned,
+        track: studio.focusedTrackId ?? requestedTrack,
+      },
       overlay: tui.ui.overlay ?? null,
     });
   const runPrompt = async (text: string): Promise<void> => {
-    const ui = tui.command(text);
+    const ui = /^\/view(?:\s|$)/i.test(text.trim())
+      ? undefined
+      : tui.command(text);
     if (ui !== undefined) {
       if (typeof ui === "string") tui.activity.pushCard(ui, { tone: "info" });
       else tui.activity.pushCard(ui.text, { tone: toneOf(ui) });
@@ -2092,6 +2233,14 @@ async function runInteractive(): Promise<void> {
       .catch(() => undefined);
   };
   runPromptLater = (command) => {
+    if (
+      agentTurn &&
+      (/^\/view(?:\s|$)/i.test(command.trim()) ||
+        routeDuringTurn(command, parsesLocally) === "local")
+    ) {
+      void settling(runLocalBesideAgent(command).finally(() => tick(true)));
+      return;
+    }
     queuedPrompts.runNow(command);
     void drainQueue();
   };
@@ -2117,7 +2266,30 @@ async function runInteractive(): Promise<void> {
     if (event.type === "tool-start") {
       const caption = toolCaption(event.name);
       if (caption) showMeCaption(caption);
+      studioStatus = caption ?? `Working · ${event.name.replaceAll("_", " ")}`;
     }
+    if (event.type === "tool-progress") studioStatus = event.line;
+    if (
+      event.type === "tool-applied" &&
+      event.resultRevision > event.baseRevision &&
+      event.trackId
+    ) {
+      studio = reduceStudioState(studio, {
+        type: "agent-written",
+        trackId: event.trackId,
+      });
+      const notes = score.notes.filter(
+        (note) => note.trackId === event.trackId,
+      );
+      studioWritingBeat =
+        notes.at(-1)?.startTick !== undefined
+          ? notes.at(-1)!.startTick / score.ticksPerBeat
+          : undefined;
+      studioStatus = event.summary;
+    }
+    if (event.type === "done") studioStatus = "Draft saved · ask for a change";
+    if (event.type === "error")
+      studioStatus = "Generation stopped · accepted changes are saved";
     if (event.type === "done" || event.type === "error") showMeFinish();
     tui.activity.applyAgentEvent(event);
     if (event.type === "done" || event.type === "error") agentReported = true;
@@ -2429,6 +2601,42 @@ async function runInteractive(): Promise<void> {
             );
           continue;
         }
+        if (
+          typeof value === "string" &&
+          (KEY_PAGE_UP.has(value) || KEY_PAGE_DOWN.has(value)) &&
+          !tui.ui.overlay &&
+          !prompt.value &&
+          !play?.on &&
+          !tape.on &&
+          !patchView.on &&
+          studio.view === "track"
+        ) {
+          const columns = Math.max(8, (stdout.columns ?? 80) - 12);
+          const step = columns / 4;
+          const current = pianoRollFirstBeat(
+            snapshot(
+              score,
+              clock.beatAt(),
+              undefined,
+              studio.focusedTrackId ?? requestedTrack,
+            ),
+            columns,
+            {
+              beat: scoreBeatAt(score, clock.beatAt()),
+              writingBeat:
+                agentTurn && studio.focusedTrackId === studio.writtenTrackId
+                  ? studioWritingBeat
+                  : undefined,
+              firstBeat: studio.firstBeat,
+            },
+          );
+          studio = reduceStudioState(studio, {
+            type: "scroll",
+            firstBeat: current + (KEY_PAGE_UP.has(value) ? -step : step),
+          });
+          tick(true);
+          continue;
+        }
         const navAction =
           typeof value === "string" ? navigationAction(value) : undefined;
         if (navAction === "jump") {
@@ -2459,6 +2667,20 @@ async function runInteractive(): Promise<void> {
           continue;
         }
         if (value === "\u0014" || value === "\u0010") {
+          if (!play?.on && !tape.on && !patchView.on) {
+            void settling(
+              submit(
+                value === "\u0014"
+                  ? "/view tracks"
+                  : studio.pinned
+                    ? "/view unpin"
+                    : "/view pin",
+              )
+                .then(receipt)
+                .finally(() => tick(true)),
+            );
+            continue;
+          }
           const same = value === "\u0014" ? tape.on : play?.on;
           void settling(
             (same
@@ -2816,7 +3038,8 @@ async function runInteractive(): Promise<void> {
             action?.kind === "submit" &&
             action.value &&
             agentTurn &&
-            routeDuringTurn(action.value, parsesLocally) === "local"
+            (/^\/view(?:\s|$)/i.test(action.value.trim()) ||
+              routeDuringTurn(action.value, parsesLocally) === "local")
           ) {
             // A typed command never waits on the agent: it commits its own
             // revision now, and the agent's next call re-reads the score.
@@ -2873,6 +3096,7 @@ async function runInteractive(): Promise<void> {
       () => exportMeter.dispose(),
       () => agentTurn?.controller.abort(),
       () => audioJobs.shutdown(),
+      () => workflowCoordinator.dispose(),
       () => projectSync?.stop(),
       () => namer.dispose(),
       () => unsubscribe(),
@@ -2905,6 +3129,41 @@ function unknownCommand(command: string): string {
 
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
+  const viewCommand = command.match(/^\/view(?:\s+(.+))?$/i);
+  if (viewCommand) {
+    const target = (viewCommand[1] ?? "tracks").trim();
+    if (play?.on) await play.exit();
+    tape.on = false;
+    patchView.on = false;
+    if (target === "tracks" || target === "all")
+      studio = reduceStudioState(studio, { type: "overview" });
+    else if (target === "pin" || target === "unpin") {
+      if (studio.view === "overview" || !studio.focusedTrackId)
+        studio = reduceStudioState(studio, {
+          type: "focus",
+          trackId: studio.focusedTrackId ?? requestedTrack,
+          pin: true,
+        });
+      studio = reduceStudioState(studio, { type: target });
+    } else if (target === "follow") {
+      studio = reduceStudioState(reduceStudioState(studio, { type: "unpin" }), {
+        type: "follow",
+      });
+    } else {
+      const track = score.tracks.find(
+        (track) =>
+          track.id === (target === "focus" ? requestedTrack : target) ||
+          track.name.toLowerCase() === target.toLowerCase(),
+      );
+      if (!track) return fail(`track not found: ${target}`);
+      studio = reduceStudioState(studio, { type: "focus", trackId: track.id });
+    }
+    return note(
+      studio.view === "overview"
+        ? "all tracks"
+        : `${studio.focusedTrackId} · ${studio.pinned ? "pinned" : "following agent"}`,
+    );
+  }
   if (/^\/?jump$/i.test(command)) {
     openJump();
     return note("jump · type to search");
@@ -6604,6 +6863,20 @@ function mouseInput(event: MouseEvent): string[] {
     const handled = tapeMouse(event, target);
     if (handled) return handled;
   }
+  if (
+    !tape.on &&
+    !play?.on &&
+    !patchView.on &&
+    !tui.ui.overlay &&
+    !menu.open &&
+    target?.kind === "tape-ruler" &&
+    event.kind === "down" &&
+    event.button === "left"
+  ) {
+    const bar = tapeBarAt(event.x, target.left, target.firstCell);
+    if (bar !== undefined) runPromptLater(`jump ${bar + 1}`);
+    return [];
+  }
   if (event.kind === "wheel") {
     const fields = activeFader ? menu.faderFields(menuContext()) : [];
     if (
@@ -6964,7 +7237,11 @@ async function revealLoadedDemo(): Promise<void> {
     soundScore();
     menu.close();
     tui.closePicker();
-    await navigate("arrangement", () => enterTape());
+    if (play?.on) await navigate("player", () => play!.exit());
+    tape.on = false;
+    patchView.on = false;
+    closeFader();
+    studio = reduceStudioState(studio, { type: "overview" });
   } catch (error) {
     warnings.push(error instanceof Error ? error.message : String(error));
   }
@@ -7552,6 +7829,7 @@ function syncHost(): SyncHost {
     sessionId: () => record.sessionId,
     current: () => score,
     async commit(plan, summary, meta) {
+      const before = score;
       const baseRevision = record.revision;
       record = await port.appendOperations(
         record,
@@ -7575,6 +7853,8 @@ function syncHost(): SyncHost {
       );
       score = scoreFromJSON(record.composition);
       clock.follow(score);
+      if (agentTurn || (meta && meta.attribution.kind !== "external"))
+        observeWrittenTrack(before, score);
       soundScore();
       reportSampleProblems(score);
       void baseRevision;
@@ -7791,7 +8071,14 @@ async function toggleTransport(): Promise<void> {
 
 async function setTransport(
   action: "play" | "pause" | "toggle",
+  automatic = false,
 ): Promise<void> {
+  if (!automatic)
+    studioHumanControl(
+      action === "play" || (action === "toggle" && !clock.playing)
+        ? "play"
+        : "pause",
+    );
   // One sound at a time: starting the song stops an audition loop.
   if (action !== "pause" && auditionLoop?.looping) stopAuditionLoop();
   if (port.mode === "daemon") {
@@ -7822,9 +8109,11 @@ async function startTransport(): Promise<void> {
   try {
     if (audio.cue) heardMs = await audio.cue(score, clock.beatAt());
     else await audio.play(score, clock.beatAt());
-  } finally {
     if (cue === transportCue && clock.cued)
       clock.play(heardMs ?? performance.now());
+  } catch (error) {
+    if (cue === transportCue) clock.pause();
+    throw error;
   }
 }
 
@@ -7832,9 +8121,131 @@ async function startTransport(): Promise<void> {
  * Keep the engine on the latest score: swap it into a playing loop or, while
  * stopped, prewarm the window a play from the playhead renders first.
  */
+function observeWrittenTrack(before: TrackScore, after: TrackScore): void {
+  const previous = new Map(
+    before.notes.map((note) => [note.id, JSON.stringify(note)]),
+  );
+  const written = after.notes.filter(
+    (note) => previous.get(note.id) !== JSON.stringify(note),
+  );
+  const trackId = editedTrack(before, after) ?? written.at(-1)?.trackId;
+  if (!trackId) return;
+  studio = reduceStudioState(studio, { type: "agent-written", trackId });
+  studioWritingBeat = written
+    .filter((note) => note.trackId === trackId)
+    .at(-1)?.startTick;
+  if (studioWritingBeat !== undefined) studioWritingBeat /= after.ticksPerBeat;
+}
+
+function studioPlaybackStatus(): AudioPlaybackStatus | undefined {
+  if (port.mode === "daemon") {
+    const state = port.audioStatus;
+    return state
+      ? {
+          ...state,
+          audibleRevision: equivalentPlaybackRevision(
+            state.audibleRevision,
+            record.revision,
+            record.events,
+          ),
+        }
+      : undefined;
+  }
+  if (!(audio instanceof AudioEngine)) return undefined;
+  const state = audio.readiness;
+  return {
+    pendingRevision: state.pendingScore
+      ? (studioScoreRevisions.get(state.pendingScore) ?? null)
+      : null,
+    audibleRevision: equivalentPlaybackRevision(
+      state.audibleScore
+        ? (studioScoreRevisions.get(state.audibleScore) ?? null)
+        : null,
+      record.revision,
+      record.events,
+    ),
+    buffered: state.buffered,
+    preparing: state.preparing,
+    buffering: state.buffering,
+    error: state.error,
+  };
+}
+
+function studioHumanControl(action: "play" | "pause" | "seek" = "pause"): void {
+  draftAutoplay.humanControl(action);
+  if (studioJob)
+    void workflowCoordinator.recordControl(studioJob.id).catch(() => undefined);
+}
+
+function studioWorkflowHost(): WorkflowHost {
+  return {
+    coordinator: workflowCoordinator,
+    scoreRevision: () => record.revision,
+    async requestPreview(request, signal) {
+      if (request.ticket.writtenRevision !== record.revision)
+        throw new Error(
+          "Preview score changed; inspect the current workflow revision",
+        );
+      const control = draftAutoplay.capture();
+      const candidate = score;
+      const bank = await jobSamples(candidate);
+      signal?.throwIfAborted();
+      if (!draftAutoplay.current(control))
+        throw new Error("Preview changed by the listener");
+      if (missingPlaybackAssets(candidate, bank).length)
+        throw new Error("Preview waits for missing audio assets");
+      if (!clock.playing) {
+        if (!draftAutoplay.mayStart())
+          throw new Error(
+            "Playback is paused by the listener; press Play to preview",
+          );
+        await setTransport("play", true);
+      }
+      const renderedNotes = audibleEventCount(
+        candidate,
+        bank,
+        request.range,
+        request.trackIds,
+      );
+      return waitForAudibleRegion({
+        request,
+        observe: studioPlaybackStatus,
+        currentRevision: () => record.revision,
+        controlsCurrent: () => draftAutoplay.current(control),
+        renderedNotes,
+        signal,
+      });
+    },
+  };
+}
+
 function soundScore(): void {
+  studioScoreRevisions.set(score, record.revision);
   if (clock.playing) void audio.play(score);
   else void audio.prewarm?.(score, clock.beatAt());
+  if (agentTurn && coherentDraftRange(score)) void autoplayDraft(score);
+}
+
+/** Asset admission precedes cueing; both a newer score and manual controls stale the result. */
+async function autoplayDraft(candidate: TrackScore): Promise<void> {
+  const ticket = draftAutoplay.offer(clock.playing);
+  if (!ticket) return;
+  try {
+    const bank = await jobSamples(candidate);
+    if (!draftAutoplay.current(ticket)) return;
+    if (candidate !== score || missingPlaybackAssets(candidate, bank).length) {
+      draftAutoplay.retry(ticket);
+      if (candidate !== score && coherentDraftRange(score))
+        void autoplayDraft(score);
+      else studioStatus = "Draft saved · waiting for its audio assets";
+      return;
+    }
+    studioStatus = "Coherent draft ready · preparing playback";
+    await setTransport("play", true);
+  } catch (error) {
+    draftAutoplay.retry(ticket);
+    transportFailed(error);
+  }
 }
 
 /** Move the playhead to transport `beat`, playing or not (section jump). */
@@ -7845,6 +8256,7 @@ function playheadBar(): number {
 }
 
 async function seekTransport(beat: number): Promise<void> {
+  studioHumanControl("seek");
   if (port.mode === "daemon") {
     await port.transport("seek", { beat });
     return;
@@ -7866,6 +8278,12 @@ async function runAgent(text: string): Promise<string | Receipt> {
     return fail(`${truncateForCard(text)} · ${NO_AGENT}`);
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
+  draftAutoplay.begin(
+    /^\s*(?:(?:please\s+)?(?:write|generate|compose|make|start)\b.*\bnew\s+(?:hyperpop\s+)?(?:song|track)\b|(?:recreate|clone|cover)\b)/i.test(
+      text,
+    ),
+  );
+  studioStatus = "Planning the song";
   // The turn ends on one musical receipt of what it changed.
   const before = score;
   reportAgentActivity(`${providerName} · thinking…`);
@@ -7907,6 +8325,12 @@ async function runAgent(text: string): Promise<string | Receipt> {
     });
     return describeAgentEvent(result) ?? "agent finished";
   } finally {
+    if (turn.controller.signal.aborted) {
+      draftAutoplay.humanControl();
+      if (studioJob)
+        await workflowCoordinator.cancel(studioJob.id).catch(() => undefined);
+    }
+    draftAutoplay.end();
     if (agentTurn === turn) agentTurn = undefined;
   }
 }
@@ -8216,6 +8640,7 @@ function agentHost(
       }),
     }),
     media: mediaServices(),
+    workflows: studioWorkflowHost(),
     history: history.handle,
     preview: agentPreviewHost(),
     // dispatch children run on this turn's provider, scoped and attributed.
@@ -8224,6 +8649,7 @@ function agentHost(
       return subagents ? { subagents } : {};
     })(),
     async commit(change) {
+      const before = score;
       // dawgd rebases operation intents onto newer revisions when nothing
       // they touch changed; the file port keeps the strict base check.
       if (
@@ -8264,11 +8690,14 @@ function agentHost(
       )
         clock.follow(score);
       if (change.toolName === "load_demo") await revealLoadedDemo();
-      else soundScore();
+      else {
+        observeWrittenTrack(before, score);
+        soundScore();
+      }
       return { revision: record.revision };
     },
     async transport(action) {
-      await setTransport(action);
+      await setTransport(action, true);
       try {
         record = await port.append(
           record,

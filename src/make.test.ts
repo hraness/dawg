@@ -93,7 +93,15 @@ describe("dawg make charts", () => {
     const stdout = sink();
     const stderr = sink();
     const code = await runMakeCommand(
-      ["make", "--from", "chart.json", "--out", "g.track.json"],
+      [
+        "make",
+        "--from",
+        "chart.json",
+        "--voice",
+        "synth",
+        "--out",
+        "g.track.json",
+      ],
       dir,
       stdout,
       stderr,

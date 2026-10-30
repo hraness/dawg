@@ -39,6 +39,7 @@ export const DAEMON_CAPS = [
   "opaque-kinds",
   "panes",
   "live",
+  "audio-status",
 ] as const;
 const MAX_CAPS = 32;
 const MAX_CAP_LENGTH = 32;
@@ -74,6 +75,17 @@ export type TransportState = {
   /** Beats per phase cycle (bar or loop), Link-style; defaults to 4. */
   quantum: number;
 };
+
+/** Observed PCM state, independent of the latest accepted composition revision. */
+export type AudioPlaybackStatus = Readonly<{
+  pendingRevision: number | null;
+  audibleRevision: number | null;
+  /** Retained ranges of audibleRevision, in loop beats; gaps are unavailable. */
+  buffered: readonly Readonly<{ fromBeat: number; toBeat: number }>[];
+  preparing: boolean;
+  buffering: boolean;
+  error?: string;
+}>;
 
 /** One live window. dawgd drops the entry when the client disconnects. */
 export type PresenceEntry = {
@@ -229,6 +241,7 @@ export type ServerMessage =
       record: SessionRecord<unknown>;
       digest: string;
       transport: TransportState;
+      audioStatus?: AudioPlaybackStatus;
       /** Negotiated revision; absent from a v1-only daemon. */
       protocol?: number;
       caps?: string[];
@@ -247,6 +260,7 @@ export type ServerMessage =
       digest: string;
     }
   | ({ v: 1; type: "transport" } & TransportState)
+  | { v: 1; type: "audio-status"; status: AudioPlaybackStatus }
   | { v: 1; type: "presence"; clients: PresenceEntry[] }
   | { v: 1; type: "meta"; meta: SessionMeta }
   | {
@@ -610,6 +624,8 @@ export function parseServerMessage(line: string): ServerMessage {
       message.protocol = value.protocol as number;
     }
     if (value.caps !== undefined) message.caps = requireCaps(value.caps);
+    if (value.audioStatus !== undefined)
+      message.audioStatus = requireAudioStatus(value.audioStatus);
     return message;
   }
   if (type === "commit") {
@@ -641,6 +657,8 @@ export function parseServerMessage(line: string): ServerMessage {
       digest: requireDigest(value.digest),
     };
   if (type === "transport") return { v: 1, type, ...requireTransport(value) };
+  if (type === "audio-status")
+    return { v: 1, type, status: requireAudioStatus(value.status) };
   if (type === "result") {
     const id = requireId(value.id, "request id");
     const status = value.status;
@@ -922,6 +940,61 @@ function requireMeta(
       throw new ProtocolError("invalid", error.message);
     throw error;
   }
+}
+
+function requireAudioStatus(value: unknown): AudioPlaybackStatus {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new ProtocolError("invalid", "audio status is invalid");
+  const data = value as Record<string, unknown>;
+  const revision = (input: unknown): number | null => {
+    if (input === null) return null;
+    if (!Number.isSafeInteger(input) || (input as number) < 0)
+      throw new ProtocolError("invalid", "audio revision is invalid");
+    return input as number;
+  };
+  if (
+    typeof data.preparing !== "boolean" ||
+    typeof data.buffering !== "boolean" ||
+    !Array.isArray(data.buffered) ||
+    data.buffered.length > 4096
+  )
+    throw new ProtocolError("invalid", "audio readiness fields are invalid");
+  let previous = -1;
+  const buffered = data.buffered.map((range: unknown) => {
+    if (!range || typeof range !== "object" || Array.isArray(range))
+      throw new ProtocolError("invalid", "audio range is invalid");
+    const { fromBeat, toBeat } = range as Record<string, unknown>;
+    if (
+      typeof fromBeat !== "number" ||
+      typeof toBeat !== "number" ||
+      !Number.isFinite(fromBeat) ||
+      !Number.isFinite(toBeat) ||
+      fromBeat < 0 ||
+      toBeat <= fromBeat ||
+      toBeat > 1e9 ||
+      fromBeat < previous
+    )
+      throw new ProtocolError("invalid", "audio range is invalid");
+    previous = toBeat;
+    return Object.freeze({ fromBeat, toBeat });
+  });
+  if (
+    data.error !== undefined &&
+    (typeof data.error !== "string" || data.error.length > 512)
+  )
+    throw new ProtocolError("invalid", "audio error is invalid");
+  const pendingRevision = revision(data.pendingRevision),
+    audibleRevision = revision(data.audibleRevision);
+  if (audibleRevision === null && buffered.length)
+    throw new ProtocolError("invalid", "audio ranges need an audible revision");
+  return Object.freeze({
+    pendingRevision,
+    audibleRevision,
+    buffered: Object.freeze(buffered),
+    preparing: data.preparing,
+    buffering: data.buffering,
+    ...(typeof data.error === "string" ? { error: data.error } : {}),
+  });
 }
 
 function requireTransport(value: unknown): TransportState {

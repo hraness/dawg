@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { GOLD } from "./gold/index.ts";
+import house from "../../../../workflows/house-v1.json";
 import { performChart } from "./perform.ts";
 import {
   chartSystemPrompt,
@@ -30,9 +31,11 @@ describe("chart writer", () => {
   test("the prompt carries the format, the names and every gold chart", () => {
     const prompt = chartSystemPrompt();
     expect(prompt).toContain("export type Chart");
-    expect(prompt).toContain("supersaw");
+    expect(prompt).toContain("bf_emma");
+    expect(prompt).toContain(JSON.stringify(house));
     for (const chart of GOLD) expect(prompt).toContain(chart.title);
-    expect(prompt).toContain("no key changes");
+    expect(prompt).toContain("No borrowed chords");
+    expect(prompt).toContain("modulation");
   });
 
   test("reads a fenced chart and names what's wrong with a bad one", () => {

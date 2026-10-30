@@ -4,7 +4,8 @@
  * screen can be taken mid-stream.
  */
 interface Gate {
-  chunks: string[];
+  chunks: Record<string, unknown>[];
+  finish: "stop" | "tool_calls";
   released: number;
   waiters: (() => void)[];
 }
@@ -33,7 +34,33 @@ export class FakeGateway {
 
   /** Queues the next reply; returns a function releasing `n` chunks. */
   reply(chunks: string[]): (n?: number) => void {
-    const gate: Gate = { chunks, released: 0, waiters: [] };
+    return this.queue(
+      chunks.map((content) => ({ content })),
+      "stop",
+    );
+  }
+
+  /** A normal-default agent batch, held until the scene admits its write. */
+  replyTools(
+    calls: readonly { name: string; args: Record<string, unknown> }[],
+  ) {
+    return this.queue(
+      [
+        {
+          tool_calls: calls.map((call, index) => ({
+            index,
+            id: `scene-tool-${index}`,
+            type: "function",
+            function: { name: call.name, arguments: JSON.stringify(call.args) },
+          })),
+        },
+      ],
+      "tool_calls",
+    );
+  }
+
+  private queue(chunks: Gate["chunks"], finish: Gate["finish"]) {
+    const gate: Gate = { chunks, finish, released: 0, waiters: [] };
     this.replies.push(gate);
     return (n = 1) => {
       gate.released += n;
@@ -52,7 +79,8 @@ export class FakeGateway {
     await request.json();
     this.requests += 1;
     const gate = this.replies.shift() ?? {
-      chunks: ["Done."],
+      chunks: [{ content: "DONE: The change is saved." }],
+      finish: "stop" as const,
       released: 1,
       waiters: [],
     };
@@ -68,17 +96,15 @@ export class FakeGateway {
           if (sent >= gate.chunks.length) {
             controller.enqueue(
               event({
-                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                choices: [{ index: 0, delta: {}, finish_reason: gate.finish }],
               }),
             );
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
             return;
           }
-          const content = gate.chunks[sent++]!;
-          controller.enqueue(
-            event({ choices: [{ index: 0, delta: { content } }] }),
-          );
+          const delta = gate.chunks[sent++]!;
+          controller.enqueue(event({ choices: [{ index: 0, delta }] }));
         },
       }),
       { headers: { "content-type": "text/event-stream" } },

@@ -1,8 +1,57 @@
 # dawg
 
-dawg is a local-first terminal music workstation with a Pi-like agent loop. Each terminal window can focus on one track while a shared local session keeps the score, transport, and agent operations in sync. It is designed for `dawg` to feel like a coding agent session where the artifact is a loop you can hear and edit.
+dawg is an agent-driven song studio with a local rendering engine. The default
+terminal surface is a player and chat: an overview of all tracks, and a horizontal
+piano roll that follows the track being written. The agent handles musical and
+production edits. Saved projects remain usable offline.
 
-The first steel thread includes a typed `track.loop/v1` score, an append-only local session with a cross-window writer lock, a terminal piano-roll projection, a multiline prompt, a bounded streaming tool-calling agent on the Vercel AI Gateway, and a local PCM synthesizer. Provider and audio adapters remain behind explicit ports so the TUI can still be exercised without credentials or a sound device.
+## Song studio
+
+`src/workflows/` owns bounded durable jobs, conditional stage tickets, source and
+artifact hashes, cancellation/resume, track/section readiness and explicit audible
+receipts. `workflows/` is the installed creative catalog: `original-house`,
+`reference-study` and `recreate-source`, with a single `house-v1.json` policy.
+Resources resolve relative to the installed package. Selecting or reading a
+workflow never silently runs another workflow.
+
+The default overview reuses `tui/tape.ts` with editing controls omitted. Track writes
+select `tui/piano-roll.ts`; its horizontal time axis draws note durations, lyrics,
+kit/sample lanes, sections and separate play/writing cursors. Ctrl-T returns to the
+overview. Clicking a track or `/view <track>` inspects and pins it. Ctrl-P toggles
+the pin; `/view unpin` resumes following the latest written track. Page Up/Down
+inspect a horizontal range; Follow clears that range. Space, section buttons and
+Alt-Left/Right remain responsive during generation, and prompt drafts survive them.
+The optional legacy editors are entered explicitly with `/tape` or `/play`.
+
+The first coherent musical draft starts automatically after required audio assets
+load. An isolated hit is insufficient. A later manual pause, seek, cancellation or
+new generation invalidates an earlier automatic start. Instrumental drafts remain
+labeled while vocals prepare. `AudioEngine.readiness` and daemon `audio-status`
+frames distinguish pending score revision, audible revision, actual retained beat
+ranges, preparing, buffering and errors. Audible means PCM has crossed the output
+queue and handoff fade. Missing clips cannot establish ready music. Existing
+streaming monitor gaps are exposed as buffering; the current engine still advances
+through an unavailable window, and a monitor mix uses fixed gain until final export.
+
+`src/vocals/` ships the stock bf_emma/Kokoro+WORLD helper closure. `sing_chart` and
+`generate_vocals` accept bounded authored words/notes, write immutable project-local
+takes with model/helper hashes, and reuse accepted audio without inference. Chart
+singing preserves authored pitch and register. `perform_chart` compiles a validated
+chart with the accepted local book and replaces musical content through strict
+revision checks. The instrumental option mutes placeholder vocal tracks. `dawg make`
+runs the durable original driver and preserves chart/draft checkpoints before
+inference; `--from` resumes the saved material. Technical completion and perceptual
+word/tone qualification are separate report fields.
+
+`src/reference/` accepts either YouTube or local project audio, retains actual
+separated-vocal provenance, grid drift and section evidence, and creates editable
+melody plus immutable stock singing and aligned level-matched source/stock pairs.
+The agent uses retained stems to rebuild accompaniment. Actual supplied or transcribed
+lyrics are preserved; stock singing does not claim to reproduce the source singer's
+identity or exact performance. `dawg reference setup` explains optional dependencies.
+
+See [the user guide](./guides/song-studio.md) for the supported listening and CLI flow.
+The remaining manual/editor sections below document explicit advanced entry points.
 
 ## Run
 
@@ -167,7 +216,7 @@ Unrecognized prompts go to the agent whenever a provider is configured (`DAWG_AI
 
 A turn calls `POST /v1/chat/completions` with `stream: true` and one JSON-schema tool for each operation family. The OpenAI-compatible SSE stream is parsed locally with `fetch`, so the agent adds no runtime dependency. Each request sends a compact, deterministic **composition brief** instead of raw logs. It contains revision, tempo, meter, bars, key, tracks with instrument, mix, note count and pitch range, the focused track's notes, recent accepted operations and the instrument list. It is capped at 12 KiB and never includes environment values.
 
-When a tool call finishes streaming, it passes three checks: the tool's own argument checks, the planner's bounded operation validator, and a dry run of the score reducer. Only then is it committed through the session as a separate revision pinned to the revision it was planned against. If the call fails a check, or another window committed first (stale revision), dawg rejects it without changing the score. The model receives the diagnostic as the tool result and can correct itself. A turn is bounded to 8 steps, 32 tool calls, 1 MiB of streamed response and a 90 s timeout.
+When a tool call finishes streaming, it passes three checks: the tool's own argument checks, the planner's bounded operation validator, and a dry run of the score reducer. Only then is it committed through the session as a separate revision pinned to the revision it was planned against. If the call fails a check, or another window committed first (stale revision), dawg rejects it without changing the score. The model receives the diagnostic as the tool result and can correct itself. A turn is bounded to 24 steps, 64 tool calls, 1 MiB of streamed response, 4 MiB of cumulative request messages and a 240 s timeout; media helpers suspend the turn deadline while their own bounded process deadline applies.
 
 `runAgentTurn` (`src/agent/agent.ts`) emits structured progress events for the TUI: `step`, `text-delta`, `tool-start`, `tool-applied` (with `summary`, `baseRevision`, `resultRevision` and `trackId`), `tool-rejected` (with `diagnostic`), and a final `done` or `error` (`aborted`, `timeout`, `budget`, `provider`). To add an operation family, append a tool to `AGENT_TOOLS` in `src/agent/tools.ts`. The schema, dispatch and validation all come from that one entry.
 
@@ -271,7 +320,7 @@ Every subprocess goes through the injectable `CommandRunner` in `src/auth/runner
 
 The gateway and OpenRouter share `src/agent/gateway.ts`, an OpenAI-compatible streaming client with tool calls that requests `stream_options.include_usage`. `src/agent/usage.ts` prices each usage chunk, using the provider's own `cost` when present and otherwise tokens × the models.dev price. It keeps the session total and a daily ledger in `~/.config/dawg/usage.json` (31 days, lock file plus atomic rename) that windows share, and draws the spend line under the prompt (`$0.12 session · $0.48 today · opus-5.5 · gateway`; `subscription` for xcb; `commands only` offline, with no model key nag; it narrows by dropping today, then session). Billed web searches add to the same meter. Prices come from `https://models.dev/api.json`, cached in `~/.config/dawg/cache/` for 24 h, fetched with a timeout and size cap, with a stale cache preferred to nothing offline; on OpenRouter its own `/models` prices win. The picker's `~$0.005/prompt` is `TYPICAL_PROMPT` (≈ 53,000 input + 600 output tokens, measured from the system prompt, tool schemas and a fixture brief over about 2 requests at about 3 bytes per token, as the agent eval in `bench/agent-eval` observed) × price.
 
-The xcb provider (`src/agent/xcb.ts`, `src/agent/xcb-agent.ts`) calls `xcb --json generate` with one `{version:1, account, model, prompt, timeoutMs, maxOutputBytes}` request on stdin. xcb exposes zero tools and does not stream, so the prompt carries the system rules, the composition brief and the tool catalog as JSON schemas, and asks for exactly one `{ops:[{tool,args}], say?, done}` object. The reply is untrusted. dawg takes the first balanced JSON object in at most 64 KiB, allows at most 16 ops and caps `say` at 400 characters. Each op then goes through `executeCall`, the same argument checks, operation validator, reducer dry run and per-op revision commit used by the gateway loop, and emits the same `tool-applied`/`tool-rejected`/`text-delta` events. If a reply cannot be parsed, an op is rejected or `done` is false, dawg makes another call with the per-op results, up to 3 calls and within the normal turn budgets. Esc aborts the turn, which terminates the xcb child and keeps every accepted revision. The child timeout is `timeoutMs + 75 s`, because the first `generate` per binding (and after an xcb or provider update) admits the account and can take up to a minute longer. A `busy` result, when two first calls hit one account, is retried with backoff. Accounts come from `xcb --json generate --capabilities`, parsed field by field from `unknown`. dawg never runs the xcb installer.
+The xcb provider (`src/agent/xcb.ts`, `src/agent/xcb-agent.ts`) calls `xcb --json generate` with one `{version:1, account, model, prompt, timeoutMs, maxOutputBytes}` request on stdin. xcb exposes zero tools and does not stream, so the prompt carries the system rules, the composition brief and the tool catalog as JSON schemas, and asks for exactly one `{ops:[{tool,args}], say?, done}` object. The reply is untrusted. dawg takes the first balanced JSON object in at most 64 KiB, allows at most 16 ops and caps `say` at 400 characters. Each op then goes through `executeCall`, the same argument checks, operation validator, reducer dry run and per-op revision commit used by the gateway loop, and emits the same `tool-applied`/`tool-rejected`/`text-delta` events. If a reply cannot be parsed, an op is rejected or `done` is false, dawg makes another call with the per-op results, up to 24 calls and within the normal turn budgets. Esc aborts the turn, which terminates the xcb child and keeps every accepted revision. The child timeout is `timeoutMs + 75 s`, because the first `generate` per binding (and after an xcb or provider update) admits the account and can take up to a minute longer. A `busy` result, when two first calls hit one account, is retried with backoff. Accounts come from `xcb --json generate --capabilities`, parsed field by field from `unknown`. dawg never runs the xcb installer.
 
 `generateText(prompt, {maxTokens, signal?, timeoutMs?, selection?})` from `src/agent/provider.ts` is a tool-free one-shot completion for helpers like session naming. On the gateway and OpenRouter it uses `anthropic/claude-haiku-4.5` with `max_tokens`. On xcb it uses the selected account with `maxOutputBytes ≈ 8 × maxTokens`. It returns at most 512 trimmed characters of untrusted text and throws when offline, so callers should fall back to a local default.
 
@@ -926,9 +975,32 @@ The organ models are dawg's own, from public descriptions of the tonewheel gener
 
 ### Offline studio library and demo songs
 
-`demo` opens three original, fully editable hyperpop songs (the other styles are off the shelf for now): Candy Fault (a sung lead over glitch breaks), Redline (F minor, drum-and-bass breaks, a vocoder singing the words back as chords) and Glass Garden (A major, tresillo). They share one kit (core/demos/hyperpop.ts) where a synth singer carries every line with the recorded words blended into it, and the vocal plays as an instrument (round-robin syllable riffs, stutters, reversals, a looped-vowel lead and a grain cloud) and the techniques in `guide hyperpop`. `demo search <words>` filters metadata; `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the composition in one undoable edit, pauses transport at the start and opens TAPE. Browsing is read-only. The agent exposes the same songs through `list_demos` and `load_demo`.
+`demo` opens six original, editable hyperpop songs: Candy Fault, Redline,
+Glass Garden, Night Swim, Kite Season and Bubble Wrap. They share the kit in
+`core/demos/hyperpop.ts`: sung words, syllable riffs, stutters, reversals, a looped
+vowel lead and a grain cloud. `demo search <words>` filters metadata;
+`demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the
+composition in one undoable edit, pauses transport at the start and shows the
+tracks overview. Browsing is read-only. The agent exposes the same songs through
+`list_demos` and `load_demo`.
 
-`dawg make "<brief>" [--model <alias>] [--rounds 1-6] [--out <song.track.json>] [--wav <song.wav>] [--sheet <chart.json>]` writes a new hyperpop song as a chart. Claude Opus 5.5, through the AI Gateway key (or OpenRouter), gets the chart format, the sound names, the demos' craft as rules and the gold charts as examples. It writes the whole song, and the critic's problems go back until a draft is clean. Each round prints its cost (about $0.65–0.90 a song, usually two rounds), and `--from <chart.json>` replays a saved chart. `dawg make --local "<brief>"` or `--seed N` runs the genome path instead. A seed mixed with the brief draws the constraints from the genome: tempo, mode, drum grammar, form, sounds, voice, moves, and in about one song in four a fugue break. The local model sees them and writes a song card: title, theme, hook, verse lines, mood, pins for only what the brief names, and the music (chord loops as Roman numerals in the song's mode, motifs as a 16th-note grid and scale steps, phrase plans, and what carries the hook). The seed draws whatever the card leaves out. The same card and seed give the same song, and a new seed or a new brief gives a new one. `dawg make --seed N` with no brief composes with no model. `dawg make --from <card.json>` composes a saved card, and still compiles a classic sheet. `dawg make --classic "<brief>" [--rounds 1-6]` runs the older sheet loop, whose songs follow the Candy Fault, Redline or Glass Garden production. The agent has `compose_song` (a card and an optional seed, loaded in one undoable edit), `song_guide` (the card guide and the classic playbook) and `write_song` (a classic sheet, with the critic's score and notes). See [docs/distill.md](./docs/distill.md).
+`dawg make "<brief>"` runs the durable original-house driver. A configured AI Gateway
+or OpenRouter model writes a chart (form, chords, words, tunes, sounds and moves),
+and the critic feeds back musical problems. The driver saves an immutable chart
+and instrumental checkpoint before singing actual original words with stock
+bf_emma. It records accepted asset hashes and separate technical/perceptual quality
+fields, then writes the final loop; `--wav` also renders it. A failure prints the
+actual admitted chart path for `--from`, which reuses accepted work. `--model`,
+`--rounds`, `--effort`, `--out` and `--sheet` remain available; `dawg make --help`
+is the flag reference. The current stock path enforces the versioned house profile.
+
+`--instrumental` creates a labeled draft and `--voice synth` selects the older
+synthetic singer explicitly. `--local`/`--seed` still use the seeded genome, and
+`--classic` uses the earlier sheet compiler. Saved cards and sheets remain readable.
+Legacy `compose_song`, `song_guide` and `write_song` tool names remain callable for
+older transcripts; the normal advertised flow uses bundled workflows, authored
+charts, `sing_chart` and `perform_chart`. See [docs/distill.md](./docs/distill.md)
+for the older compilers and [Song studio](./docs/song-studio.md) for current use.
 
 `sample library [query]` opens the bundled studio shelf; `sample preview <id>` listens while transport is paused; `sample use <id>` adds a hash-pinned sound without replacing an occupied instrument. `sample chop <id> [4|8|16]` creates a separate sampler with slices and editable notes. The fifteen original synthetic samples ship in the package, need no download, and include provenance and a CC0 dedication in `assets/samples/studio/`. Their registered `pack:studio/<id>` sources use the normal pack loader and agent `search_sounds` / `use_sound` tools. `guide demos` and `guide sample-library` explain the manual and agent routes. These are original compositions and machine voices, with no commercial song recordings or borrowed vocal performances.
 
@@ -1566,7 +1638,7 @@ Rendering. Synth and wavetable voices start at the tuned frequency; keyed sample
 
 ## Play mode (computer keyboard)
 
-`Ctrl-P` or `/play` turns the computer keyboard into a piano for the focused track, using the "musical typing" layout GarageBand, Logic, BandLab, FL Studio and Ableton share. `Esc` or `/play off` leaves it and every normal binding is back. Typing `/` starts a slash command without leaving the mode (`/click 40%`, `/play off`).
+`/play` turns the computer keyboard into a piano for the focused track, using the "musical typing" layout GarageBand, Logic, BandLab, FL Studio and Ableton share. `Esc` or `/play off` leaves it and every normal binding is back. Typing `/` starts a slash command without leaving the mode (`/click 40%`, `/play off`).
 
 | Key                     | Does                                                                     |
 | ----------------------- | ------------------------------------------------------------------------ |
@@ -1788,9 +1860,9 @@ Range commands take bars as the ruler counts them (from 1): `5-6`, `5`, or a sec
 
 Copy, move, clear and reverse never touch tempo or meter points (except that `insert` opens new bars first); `bars insert` and `bars remove` move them. The menu's **Arrange › range** runs the same commands (loop bars, loop next and prev, copy, move, clear, reverse, paste at, insert and remove bars), the agent's `edit_range` tool types them, and show-me can type any of them. In `song.ts`, `bars(notes, 5, 6)` takes the notes in bars 5-6 starting at 0, `place(notes, { at: 7, times: 3 })` lays them at bar 7 three times, `reversed(notes, { bars: 2 })` mirrors them, and `insertBars(song, { at: 7, bars: 2 })` inserts bars into a whole song (SDK 1.34.0).
 
-## TAPE (Ctrl-T)
+## Optional TAPE editor
 
-`Ctrl-T` or `/tape` opens TAPE in place of the highway: every track as a row across the bars, each cell a density glyph (` ▁▂▃▄▅▆▇█`, the notes starting there weighted by velocity; a held note `▁`, an audio clip `▃`, empty `·`). Above the rows sit the bar ruler with the playhead `▼` and the loop brackets `[══]` read from `score.loop`, and the sections (`▀name▀`, the looped one reversed). The focused row carries `›`, a muted row is dim, and color is never the only cue (NO_COLOR and the mono theme keep every glyph). `-` and `=` zoom between a bar, a beat and half a beat a cell, and the view scrolls to keep the playhead in sight. The highway stays home: `Esc` or `Ctrl-T` again goes back, and `dawg pane tape` opens a pane on it.
+`/tape` opens the optional TAPE editor: every track as a row across the bars, each cell a density glyph (` ▁▂▃▄▅▆▇█`, the notes starting there weighted by velocity; a held note `▁`, an audio clip `▃`, empty `·`). Above the rows sit the bar ruler with the playhead `▼` and the loop brackets `[══]` read from `score.loop`, and the sections (`▀name▀`, the looped one reversed). The focused row carries `›`, a muted row is dim, and color is never the only cue (NO_COLOR and the mono theme keep every glyph). `-` and `=` zoom between a bar, a beat and half a beat a cell, and the view scrolls to keep the playhead in sight. `Esc` or `Ctrl-T` returns to the studio overview, and `dawg pane tape` opens an editor pane.
 
 `/patch` (Ctrl-K Sound › patch › Edit patch) opens the patch view of the focused track in place of the highway; `/patch --fx <name>` opens one of its effect patches (Effects › "<name> patch" › Edit effect patch). It lists the nodes in signal order (`◆` per voice, `●` once), the selected node's ports, and a cable matrix with outputs down and inputs across, pinned headers, and only the selected node's neighbourhood until `f` shows the whole matrix. A cell shows a cable's amount; a cable the compiler drops (an unreachable node, a cycle) is marked and its warning sits above the knobs. `tab` moves between the panes, `enter` opens a node's settings in the drawer or wires and unwires a cell, `[ ] { }` and `1`-`0` set a cable's amount, and `a`, `w`, `x`, `m` and `g` add a node, wire to a legal input, remove, map a param to a knob, and switch a node between per voice and once. `space` loops the track solo, and while it loops each row of the add list is heard as you move (`enter` keeps, `esc` reverts). Every key runs a typed `patch …` command that echoes, so the receipt teaches the words. The patch's first four macros are the four knobs (`KNOB_MAPS` row `sound:patch`). A track that is not a patch shows as a preview of its engine (`patch convert` makes it one), and a library patch is read-only apart from its knobs. A cable wired anywhere else (a typed command, the agent, another pane) moves the selection to its cell, so show-me lands where the change happened. `Esc` goes back, and `dawg pane patch [track]` opens a pane on it.
 

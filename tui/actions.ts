@@ -23,52 +23,98 @@ export function paintActions(
     target: HitTarget;
     role: "transport" | "loopRule" | "track" | "success" | "borderFocus";
   };
-  const rows: Action[][] = [
-    [
-      ...NAVIGATION_ACTIONS.map((action): Action => ({
-        label: action.id === "jump" ? "Jump ^G" : "Back ^B",
-        compact: action.id === "jump" ? "Jump ^G" : "Back ^B",
-        target: { kind: "command", command: action.command },
-        role: "borderFocus",
-      })),
-      {
-        label: `${view.score.playing ? (unicode ? "Ⅱ Pause" : "| Pause") : unicode ? "▶ Play" : "> Play"} Space`,
-        compact: view.score.playing ? "Pause" : "Play",
-        target: { kind: "transport" },
-        role: "transport",
-      },
-      {
-        label: "☰ Menu ^K",
-        compact: "Menu ^K",
-        target: { kind: "command", command: "/menu" },
-        role: "borderFocus",
-      },
-      {
-        label: "♪ Keys ^P",
-        compact: "Keys ^P",
-        target: { kind: "command", command: "/play" },
-        role: "track",
-      },
-      {
-        label: "Guide",
-        compact: "Guide",
-        target: { kind: "command", command: "/guide" },
-        role: "borderFocus",
-      },
-      {
-        label: "‹ Scene alt-←",
-        compact: "‹ Scene",
-        target: { kind: "scene-step", direction: -1 },
-        role: "loopRule",
-      },
-      {
-        label: "Scene › alt-→",
-        compact: "Scene ›",
-        target: { kind: "scene-step", direction: 1 },
-        role: "loopRule",
-      },
-    ],
-  ];
+  const rows: Action[][] = view.studio
+    ? [
+        [
+          {
+            label: `${view.score.playing ? "Pause" : "Play"} Space`,
+            compact: view.score.playing ? "Pause" : "Play",
+            target: { kind: "transport" },
+            role: "transport",
+          },
+          {
+            label: "Tracks ^T",
+            compact: "Tracks",
+            target: { kind: "command", command: "/view tracks" },
+            role: "track",
+            active: view.studio.view === "overview",
+          },
+          {
+            label: view.studio.pinned ? "Unpin ^P" : "Pin ^P",
+            compact: view.studio.pinned ? "Unpin" : "Pin",
+            target: {
+              kind: "command",
+              command: view.studio.pinned ? "/view unpin" : "/view pin",
+            },
+            role: "track",
+            active: view.studio.pinned,
+          },
+          {
+            label: "Follow",
+            compact: "Follow",
+            target: { kind: "command", command: "/view follow" },
+            role: "success",
+          },
+          {
+            label: "Previous section",
+            compact: "< Section",
+            target: { kind: "scene-step", direction: -1 },
+            role: "loopRule",
+          },
+          {
+            label: "Next section",
+            compact: "Section >",
+            target: { kind: "scene-step", direction: 1 },
+            role: "loopRule",
+          },
+        ],
+      ]
+    : [
+        [
+          ...NAVIGATION_ACTIONS.map((action): Action => ({
+            label: action.id === "jump" ? "Jump ^G" : "Back ^B",
+            compact: action.id === "jump" ? "Jump ^G" : "Back ^B",
+            target: { kind: "command", command: action.command },
+            role: "borderFocus",
+          })),
+          {
+            label: `${view.score.playing ? (unicode ? "Ⅱ Pause" : "| Pause") : unicode ? "▶ Play" : "> Play"} Space`,
+            compact: view.score.playing ? "Pause" : "Play",
+            target: { kind: "transport" },
+            role: "transport",
+          },
+          {
+            label: "☰ Menu ^K",
+            compact: "Menu ^K",
+            target: { kind: "command", command: "/menu" },
+            role: "borderFocus",
+          },
+          {
+            label: "♪ Keys ^P",
+            compact: "Keys ^P",
+            target: { kind: "command", command: "/play" },
+            role: "track",
+          },
+          {
+            label: "Guide",
+            compact: "Guide",
+            target: { kind: "command", command: "/guide" },
+            role: "borderFocus",
+          },
+          {
+            label: "‹ Scene alt-←",
+            compact: "‹ Scene",
+            target: { kind: "scene-step", direction: -1 },
+            role: "loopRule",
+          },
+          {
+            label: "Scene › alt-→",
+            compact: "Scene ›",
+            target: { kind: "scene-step", direction: 1 },
+            role: "loopRule",
+          },
+        ],
+      ];
   if (view.play)
     rows.push([
       {

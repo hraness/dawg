@@ -26,7 +26,11 @@ import {
   runProviderTurn,
   selectProvider,
 } from "./provider.ts";
-import { runTextAgentTurn, type TextGenerate } from "./xcb-agent.ts";
+import {
+  runTextAgentTurn,
+  XCB_MAX_STEPS,
+  type TextGenerate,
+} from "./xcb-agent.ts";
 import {
   describeReason,
   extractFirstJsonObject,
@@ -422,16 +426,12 @@ describe("text agent loop", () => {
   test("stops at the step limit when the model never finishes", async () => {
     const { host } = memoryHost();
     const reply = JSON.stringify({ ops: [], done: false });
-    const { generate, prompts } = scriptedGenerate([
-      reply,
-      reply,
-      reply,
-      reply,
-      reply,
-    ]);
+    const { generate, prompts } = scriptedGenerate(
+      Array.from({ length: XCB_MAX_STEPS }, () => reply),
+    );
     const result = await runTextAgentTurn({ prompt: "x", generate, host });
     expect(result).toMatchObject({ type: "done", reason: "max-steps" });
-    expect(prompts).toHaveLength(3);
+    expect(prompts).toHaveLength(XCB_MAX_STEPS);
   });
 
   test("cancellation kills the xcb child and keeps the last accepted revision", async () => {

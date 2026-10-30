@@ -229,7 +229,7 @@ export const SCENARIOS: readonly Scenario[] = [
     async open(t) {
       await ready(t);
       await seed(t);
-      await t.type("\u0014", "tape opened");
+      await t.type("/tape on\r", "tape opened");
       await t.until(() => t.vt.text().includes("range: "), "tape");
     },
     marker: (text) => text.includes("range: "),
@@ -251,7 +251,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "play-mode",
     async open(t) {
       await ready(t);
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
     },
     // The on-screen keyboard keeps every note key at every usable size.
@@ -263,7 +263,7 @@ export const SCENARIOS: readonly Scenario[] = [
       await ready(t);
       await t.send("instrument kit\r");
       await t.settle("kit");
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
     },
     argv: ["--track", "drums"],
@@ -274,7 +274,7 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "play-keys",
     async open(t) {
       await ready(t);
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
       await t.send("?");
       await t.until(() => /esc|close/.test(t.vt.text()), "keys sheet");
@@ -436,6 +436,7 @@ export const SCENARIOS: readonly Scenario[] = [
   {
     name: "showme-stream",
     agent: true,
+    env: { DAWG_SHOWME: "on" },
     animating: true,
     async open(t) {
       await ready(t);

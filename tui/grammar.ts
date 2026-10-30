@@ -211,8 +211,10 @@ export const KEYS = {
       title: "start here",
       rows: [
         ["type", "ask in plain words, or type a command"],
-        ["ctrl-p", "play mode: notes on the keyboard (chords: q)"],
-        ["ctrl-t", "TAPE: all tracks across the bars"],
+        ["ctrl-p", "pin/unpin the inspected track"],
+        ["ctrl-t", "song overview: all tracks across the bars"],
+        ["page up/down", "inspect time in the horizontal piano roll"],
+        ["/play /tape", "optional keyboard and arrangement editors"],
         ["ctrl-k", `menu: ${MENU_ROOTS.length} sections · /menu <topic>`],
         ["space", "play / pause (empty prompt)"],
         ["alt-← alt-→", "previous / next scene (empty prompt)"],

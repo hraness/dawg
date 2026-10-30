@@ -70,11 +70,13 @@ test.skipIf(!supported)(
         async () => (await session(t.cwd))?.sections?.length === 2,
         "two sections in session",
       );
+      await t.type("/play on\r", "open legacy keyboard with arrangement strip");
       // The strip names both blocks over the timeline.
       await t.until(
         () => /[▼▏]verse/u.test(t.vt.text()) && t.vt.text().includes("▏chorus"),
         "arrangement strip",
       );
+      await t.type("/play off\r", "return to command prompt after strip check");
 
       await t.send("form verse*2 chorus\r");
       await waitFor(

@@ -74,9 +74,10 @@ function receipt(t: Session): string {
 /** An open help, guide or menu panel, framed top to bottom. */
 function panel(t: Session): string {
   const lines = t.vt.lines();
-  const top = lines.findIndex((line) => /^\s*╭─ /.test(line));
+  // The inset panel leaves two background cells visible, including observer labels.
+  const top = lines.findIndex((line) => /^.{0,2}╭─ /.test(line));
   if (top < 0) return "";
-  const bottom = lines.findIndex((line, i) => i > top && /^\s*╰/.test(line));
+  const bottom = lines.findIndex((line, i) => i > top && /^.{0,2}╰/.test(line));
   return lines.slice(top, bottom + 1).join("\n");
 }
 
@@ -157,7 +158,9 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     const offline = await launch(80, 24, OFFLINE, []);
     try {
       await offline.until(
-        () => ready(offline) && screen(offline).includes("try: "),
+        () =>
+          ready(offline) &&
+          screen(offline).includes("configure a model to generate"),
         "offline prompt",
       );
       // §8.2: the agent key is `/model key`; login is only a typed alias.

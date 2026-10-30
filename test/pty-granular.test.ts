@@ -91,7 +91,7 @@ test.skipIf(!supported)(
       await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
 
       // Play mode on the granular track: arm, play two keys, stop.
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
       await t.send("q");
       await t.until(() => t.vt.text().includes("MANUAL"), "manual");

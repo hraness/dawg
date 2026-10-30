@@ -20,6 +20,7 @@ import {
   type ServerMessage,
   type TransportAction,
   type TransportState,
+  type AudioPlaybackStatus,
 } from "./protocol.ts";
 import {
   sessionPaths,
@@ -31,6 +32,7 @@ import {
 export type DaemonClientUpdate =
   | { type: "record"; record: SessionRecord<unknown>; digest: string }
   | { type: "transport"; transport: TransportState }
+  | { type: "audio-status"; status: AudioPlaybackStatus }
   | { type: "presence"; clients: PresenceEntry[] }
   | { type: "meta"; meta: SessionMeta }
   | { type: "status"; connected: boolean; message: string };
@@ -96,6 +98,7 @@ export class DaemonClient {
   public record!: SessionRecord<unknown>;
   public digest = "";
   public transport!: TransportState;
+  public audioStatus: AudioPlaybackStatus | undefined;
   public presence: PresenceEntry[] = [];
   public daemonPid = 0;
   /** Negotiated revision: 1 until a v2 daemon says otherwise. */
@@ -493,10 +496,13 @@ export class DaemonClient {
       this.record = message.record;
       this.digest = message.digest;
       this.transport = message.transport;
+      this.audioStatus = message.audioStatus;
       this.welcomed?.();
       this.welcomed = undefined;
       this.emit({ type: "record", record: this.record, digest: this.digest });
       this.emit({ type: "transport", transport: this.transport });
+      if (this.audioStatus)
+        this.emit({ type: "audio-status", status: this.audioStatus });
       return;
     }
     if (message.type === "commit") {
@@ -538,6 +544,11 @@ export class DaemonClient {
       this.emit({ type: "transport", transport: state });
       return;
     }
+    if (message.type === "audio-status") {
+      this.audioStatus = message.status;
+      this.emit({ type: "audio-status", status: message.status });
+      return;
+    }
     if (message.type === "meta") {
       // Metadata has its own version; never regress to an older one.
       if (message.meta.version < this.record.meta.version) return;
@@ -571,6 +582,7 @@ export class DaemonClient {
 
   private onClose(socket: Socket): void {
     if (this.socket !== socket) return;
+    this.audioStatus = undefined;
     this.socket = undefined;
     if (this.closed) return;
     this.emit({

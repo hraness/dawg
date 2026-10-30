@@ -16,7 +16,10 @@ for (const [cols, rows] of [
         await t.settle();
         await t.type("add C4 at 0\r");
         await t.type("my unfinished draft");
-        expect((await t.type("\u0014")).screen).toBe("tape");
+        // Jump runs the explicit /tape on destination without submitting the draft.
+        await t.type("\u0007", "open Jump beside draft");
+        await t.type("Tape arrangement", "find legacy editor");
+        expect((await t.type("\r", "open /tape on")).screen).toBe("tape");
         expect((await t.type("\u0010")).screen).toBe("play");
         expect((await t.type("\u0002")).screen).toBe("tape");
         expect((await t.type("\u0002")).screen).toBe("home");
@@ -69,7 +72,8 @@ test.skipIf(!supported)(
     try {
       await t.settle();
       await t.type("/demo glass-garden\r");
-      expect(t.state()?.screen).toBe("tape");
+      expect(t.state()?.screen).toBe("home");
+      expect(t.vt.text()).toContain("Tracks");
       await t.send("/export cancelled.wav\r");
       await t.until(() => t.state()?.busy === true, "export started");
       const before = t.state()!.in;
@@ -115,7 +119,8 @@ test.skipIf(!supported)(
     try {
       await t.settle();
       await t.type("/demo glass-garden\r");
-      expect(t.state()?.screen).toBe("tape");
+      expect(t.state()?.screen).toBe("home");
+      expect(t.vt.text()).toContain("Tracks");
       await t.send("/export cancelled.wav\r/export queued.wav\r");
       await t.until(() => t.state()?.busy === true, "export started");
       await t.send("\u0003");

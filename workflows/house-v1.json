@@ -1,0 +1,23 @@
+{
+  "id": "house-hyperpop",
+  "version": "1.0.0",
+  "bpm": { "min": 100, "max": 180 },
+  "harmony": { "mode": "major", "diatonic": true, "modulation": false },
+  "voice": { "engine": "kokoro-world", "id": "bf_emma", "language": "b" },
+  "register": {
+    "verseMidi": [57, 65],
+    "chorusMedianMidi": [69, 71],
+    "p90MaxMidi": 74
+  },
+  "arrangement": {
+    "maxNotes": 4000,
+    "seconds": [60, 210],
+    "silentVocalShare": [0.25, 0.4]
+  },
+  "quality": {
+    "mixRecall": 0.65,
+    "denseMixRecall": 0.45,
+    "denseAboveBpm": 150,
+    "mixSoloRetention": 0.75
+  }
+}

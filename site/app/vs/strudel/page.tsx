@@ -153,9 +153,10 @@ export default function StrudelPage() {
             shell, in as many terminals as you like, with no browser tab.
           </li>
           <li>
-            <strong>Playing and recording.</strong> Ctrl-P turns the keyboard
-            into a piano; <code>r</code> records over the loop with a click and
-            count-in, quantized to the grid.
+            <strong>Playing and recording.</strong> The optional{" "}
+            <code>/play</code> keyboard piano records over the loop with{" "}
+            <code>r</code>, a click and a count-in, quantized to the grid.
+            Ctrl-P pins track inspection in the normal player.
           </li>
           <li>
             <strong>Songs, not loops.</strong> A timeline in bars with sections,
@@ -163,9 +164,9 @@ export default function StrudelPage() {
             automation.
           </li>
           <li>
-            <strong>An agent that shows its work.</strong> Ask in plain words;
-            it types dawg commands into your prompt as it works, and each change
-            is one undo step.
+            <strong>An agent that makes songs.</strong> Ask in plain words,
+            follow the tracks and hear a ready draft while it keeps working.
+            Changes remain undoable; command receipts are optional.
           </li>
           <li>
             <strong>Project files as code.</strong> A song is{" "}

@@ -4,6 +4,7 @@
  * `/` filters, and Esc steps back one level (the filter first).
  */
 import { expect, test } from "bun:test";
+import { listGuides } from "../guides/index.ts";
 import { launch, supported } from "./pty-harness.ts";
 
 const ESC = "\u001b";
@@ -161,7 +162,7 @@ test.skipIf(!supported)(
       // A new `instrument piano` stores the modelled grand (0.6 keys).
       await t.send("instrument piano\r");
       await t.until(() => t.vt.text().includes("keys · grand"), "piano");
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play");
       expect(t.vt.text()).toContain("? keys");
       const header = t.vt.lines().find((line) => line.includes("PLAY"))!;
@@ -203,9 +204,13 @@ test.skipIf(!supported)(
       expect(t.vt.text()).not.toContain("Getting started");
       await t.send(ESC);
       await t.until(() => t.vt.text().includes("Getting started"), "cleared");
-      // Home ↓ → expands Using dawg; ↓ Enter opens its first guide.
+      // Select Using dawg by its actual catalog id, after the studio guide.
       await t.send("\u001b[H");
-      await t.send("\u001b[B");
+      const using = listGuides()
+        .filter((guide) => !guide.parent)
+        .findIndex((guide) => guide.id === "keys");
+      expect(using).toBeGreaterThan(0);
+      for (let row = 0; row < using; row++) await t.send("\u001b[B");
       await t.send("\u001b[C");
       await t.until(() => t.vt.text().includes("Play mode"), "expanded");
       await t.send("\u001b[B");
