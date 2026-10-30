@@ -5,7 +5,8 @@ parent: arrange
 order: 6
 ---
 
-TAPE (Ctrl-T) shows every track across the bars. Typing still goes to
+The optional `/tape` editor shows every track across the bars. Typing
+still goes to
 the prompt, and each TAPE key or button prints the command it runs, so
 the prompt teaches the typed form. Esc goes back.
 

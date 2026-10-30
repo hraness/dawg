@@ -16,6 +16,7 @@ import { MEDIA_TOOLS } from "../media/tools.ts";
 import {
   AGENT_LIMITS,
   MEDIA_PROMPT,
+  STUDIO_PROMPT,
   DISPATCH_PROMPT,
   WORKSPACE_PROMPT,
   classifyAgentError,
@@ -108,6 +109,7 @@ export const COMMAND_AGENT_PROMPT = [
   "Use the tools only for what commands cannot do: project files, the web, media, previewing and measuring.",
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,
+  STUDIO_PROMPT,
   DISPATCH_PROMPT,
 ].join(" ");
 

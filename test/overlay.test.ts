@@ -199,7 +199,13 @@ test("/guide opens the guide tree; → opens a guide; Esc steps back out", () =>
   let lines = h.frame();
   expect(lines.some((line) => line.includes("Getting started"))).toBe(true);
   expect(lines.some((line) => line.includes("Using dawg"))).toBe(true);
+  expect(h.app.guide?.selected).toBe("song-studio");
   expect(h.app.input(DOWN).type).toBe("overlay");
+  for (let row = 0; row < h.app.guide!.visible().length; row++) {
+    if (h.app.guide?.selected === "keys") break;
+    h.app.input(DOWN);
+  }
+  expect(h.app.guide?.selected).toBe("keys");
   h.app.input("\u001b[C");
   lines = h.frame();
   expect(lines.some((line) => line.includes("Play mode"))).toBe(true);

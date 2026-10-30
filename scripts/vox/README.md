@@ -1,5 +1,11 @@
 # Sung hook generator
 
+For user songs, prefer the installed `dawg make`, `dawg vocals` and bundled
+`original-house` workflow. They save project-local immutable takes and need no
+public sample registration. `dawg reference` handles private source recreations
+with stock bf_emma and retained source-vocal comparisons. The scripts below remain
+contributor tools for authored bundled demos.
+
 `songs.py` writes the eleven studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`, `night-swim-vox`, `kite-season-vox`, `candy-fault-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
 
 1. [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) speaks the original lyric with word timestamps.
@@ -24,13 +30,13 @@ The extra pins avoid three install traps: pyworld still imports `pkg_resources` 
 
 ## Sounding human
 
-The later books (`night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`) are written to speech rhythm rather than an even grid: small words short, the stressed last vowel held, pickups before the bar, rests between lines, and verses sung low. Three opt-in tools help:
+The later books (`night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`) are written to speech rhythm rather than an even grid: small words short, the stressed last vowel held, pickups before the bar, rests between lines, and verses sung low. Three opt-in tools help:
 
 - **`human`** (0–1, per song or per spec) adds a singer's timing drift, flat landings that settle onto the note, and a slow pitch wander. 0.25 is the books' setting.
 - **Per-note `dyn` and `air`**: `dyn` (0–1.5) sets loudness, and soft notes also get breathier; `air` (0–1) adds breath. A `"~"` syllable is melisma: the previous vowel moves to a new pitch, and its ending consonant waits for the last `"~"`.
 - **`cadence.py "<syl- la- bles>" <bpm> [beats] [voice] [grid]`** has Kokoro say the line and prints onsets and lengths for `line()`, scaled to fill `beats` and snapped to `grid`. It is a speech shape to start from, not a melody.
 
-A part can take a fourth item, a dict that overrides the song's settings for that part, such as `{"voice": "bm_lewis"}` for a low answer or chant, or `{"speed": 0.6}` for a line whisper mishears: Kokoro reads the words slower and WORLD fits them to the same notes.
+A part can take a fourth item, a dict that overrides the song's settings for that part, such as `{"voice": "bm_lewis"}` for a low answer or chant.
 
 ## Chart books
 

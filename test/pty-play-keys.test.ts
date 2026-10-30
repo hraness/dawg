@@ -42,7 +42,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.type("/count-in 0\r");
       await t.type("/chords off\r");
-      await t.type("\u0010", "play mode");
+      await t.type("/play on\r", "play mode");
       expect(t.state()?.screen).toBe("play");
       // The frame follows the settled state; wait for the keyboard itself.
       await t.until(() => t.vt.text().includes("rec off"), "keyboard");
@@ -97,7 +97,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("NOW"), "prompt");
       await t.type("instrument kit\r");
       await t.until(() => t.vt.text().includes("track"), "kit");
-      await t.type("\u0010", "play mode");
+      await t.type("/play on\r", "play mode");
       await t.until(() => t.vt.text().includes(" kick snr "), "drum keys");
       const keys = t.vt.lines().slice(1, 6).join("\n");
       expect(keys).toMatch(/ kick snr /);

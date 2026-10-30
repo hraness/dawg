@@ -6,37 +6,71 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Added
 
+- Three more original hyperpop demos, each with a British `bf_emma` vocal book:
+  Glow Stick (Db major, 128 BPM, twee house-pop), Window Seat (G major, 170 BPM,
+  liquid drum and bass sung in half time), and Light One (F major, 122 BPM,
+  cathedral pop with a fugue break). Each stays in one major key.
+
+### Changed
+
+- The nine-demo shelf retains the earlier lower-register arrangements: Redline's
+  recomposed topline, Glass Garden's low verses and lifting chorus, Candy Fault's
+  fourth-lower key with its half-step lift, and clearer original lines in Night
+  Swim, Kite Season and Glow Stick.
+- The current nine mixes bring the lead forward against instruments and same-timbre
+  layers, with dry words, clean inserts, safe pre-window headroom and fixed monitor
+  gain compensation. This balance supersedes earlier caps on vocal prominence;
+  the final mix pass preserves authored notes, lyrics, timing and sample files.
+
+### Fixed
+
+- The studio pack's `list_packs` detail retains complete JSON with every vocal
+  book's slice bounds rounded to the millisecond.
+
+## 0.38.0
+
+### Added
+
+- A song studio focused on playback and chat. The existing track timeline is
+  the default overview; a horizontal piano roll follows agent-written tracks,
+  with pinning, horizontal inspection and responsive section seeking.
+- Durable, versioned original-song, reference-study and recreation workflows,
+  bundled house policy and instructions, and inspect/cancel/resume CLI tools.
+- Project-local British bf_emma singing with Kokoro and WORLD, pinned immutable
+  takes, cached replay, and explicit setup for optional inference dependencies.
+- Reference preparation from YouTube or local audio, editable melody, actual-word
+  stock singing, retained source vocals and aligned level-matched comparisons.
+  Accompaniment reconstruction uses the retained stems and transcription tools.
+
 - **Three new demo songs, each unlike the first three.**
   - **Night Swim:** D major at 122, a Balearic house groove with marimba and plucks, sung low with a low `bm_lewis` echo and a detuned double on the chorus.
   - **Kite Season:** E major at 146, felt in half time. Organ, a fuzz guitar wall, a gliding saw hook and glockenspiel over acoustic drums, and a dead stop on a held organ chord.
   - **Bubble Wrap:** Bb major at 100. Stop-start metallic hits, a rubbery bass and steel-pan answers under a deadpan low verse. A low chant lists parcel labels and grows each pass. The chorus flips to double time with plastic stabs and chipmunk pops, then comes a false ending and a ballad breakdown.
-- **Three more demo songs, each in a style the shelf did not have.** All three stay in one major key with no borrowed chords, and each sings a new `bf_emma` book.
-  - **Glow Stick:** Db major at 128, twee house-pop. Electric piano and voices carry a drumless intro. The verses are sung low over a plain four-on-the-floor with no bass. The bass arrives only for the chorus and pumps under the whole mix, with harp sweeps, a drumless break and strings on the last chorus.
-  - **Window Seat:** G major at 170, liquid drum and bass sung in half time. Felt piano and nylon guitar play over a ticking breakbeat. The chorus brings the full two-step break, a reese bass and a warm pad. An electric-piano break leads to a piano-only outro.
-  - **Light One:** F major at 122, cathedral pop. Church organ and tubular bells, a sixteenth-note pluck arpeggio, and a choir with an 808 in the chorus. The break is a small fugue: one subject passes from organ to pluck to bass to sung chops, each entry a few scale steps from the last.
 - **Vocal books that sound sung, not typed.** The three new books are written to speech rhythm, with pickups, rests and held stressed vowels, and their verses sit in a low register. `sing.py` takes an opt-in `human` setting (timing drift, flat landings, slow pitch wander), per-note `dyn` and `air`, and `"~"` melisma. A part can switch voice for a low answer or chant. `scripts/vox/cadence.py` prints a line's spoken rhythm as a starting point.
 
 ### Changed
 
-- **The demo vocals sing lower and sit inside the mix, not on top of it.** The register and levels follow measurements of commercial electronic pop records: low verses, a chorus that lifts a 5th or 6th to about B4, and a lead that owns the consonant band without being the loudest thing in the song.
-  - **Redline** is recomposed an octave lower with new verse and chorus words ("windows down at midnight", "redline, take me to the redline").
-  - **Glass Garden** sings its verses an octave lower and gets a new chorus around B4, plus new lines ("every petal glows").
-  - **Candy Fault** keeps every note and its half-step lift but sounds a 4th lower, in B (lifting to C). Its book was re-sung there, and whisper hears its words better than before.
-  - Night Swim, Kite Season and Glow Stick get clearer lines where whisper misheard them.
-  - The lead now sits 3 to 7 dB over the rest in 300-4000 Hz and close to level with it broadband, down from 6 to 14 dB. A low cut at 200 Hz joins the shared lead chain.
-- **Every demo vocal book now sings in Kokoro's British `bf_emma` voice.** Redline, Glass Garden, Night Swim and Kite Season were re-sung to match Bubble Wrap. Candy Fault trades its synth singer for a new book, `candy-fault-vox`, that sings its topline note for note. The final chorus is sung a half step up there, so the lift needs no re-pitching, and the glitch-break "pix" stutters come from the book's chops. On Candy Fault, whisper now hears nearly every line of the mix, where it heard almost none from the synth singer. Clef scores its vocals 7.8 against 5.2, with polish level. Each book takes the clearest of several takes line by line. Redline, Glass Garden and Kite Season read their words at `speed: 0.8` before WORLD fits them to the melody, which keeps fast lines from slurring. Whisper misses fewer words than with the old voices on Glass Garden (0.03 against 0.17) and Kite Season (0.10 against 0.11), and about as many on Night Swim (0.07 against 0.06) and Redline (0.21 against 0.21). `songs.py` takes a song-wide `speed`.
+- A coherent draft starts playing automatically. Pause, seek and pinned inspection
+  remain authoritative while work continues and across later edit requests.
+- Saved, preparing, buffering and actually audible revisions are reported
+  separately, including retained monitor coverage. Failed initial cues stay paused.
+- `dawg make` preserves authored chart and instrumental checkpoints before singing;
+  `--from` resumes them. Explicit synthetic and instrumental draft options remain.
+- New house songs follow one diatonic-major policy and preserve authored lower
+  vocal registers. Detailed manual editors remain explicit `/tape` and `/play`
+  entry points; generated songs and assets stay in the user's project.
+
+- **Every demo vocal book now sings in Kokoro's British `bf_emma` voice.** Redline, Glass Garden, Night Swim and Kite Season were re-sung to match Bubble Wrap. Candy Fault trades its synth singer for a new book, `candy-fault-vox`, that sings its topline note for note. The final chorus is sung a half step up there, so the lift needs no re-pitching, and the glitch-break "pix" stutters come from the book's chops. On Candy Fault, whisper now hears nearly every line of the mix, where it heard almost none from the synth singer. Clef scores its vocals 7.8 against 5.2, with polish level. Each book takes the clearest of several takes line by line. Redline, Glass Garden and Kite Season read their words at `speed: 0.8` before WORLD fits them to the melody, which keeps fast lines like "neon on the highway" from slurring. Whisper misses fewer words than with the old voices on Glass Garden (0.03 against 0.17) and Kite Season (0.10 against 0.11), and about as many on Night Swim (0.07 against 0.06) and Redline (0.21 against 0.21). `songs.py` takes a song-wide `speed`.
 
 ### Fixed
 
-- **Sung words are easier to make out on every demo.** The lead vocal used to sit 4 to 19 dB under the rest of the song while it sang. Chops, stutters, the vocoder, doubles and the synth singer sang over the words, and reverb plus wide delay throws smeared each line into the next. The demos now share one vocal mix in `core/demos/hyperpop.ts`:
-  - The lead ducks the bed 6 dB under each line.
-  - Layers that share its timbre play about 4 dB lower.
-  - Its reverb and echo are short and dry, and delay throws land only after a line's last word.
-  - Candy Fault's break crush moved off the sung lines onto its stutters. Its notes and form are unchanged.
-  - The Redline, Glass Garden and Candy Fault books take the clearest of several takes line by line. Lines that every take misheard now read their words slower on the same notes (a per-part `speed` in `songs.py`).
-  - Whisper's word recall on the full mixes rose from 0.14-0.63 to 0.51-0.83 (Glass Garden 0.14 to 0.72, Window Seat 0.39 to 0.66, Kite Season 0.43 to 0.83).
-- The `list_packs` detail for the studio pack no longer cuts off mid-JSON. It lists every vocal book's slices to the millisecond and has room for all of them.
+- Demo vocals sit ahead of competing instruments and vocal layers, with drier
+  words, cleaner lead inserts and headroom before long-song rendering. The mix
+  pass preserves authored notes, lyrics, timing and vocal sample files. Newly
+  generated stock takes use a separately calibrated balance.
+
 - **Long one-shot samples no longer cut out partway through songs over 45 seconds.** Those songs render in windows of about 20 seconds, and a window only reached 8 seconds back for notes still sounding. A one-shot hit rings its whole sample however short its note, so a 15-second vocal phrase that started more than 8 seconds before a seam fell silent at the seam until the next hit. Windows now reach back to any sample still playing.
+
 - **Pressing play no longer runs the playhead ahead of silent audio.** The transport used to start its clock at once while the engine rendered its first windows (2 to 8 seconds cold on the demos), so the playhead moved through silence and the song's opening was skipped. The clock now holds until the first frame is heard, and the engine prewarms that first window while stopped. A prewarmed play sounds within about 0.1 s.
 
 - **`sing.py` speech mode now times a take's words by aligning it to Kokoro.** On clips of two or three seconds, whisper's word offsets drifted by whole seconds. Sometimes the last word ran to 30 seconds, and every earlier word fell to zero length. Kokoro now says the same words, and DTW over MFCCs maps its word times onto the take. Run against a second Kokoro voice, the aligned book misses words at almost the same rate as Kokoro singing directly (0.19 against 0.175).

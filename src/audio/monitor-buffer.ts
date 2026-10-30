@@ -7,6 +7,20 @@ export class MonitorBuffer {
   public get bytes(): number {
     return this.retained;
   }
+  /** Retained coverage only; gaps and evicted windows never count as ready. */
+  public ranges(): readonly Readonly<{ fromFrame: number; toFrame: number }>[] {
+    const ranges: { fromFrame: number; toFrame: number }[] = [];
+    for (const [start, pcm] of [...this.chunks].sort((a, b) => a[0] - b[0])) {
+      const fromFrame = Math.max(0, start);
+      const toFrame = Math.min(this.loopFrames, start + pcm.length / 2);
+      if (toFrame <= fromFrame) continue;
+      const previous = ranges.at(-1);
+      if (previous && fromFrame <= previous.toFrame)
+        previous.toFrame = Math.max(previous.toFrame, toFrame);
+      else ranges.push({ fromFrame, toFrame });
+    }
+    return Object.freeze(ranges.map((range) => Object.freeze(range)));
+  }
   constructor(
     readonly loopFrames: number,
     readonly maxBytes = 16 * 1024 * 1024,

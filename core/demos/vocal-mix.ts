@@ -35,6 +35,14 @@ function normalizedStock(lead: TrackInput) {
   );
 }
 
+/** Local normalized books retain the stock generation path's master conditioning. */
+export function hasNormalizedStockVocals(
+  tracks: readonly TrackInput[],
+): boolean {
+  const lead = vocalLead(tracks);
+  return !!lead && normalizedStock(lead);
+}
+
 /** Fixed monitoring restores only the common pre-window attenuation; exports solve their target. */
 export function vocalMonitorGain(tracks: readonly TrackInput[]): number {
   const lead = vocalLead(tracks);

@@ -109,8 +109,11 @@ const screens = (ws: readonly Window[]) =>
 
 async function ready(w: Window): Promise<void> {
   await until(
-    // DAWG_AI=0: no agent, so the command placeholder shows instead of NOW.
-    () => w.vt.text().includes("try: ") && /rev \d+/.test(header(w)),
+    // Offline studio is ready when its real prompt and revision header are drawn.
+    () =>
+      w.vt.lines().some((line) => /^│ › /.test(line)) &&
+      w.vt.text().includes("configure a model to generate") &&
+      /rev \d+/.test(header(w)),
     `${w.name} prompt`,
     () => w.vt.text(),
   );

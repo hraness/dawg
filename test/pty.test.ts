@@ -235,9 +235,9 @@ test.skipIf(!supported)(
     const t = await launch(100, 30, {}, []);
     await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     expect(t.vt.text()).toContain("created .dawg/ · add it to .gitignore");
-    expect(t.vt.text()).toMatch(
-      /main · empty · [^\n]*space play · ctrl-p play mode · ctrl-k menu/,
-    );
+    expect(t.vt.lines()[0]).toMatch(/· main\b/);
+    expect(t.vt.text()).toContain("Tracks");
+    expect(t.vt.text()).toContain("describe a song, a change, or a reference");
 
     // A drum command on a melodic track is a failure, drawn in the error role.
     await t.send("pattern kick 0 1\r");
@@ -415,10 +415,11 @@ test.skipIf(!supported)(
     // No sign-in nag in the header: the first session's card names /login.
     expect(t.vt.text()).not.toContain("dawg login");
     expect(t.vt.text()).not.toContain(" NOW ");
-    // Commands only: the empty state and placeholder never ask for prose.
+    // Offline playback stays available, with a clear generation setup hint.
     expect(t.vt.text()).not.toContain("type a request");
     expect(t.vt.text()).not.toContain("describe a");
-    expect(t.vt.text()).toContain("try: ");
+    expect(t.vt.text()).toContain("play your saved song");
+    expect(t.vt.text()).toContain("configure a model to generate");
     // A sentence that starts with a command verb is a request, not a usage
     // error: offline it says "unrecognized", never the add syntax.
     await t.send("add a walking bass in A minor\r");

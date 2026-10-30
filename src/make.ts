@@ -47,7 +47,7 @@ import { systemRunner } from "./auth/runner.ts";
 import { MAX_OUTPUT_TOKENS } from "./agent/gateway.ts";
 import { resolveModelChoice } from "./agent/models.ts";
 import { apiClient } from "./agent/provider.ts";
-import type { TrackScore } from "../core/score.ts";
+import { updateTrack, type TrackScore } from "../core/score.ts";
 import {
   findLocalModel,
   isLocalModel,
@@ -55,9 +55,14 @@ import {
   stopLocalServers,
 } from "./agent/local.ts";
 import { runRenderCommand } from "./render.ts";
+import { readSongChart, instrumentalChart } from "./studio/song.ts";
+import {
+  runOriginalSong,
+  type OriginalSongOptions,
+} from "./workflows/original.ts";
 
 export const MAKE_USAGE =
-  'usage: dawg make "<brief>" [--model <alias>] [--out <song.track.json>] [--wav <song.wav>] [--sheet <chart.json>] [--rounds <1-6>] [--effort low|medium|high] · dawg make "<brief>" --local|--seed <n> · dawg make "<brief>" --classic · dawg make --seed <n> · dawg make --from <chart-card-or-sheet.json> [--out …] [--wav …]';
+  'usage: dawg make "<brief>" [--voice bf_emma|synth | --instrumental] [--model <alias>] [--out <song.track.json>] [--wav <song.wav>] [--sheet <chart.json>] [--rounds <1-6>] [--effort low|medium|high] · dawg make "<brief>" --local|--seed <n> · dawg make "<brief>" --classic · dawg make --seed <n> · dawg make --from <chart-card-or-sheet.json> [--out …] [--wav …]';
 
 /** The model that writes charts unless `--model` names another. */
 export const CHART_MODEL = "opus-5.5";
@@ -80,8 +85,16 @@ const VALUE = new Set([
   "--seed",
   "--model",
   "--effort",
+  "--voice",
 ]);
-const FLAGS = new Set(["--classic", "--local"]);
+const FLAGS = new Set(["--classic", "--local", "--instrumental"]);
+
+export type MakeServices = Readonly<{
+  createChart?: (brief: string, signal?: AbortSignal) => Promise<Chart>;
+  coordinator?: OriginalSongOptions["coordinator"];
+  vocal?: OriginalSongOptions["vocal"];
+  qualify?: OriginalSongOptions["qualify"];
+}>;
 
 const slug = (title: string) =>
   title
@@ -96,6 +109,7 @@ export async function runMakeCommand(
   stderr: Output,
   signal?: AbortSignal,
   auth?: AuthEnv,
+  services?: MakeServices,
 ): Promise<number> {
   const rest = argv.slice(1);
   if (rest.includes("--help") || rest.includes("-h")) {
@@ -123,6 +137,15 @@ export async function runMakeCommand(
     } else words.push(arg);
   }
   const brief = words.join(" ").trim();
+  const voice = options.get("--voice");
+  if (voice !== undefined && voice !== "bf_emma" && voice !== "synth") {
+    stderr.write("dawg make: --voice takes bf_emma or synth\n");
+    return 2;
+  }
+  if (voice !== undefined && options.has("--instrumental")) {
+    stderr.write("dawg make: choose --voice or --instrumental\n");
+    return 2;
+  }
   const from = options.get("--from");
   const seedArg = options.get("--seed");
   const seed = seedArg === undefined ? undefined : Number(seedArg);
@@ -144,6 +167,12 @@ export async function runMakeCommand(
     !options.has("--local") &&
     seed === undefined &&
     (brief !== "" || (from !== undefined && (await isChart(workspace, from))));
+  if (!chartPath && voice === "bf_emma") {
+    stderr.write(
+      "dawg make: stock bf_emma uses the authored chart path; seed/local/classic are explicitly built-in synth drafts\n",
+    );
+    return 2;
+  }
   const rounds = Number(options.get("--rounds") ?? (chartPath ? 4 : 3));
   if (!Number.isInteger(rounds) || rounds < 1 || rounds > 6) {
     stderr.write("dawg make: --rounds takes 1 to 6\n");
@@ -173,6 +202,7 @@ export async function runMakeCommand(
       stderr,
       signal,
       auth: auth ?? defaultAuthEnv(systemRunner),
+      services,
     });
   if (!options.has("--classic"))
     return makeGenome({
@@ -256,6 +286,10 @@ export async function runMakeCommand(
     }
   }
 
+  if (options.has("--instrumental")) score = withoutSingers(score);
+  stdout.write(
+    `${options.has("--instrumental") ? "instrumental" : "legacy built-in synth"} draft · no stock vocal inference\n`,
+  );
   const out = resolve(
     workspace,
     options.get("--out") ?? `${slug(sheet.title)}.track.json`,
@@ -377,6 +411,11 @@ async function makeGenome(run: GenomeRun): Promise<number> {
       stopLocalServers();
     }
   }
+  if (options.has("--instrumental"))
+    song = { ...song, score: withoutSingers(song.score) };
+  stdout.write(
+    `${options.has("--instrumental") ? "instrumental" : "seeded built-in synth"} draft · no stock vocal inference\n`,
+  );
   const out = resolve(
     workspace,
     options.get("--out") ?? `${slug(song.title)}.track.json`,
@@ -407,7 +446,8 @@ async function makeGenome(run: GenomeRun): Promise<number> {
   return 0;
 }
 
-type ChartRun = Omit<GenomeRun, "seed"> & Readonly<{ auth: AuthEnv }>;
+type ChartRun = Omit<GenomeRun, "seed"> &
+  Readonly<{ auth: AuthEnv; services?: MakeServices }>;
 
 async function isChart(workspace: string, from: string): Promise<boolean> {
   try {
@@ -418,125 +458,159 @@ async function isChart(workspace: string, from: string): Promise<boolean> {
   }
 }
 
+function withoutSingers(score: TrackScore): TrackScore {
+  for (const track of score.tracks)
+    if (track.instrument === "vocal" || track.vocoder)
+      score = updateTrack(score, track.id, { muted: true });
+  return score;
+}
+
 /** The chart path: Opus writes and revises a chart, or a saved one replays. */
 async function makeChart(run: ChartRun): Promise<number> {
-  const { brief, from, rounds, options, workspace, stdout, stderr, signal } =
-    run;
-  let chart: Chart;
-  let score: TrackScore;
-  if (from) {
-    chart = JSON.parse(await readFile(resolve(workspace, from), "utf8"));
-    const problems = checkChart(chart);
-    if (problems.length) {
-      stderr.write(
-        `dawg make: ${from} is not a valid chart\n  - ${problems.slice(0, 8).join("\n  - ")}\n`,
+  const { from, options, workspace, stdout, stderr, signal, services } = run;
+  try {
+    if (
+      from &&
+      options.get("--out") &&
+      resolve(workspace, from) === resolve(workspace, options.get("--out")!)
+    )
+      throw new Error("score output must not overwrite its authored chart");
+    const authored = from
+      ? await readSongChart(from, {
+          projectRoot: workspace,
+          trackSlug: "song",
+          runner: systemRunner,
+        })
+      : undefined;
+    const voice = options.has("--instrumental")
+      ? "instrumental"
+      : (options.get("--voice") ?? "bf_emma");
+    let score: TrackScore;
+    let out: string;
+    if (voice === "bf_emma") {
+      const result = await runOriginalSong({
+        workspace,
+        brief: run.brief,
+        chart: authored,
+        chartSource: from,
+        createChart: (stageSignal) => writeNewChart(run, stageSignal),
+        output: options.get("--out"),
+        chartOutput: options.get("--sheet"),
+        signal,
+        coordinator: services?.coordinator,
+        vocal: services?.vocal,
+        qualify: services?.qualify,
+        onProgress: (message) => stdout.write(`${message}\n`),
+      });
+      score = result.score;
+      out = resolve(workspace, result.outputPath);
+      stdout.write(`stock bf_emma · ${score.bars} bars → ${out}\n`);
+    } else {
+      const chart = authored ?? (await writeNewChart(run, signal));
+      score =
+        voice === "instrumental"
+          ? instrumentalChart(chart)
+          : performChart(chart).score;
+      out = resolve(
+        workspace,
+        options.get("--out") ?? `${slug(chart.title)}.track.json`,
       );
-      return 1;
-    }
-    try {
-      score = performChart(chart).score;
-    } catch (error) {
-      stderr.write(`dawg make: ${(error as Error).message.slice(0, 400)}\n`);
-      return 1;
-    }
-  } else {
-    const gateway = await resolveGatewayKey(run.auth);
-    const service = gateway ? "gateway" : "openrouter";
-    const key = gateway ?? (await resolveOpenRouterKey(run.auth));
-    if (!key) {
-      stderr.write(
-        "dawg make: writing a song needs an AI Gateway or OpenRouter key; run `dawg model key gateway`, or use --local for the local model\n",
-      );
-      return 1;
-    }
-    const alias = options.get("--model") ?? CHART_MODEL;
-    const model = resolveModelChoice(service, alias);
-    if (!model) {
-      stderr.write(`dawg make: unknown model ${alias.slice(0, 40)}\n`);
-      return 2;
-    }
-    const client = apiClient({
-      kind: service,
-      choice: service,
-      apiKey: key.key,
-      source: key.source,
-      modelId: model,
-    });
-    stdout.write(`writing "${brief}" with ${model} (${service})\n`);
-    try {
-      const song = await writeChart(
-        brief,
-        async (turns: readonly ChatTurn[]) => {
-          let text = "";
-          let usage;
-          for await (const event of client.stream(
-            {
-              model,
-              messages: turns,
-              maxTokens: Math.min(32_000, MAX_OUTPUT_TOKENS),
-              maxResponseBytes: 4_000_000,
-              effort: (options.get("--effort") ??
-                CHART_EFFORT) as (typeof EFFORTS)[number],
-            },
-            signal,
-          )) {
-            if (event.type === "text") text += event.delta;
-            else if (event.type === "usage") usage = event;
-          }
-          return { text, ...(usage ? { usage } : {}) };
-        },
-        {
-          rounds,
-          onDraft: (d) =>
-            stdout.write(
-              `  round ${d.round}: ${d.problems.length ? `${d.problems.length} to fix` : "clean"} · $${d.costUsd.toFixed(2)} · ${(d.ms / 1000).toFixed(0)} s${d.problems.length ? `\n    - ${d.problems.slice(0, 4).join("\n    - ")}` : ""}\n`,
-            ),
-        },
-      );
-      chart = song.chart;
-      score = song.score;
-      if (song.stopped)
-        stderr.write(`  ${song.stopped}; kept the best draft\n`);
+      await writeFile(out, encodeLoop(score), "utf8");
       stdout.write(
-        `  cost $${song.costUsd.toFixed(2)} · ${song.inputTokens} in (${song.cachedInputTokens} cached) · ${song.outputTokens} out\n`,
+        `"${chart.title}" · ${chart.key} ${chart.mode} · ${chart.bpm} bpm · ${score.bars} bars → ${out} · ${voice === "instrumental" ? "instrumental draft" : "built-in synth draft; no stock vocal take"}\n`,
       );
-      if (song.problems.length)
-        stdout.write(
-          `  still to improve:\n  - ${song.problems.slice(0, 5).join("\n  - ")}\n`,
+      const sheetOut = options.get("--sheet");
+      if (sheetOut && !from) {
+        await writeFile(
+          resolve(workspace, sheetOut),
+          `${JSON.stringify(chart, null, 2)}\n`,
+          "utf8",
         );
-    } catch (error) {
-      stderr.write(`dawg make: ${(error as Error).message.slice(0, 400)}\n`);
-      return 1;
+        stdout.write(
+          `chart → ${resolve(workspace, sheetOut)} (replay with --from)\n`,
+        );
+      }
     }
+    const wav = options.get("--wav");
+    return wav
+      ? runRenderCommand(
+          ["render", wav, "--import", out],
+          workspace,
+          stdout,
+          stderr,
+        )
+      : 0;
+  } catch (error) {
+    stderr.write(
+      `dawg make: ${error instanceof Error ? error.message.slice(0, 4_000) : "song generation failed"}\n`,
+    );
+    return signal?.aborted ? 130 : 1;
   }
-  const out = resolve(
-    workspace,
-    options.get("--out") ?? `${slug(chart.title)}.track.json`,
+}
+
+async function writeNewChart(
+  run: ChartRun,
+  signal?: AbortSignal,
+): Promise<Chart> {
+  if (run.services?.createChart)
+    return run.services.createChart(run.brief, signal);
+  const gateway = await resolveGatewayKey(run.auth);
+  const service = gateway ? "gateway" : "openrouter";
+  const key = gateway ?? (await resolveOpenRouterKey(run.auth));
+  if (!key)
+    throw new Error(
+      "writing a song needs an AI Gateway or OpenRouter key; run `dawg model key gateway`, or use --local for the local model",
+    );
+  const alias = run.options.get("--model") ?? CHART_MODEL;
+  const model = resolveModelChoice(service, alias);
+  if (!model) throw new Error(`unknown model ${alias.slice(0, 40)}`);
+  const client = apiClient({
+    kind: service,
+    choice: service,
+    apiKey: key.key,
+    source: key.source,
+    modelId: model,
+  });
+  run.stdout.write(`writing "${run.brief}" with ${model} (${service})\n`);
+  const song = await writeChart(
+    run.brief,
+    async (turns: readonly ChatTurn[]) => {
+      let text = "";
+      let usage;
+      for await (const event of client.stream(
+        {
+          model,
+          messages: turns,
+          maxTokens: Math.min(32_000, MAX_OUTPUT_TOKENS),
+          maxResponseBytes: 4_000_000,
+          effort: (run.options.get("--effort") ??
+            CHART_EFFORT) as (typeof EFFORTS)[number],
+        },
+        signal,
+      )) {
+        if (event.type === "text") text += event.delta;
+        else if (event.type === "usage") usage = event;
+      }
+      return { text, ...(usage ? { usage } : {}) };
+    },
+    {
+      rounds: run.rounds,
+      onDraft: (draft) =>
+        run.stdout.write(
+          `  round ${draft.round}: ${draft.problems.length ? `${draft.problems.length} to fix` : "clean"} · $${draft.costUsd.toFixed(2)} · ${(draft.ms / 1000).toFixed(0)} s${draft.problems.length ? `\n    - ${draft.problems.slice(0, 4).join("\n    - ")}` : ""}\n`,
+        ),
+    },
   );
-  await writeFile(out, encodeLoop(score), "utf8");
-  stdout.write(
-    `"${chart.title}" · ${chart.key} ${chart.mode} · ${chart.bpm} bpm · ${score.bars} bars → ${out}\n`,
+  if (song.stopped)
+    run.stderr.write(`  ${song.stopped}; kept the best draft\n`);
+  run.stdout.write(
+    `  cost $${song.costUsd.toFixed(2)} · ${song.inputTokens} in (${song.cachedInputTokens} cached) · ${song.outputTokens} out\n`,
   );
-  const sheetOut = options.get("--sheet");
-  if (sheetOut && !from) {
-    await writeFile(
-      resolve(workspace, sheetOut),
-      `${JSON.stringify(chart, null, 2)}\n`,
-      "utf8",
+  if (song.problems.length)
+    run.stdout.write(
+      `  still to improve:\n  - ${song.problems.slice(0, 5).join("\n  - ")}\n`,
     );
-    stdout.write(
-      `chart → ${resolve(workspace, sheetOut)} (replay with --from)\n`,
-    );
-  }
-  const wav = options.get("--wav");
-  if (wav)
-    return runRenderCommand(
-      ["render", wav, "--import", out],
-      workspace,
-      stdout,
-      stderr,
-    );
-  return 0;
+  return song.chart;
 }
 
 /** Options passed through when a --from file turns out to be a classic sheet. */

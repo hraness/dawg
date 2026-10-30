@@ -1,5 +1,5 @@
 /**
- * Play mode end to end: Ctrl-P enters, keys record into the focused track
+ * Play mode end to end: /play on enters, keys record into the focused track
  * through the session, Esc leaves and normal typing works again.
  */
 import { expect, test } from "bun:test";
@@ -48,7 +48,7 @@ test.skipIf(!supported)(
         "count-in",
       );
 
-      await t.send("\u0010");
+      await t.send("/play on\r");
       // Bass sits an octave low; the keyboard shows the keys, C2 under A.
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
       await t.until(() => t.vt.text().includes("oct C2–F3"), "keyboard");
@@ -121,7 +121,7 @@ test.skipIf(!supported)(
         () => t.vt.text().includes("count-in · 0 bars"),
         "count-in",
       );
-      await t.send("\u0010");
+      await t.send("/play on\r");
       // A keys track defaults to auto chords; each key names its chord.
       await t.until(() => t.vt.text().includes("AUTO C major"), "auto header");
       expect(t.vt.text()).toMatch(/^ C +Dm +Em +F +G +Am +Bdim /m);
@@ -171,7 +171,7 @@ test.skipIf(!supported)(
     const t = await launch(120, 28, {}, ["--track", "keys"]);
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("1 dim"), "legend");
       const style = (label: string) => {
         const y = t.vt.findRow("1 dim");
@@ -217,7 +217,7 @@ test.skipIf(!supported)(
         await t.send(`${line}\r`);
         await t.until(() => t.vt.text().includes(seen), line);
       }
-      await t.send("\u0014"); // Ctrl-T: TAPE
+      await t.send("/tape on\r"); // Explicit manual TAPE editor
       await t.until(() => t.vt.text().includes(" record "), "tape button");
       {
         // The footer button: on the keyboard `r` types into the prompt.

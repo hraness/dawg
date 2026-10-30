@@ -41,17 +41,14 @@ test("the animated screens keep their frames", () => {
   }
 });
 
-test("the README's highway screen is the committed capture", () => {
+test("the README describes the default observer and following piano roll", () => {
   const readme = readFileSync(
     new URL("../../README.md", import.meta.url),
     "utf8",
   );
-  const screen = JSON.parse(
-    readFileSync(screenPath("highway"), "utf8"),
-  ) as ScreenFile;
-  expect(readme).toContain(
-    `\`\`\`text\n${screenText(screen).join("\n")}\n\`\`\``,
-  );
+  expect(readme).toContain("Its overview shows every track across the");
+  expect(readme).toContain("a horizontal piano roll follows the notes");
+  expect(readme).toContain("Pause and seek stay under your control");
 });
 
 test.skipIf(!supported)(

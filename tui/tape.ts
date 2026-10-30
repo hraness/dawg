@@ -43,6 +43,8 @@ export type TapeZoom = "half" | "beat" | "bar";
 export const TAPE_ZOOMS: readonly TapeZoom[] = ["bar", "beat", "half"];
 
 export type TapeView = Readonly<{
+  /** Read-only song overview: retain track rendering, omit DAW editing controls. */
+  observer?: boolean;
   bars: number;
   /** The bar (0-based) each cell belongs to, in order. */
   cellBars: readonly number[];
@@ -135,6 +137,7 @@ export function paintTape(
   options: TapePaintOptions,
 ): TapeLayout {
   const { theme, unicode } = options;
+  const footerRows = view.observer ? 1 : FOOTER_ROWS;
   const roles = theme.roles;
   const digits = String(view.rows.length).length;
   const badgeWidth = rect.width >= 80 ? 4 : 2;
@@ -243,7 +246,7 @@ export function paintTape(
   y += 1;
 
   // Sections: `▀name▀▀▀`; the looped one reversed; a form repeat `░name░`.
-  if (y < bottom - FOOTER_ROWS - 1) {
+  if (y < bottom - footerRows - 1) {
     buffer.text(rect.x, y, " sect", roles.faint);
     const sectionAt = (cell: number): TapeSection | undefined => {
       const bar = cellBar(cell);
@@ -311,7 +314,7 @@ export function paintTape(
   }
 
   // Tempo marks, only when the tempo changes.
-  if (view.tempo.length > 0 && y < bottom - FOOTER_ROWS - 1) {
+  if (view.tempo.length > 0 && y < bottom - footerRows - 1) {
     buffer.text(rect.x, y, " tempo", roles.faint);
     for (const mark of view.tempo) {
       const at = mark.cell - firstCell;
@@ -328,7 +331,7 @@ export function paintTape(
 
   // Track rows.
   const rowsY = y;
-  const rowRoom = Math.max(0, bottom - FOOTER_ROWS - y);
+  const rowRoom = Math.max(0, bottom - footerRows - y);
   const firstRow = tapeFirstRow(view, rowRoom);
   const levels = unicode ? LEVELS : ASCII_LEVELS;
   const visible = view.rows.slice(firstRow, firstRow + rowRoom);
@@ -403,12 +406,18 @@ export function paintTape(
         ch === "●" || ch === "*" ? roles.error : { ...roles.muted, dim: true },
       ),
     );
-    options.hits?.add(rect.x, y, rect.width, 1, {
-      kind: "tape-row",
-      row: index,
-      left,
-      firstCell,
-    });
+    if (view.observer)
+      options.hits?.add(rect.x, y, rect.width, 1, {
+        kind: "command",
+        command: `/view ${row.id}`,
+      });
+    else
+      options.hits?.add(rect.x, y, rect.width, 1, {
+        kind: "tape-row",
+        row: index,
+        left,
+        firstCell,
+      });
     // Semantic state has a letter as well as colour. M/S are buttons, so
     // a mix change does not require leaving the arrangement or its range.
     const badges = [
@@ -429,16 +438,35 @@ export function paintTape(
         badge.active ? badge.text : "·",
         badge.active ? (index < 2 ? roles.warning : roles.track) : roles.faint,
       );
-      if (badge.command)
+      if (badge.command && !view.observer)
         options.hits?.add(x, y, 1, 1, {
           kind: "command",
           command: badge.command,
         });
-      else if (index === 1 && focused)
+      else if (index === 1 && focused && !view.observer)
         options.hits?.add(x, y, 1, 1, { kind: "tape-key", key: "H" });
     });
     y += 1;
   });
+
+  if (view.observer) {
+    if (bottom > rowsY)
+      buffer.text(
+        rect.x + 1,
+        bottom - 1,
+        truncate(view.hint, rect.width - 2),
+        roles.muted,
+      );
+    return {
+      rulerY,
+      firstCell,
+      cells,
+      firstRow,
+      rowsY,
+      rowCount: visible.length,
+      gutter,
+    };
+  }
 
   // Footer: range line with the clipboard chip, knob strip, gesture hints.
   const footerY = bottom - FOOTER_ROWS;

@@ -35,7 +35,7 @@ export async function GET(): Promise<Response> {
 
 ${productMessaging.long}
 
-dawg is free and MIT licensed, runs on macOS and Linux on Bun (1.3.14 or newer), and needs no account. Typed commands such as \`tempo 96\`, \`pattern kick 0 1 2 3\` or \`reverb 0.3\` edit the score directly; anything else goes to a streaming agent whose every tool call is checked before it commits as its own revision, so undo and redo work from any window. The agent types each command it runs into the prompt so the chat teaches the manual way.
+dawg is free and MIT licensed and runs on macOS and Linux on Bun (1.3.14 or newer). Its normal terminal surface is a player and chat. Describe the song or revision you want; the agent composes, arranges and generates vocals through checked tools. Musical progress and pending audio are shown separately. Saved songs play without an account, Python or network access. New generation and analysis use configured providers and optional local tools/models.
 
 ## Install
 
@@ -45,6 +45,12 @@ ${installLines}
 
 ## What ships
 
+- Tracks overview by default, with a horizontal piano roll following the track being written. Ctrl-P pins or unpins inspection; Ctrl-T returns to the overview. Page Up/Down inspect the horizontal range, and Follow returns to the writing cursor.
+- Playback starts with the first ready musical draft. A person's later pause or seek remains in control while generation continues.
+- Three bundled workflows: original-house, reference-study and recreate-source. House hyperpop originals use stock British bf_emma/Kokoro+WORLD singing. Reference work uses supplied or transcribed lyrics, retains the original vocal for comparison and reports timing, pitch, words and tone separately.
+- Project-local songs, vocal takes and resumable progress. Accepted voice takes are reused; fresh voice inference is not promised to produce identical bytes.
+- Nine complete editable original hyperpop demos, available offline through \`demo\`.
+- Optional advanced commands and editors remain available, including \`/play\` for keyboard recording, \`/patch\` for sound design and \`/showme on\` for command receipts.
 - Instruments: sine, piano, pluck, bass, saw, square, triangle, and a synthesized drum kit (kick, snare, clap, rim, tom, hat, openhat).
 - Per-track volume, pan, mute, solo, low-pass filter, ping-pong stereo delay, Freeverb-style reverb, and automation lanes for volume, pan, filter cutoff, resonance, delay feedback and delay mix.
 - Gapless playback through dawg's native audio sink (prebuilt for macOS and Linux, arm64 and x64; ffplay, SoX play or afplay as fallbacks); \`dawg render out.wav\` writes byte-identical stereo WAVs.
@@ -53,7 +59,7 @@ ${installLines}
 - Sessions name themselves from the music; /rename, /fork (numbered), /sessions and /resume.
 - Providers: \`dawg model key\` picks one: a Vercel AI Gateway key, OpenRouter (browser sign-in), or a Claude or ChatGPT/Codex subscription through xcb (https://xcb.sh). \`dawg model\` picks the model; the default is opus-5.5.
 - Patches (/patch): modular instruments and effects from nodes and cables, four macro knobs, eight built-ins, a user library and \`github:\` patches; \`patch()\` in song.ts.
-- TAPE (Ctrl-T): copy, move, loop and repeat ranges of bars.
+- Optional TAPE editor (\`/tape\`): copy, move, loop and repeat ranges of bars.
 - Panes: one song in several terminals, one transport, a letter per pane.
 - Themes default, high-contrast and mono; reduced motion; NO_COLOR.
 

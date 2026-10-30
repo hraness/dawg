@@ -30,7 +30,7 @@ writes the words and a seed draws the music, so each seed is a new song.
 
 - `demo` opens the song shelf · `demo search drop`
 - `demo info glass-garden` explains its arrangement and mix
-- `demo glass-garden` loads the song and opens TAPE, paused
+- `demo glass-garden` loads the song into the player overview, paused
 - `sample library` browses the bundled sounds
 - `sample chop soft-reboot-vox 8` slices a vocal book into a pattern
 
@@ -45,9 +45,9 @@ Use a `style` groove for a short backing loop to build on.
 
 ## Keys
 
-- Space plays in TAPE · Tab / Shift-Tab changes track
-- `,` / `.` changes scene · `-` / `=` zooms out / in
-- Click TAPE action labels to navigate · Esc returns to the prompt
+- Space plays or pauses · click a track to inspect its piano roll
+- Alt-Left / Alt-Right changes section · Page Up/Down inspects a track
+- Ctrl-P pins/unpins · Ctrl-T shows all tracks · Ctrl-O opens chat
 - Ctrl-Z restores the song before loading
 
 ## Next

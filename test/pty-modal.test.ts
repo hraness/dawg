@@ -105,7 +105,7 @@ test.skipIf(!supported)(
       await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
 
       // Play mode on the modal track: arm, play a key, stop.
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play header");
       if (t.vt.text().includes("AUTO")) {
         await t.send("q");

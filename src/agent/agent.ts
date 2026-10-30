@@ -12,6 +12,7 @@ import {
 } from "../../core/score.ts";
 import { CHORD_PROCESS } from "../../core/chords.ts";
 import type { MediaServices } from "../media/types.ts";
+import type { WorkflowHost } from "../workflows/tools.ts";
 import type { PackStore } from "../audio/packs.ts";
 import type { PreviewHost } from "./preview-tool.ts";
 import { compositionBrief } from "./brief.ts";
@@ -62,16 +63,16 @@ import {
 
 /** Hard ceilings for one agent turn. Callers may only tighten them. */
 export const AGENT_LIMITS = Object.freeze({
-  maxSteps: 8,
-  maxToolCalls: 32,
+  maxSteps: 24,
+  maxToolCalls: 64,
   // Raw SSE bytes, framing included: each streamed token costs ~150-200
   // bytes, so reasoning models need room beyond the visible reply.
   maxResponseBytes: 1024 * 1024,
   maxToolArgumentBytes: 32 * 1024,
-  timeoutMs: 90_000,
+  timeoutMs: 240_000,
   maxTextChars: 4_000,
   /** Bytes of request bodies sent over a whole turn, all steps together. */
-  maxRequestBytes: 512 * 1024,
+  maxRequestBytes: 4 * 1024 * 1024,
   /** Tool results older than this many steps are sent as one-line summaries. */
   fullToolResultSteps: 2,
   maxSummaryChars: 160,
@@ -250,6 +251,7 @@ export type AgentHost = Readonly<{
   web?: WebHost;
   /** Runner and env for the media tools (root and slug come from `workspace`); absent → rejected. */
   media?: MediaServices;
+  workflows?: WorkflowHost;
   /** Sample packs for the pack tools; default the user cache. */
   packs?: PackStore;
   /** How preview_sound renders and plays (the TUI plays it once). */
@@ -324,6 +326,9 @@ export const DISPATCH_PROMPT =
 export const MEDIA_PROMPT =
   "Media tools (download_audio, split_stems, analyze_audio, transcribe_notes, import_sample, make_wavetable, transcribe_lyrics) work on files under tracks/<slug>/downloads/ and report project-relative paths; the brief's project tree lists what is already there (read_file reports a wav's type and size), so never download the same video twice. They can run for minutes, so call them one at a time and chain on their outputs (download → stems → analyze → notes). make_wavetable turns a download, stem or sample into tracks/<slug>/wavetables/<name>.wav and describes its sweep; play it with set_wavetable table <that path>.";
 
+export const STUDIO_PROMPT =
+  "The product is a song-generation and audio-rendering studio with a minimal player and chat. The listener watches track changes and a following horizontal piano roll; you own musical editing, effects and mix parameters. For a new song, read workflow_catalog original-house and its house/vocals/chart resources, create a durable job, and follow its stages. Our current style is the one versioned house-hyperpop profile; do not invent additional style presets. Author new words, hooks and forms. Commit a coherent instrumental region early and label vocals pending; playback starts automatically when a coherent draft is ready. sing_chart and generate_vocals sing the actual authored words with stock British bf_emma into immutable project-local assets; perform_chart attaches the accepted take. Do not silently substitute filler or claim unfinished vocals are ready. For a YouTube/audio-file recreation read recreate-source; preserve the source vocal for comparison and re-sing the actual transcribed or supplied lyrics with stock bf_emma. A production study uses reference-study. Only run the workflow the person requested. Keep accepted progress and artifact hashes in the job, record its current score revision and ready track regions before workflow_preview. Saved notes, ready assets, buffered PCM and audible changes are distinct facts. Respect pause, seek and pinned track inspection; never force playback back on after a listener pause. Keep all song output inside the user's project; generating a song never edits the app's demo catalog or release history. Prefer musical progress messages to command tutorials.";
+
 /**
  * Lets a model end the turn in the same response as its last tool calls,
  * which saves the summary-only round trip (about a third of a typical turn).
@@ -339,6 +344,7 @@ export const DONE_PROMPT =
  * file edits, which passed every eval run either way, end early.
  */
 export const CONTENT_TOOLS: ReadonlySet<string> = new Set([
+  "perform_chart",
   "add_notes",
   "update_notes",
   "remove_notes",
@@ -366,7 +372,8 @@ export function doneSummary(text: string): string | undefined {
 }
 
 export const AGENT_SYSTEM_PROMPT = [
-  "You are dawg, a loop composer inside a terminal music workstation.",
+  "You are dawg, the producer in an agent-driven song studio.",
+  STUDIO_PROMPT,
   "Edit the score only by calling the provided tools; every call is validated and applied immediately, and its result tells you the new revision.",
   'Times are in beats from the loop start (0-based), while musicians count from 1: in 4/4 "beats 2 and 4" are beats 1 and 3 of each bar here, "the and of 1" is 0.5, and bar n starts at (n-1)×beats per bar. Keep notes inside loopBeats unless you extend the loop first.',
   "Prefer a few well-formed calls (one add_notes call per track part) over many tiny ones.",
@@ -843,6 +850,9 @@ export const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   "fetch_url",
   "web_search",
   "download_audio",
+  "prepare_reference",
+  "recreate_reference_vocal",
+  "transcribe_lyrics",
 ]);
 
 /**
@@ -969,7 +979,7 @@ async function executeCallInner(
       event: appliedEvent(plan.summary, snapshot.revision),
     };
   }
-  if (plan.kind === "prepare") {
+  if (plan.kind === "prepare" || plan.kind === "prepare-replace") {
     try {
       plan = await plan.run({
         ...(context.host.packs ? { packs: context.host.packs } : {}),
@@ -1003,6 +1013,7 @@ async function executeCallInner(
       ...(context.host.preview ? { preview: context.host.preview } : {}),
       ...(context.host.media ? { media: context.host.media } : {}),
       ...(context.host.history ? { history: context.host.history } : {}),
+      ...(context.host.workflows ? { workflows: context.host.workflows } : {}),
       ...(context.turnId
         ? {
             turn: {
@@ -1036,7 +1047,9 @@ async function executeCallInner(
   }
   if (plan.kind === "media") {
     const media = context.host.media;
-    const workspace = context.host.workspace;
+    const workspace = context.host.workspace
+      ? await withReadRoots(context.host.workspace)
+      : undefined;
     if (!media || !workspace)
       return reject("media tools are unavailable in this host");
     // A child's outputs must stay in its task scope; only `audio` and `exec`
@@ -1073,6 +1086,7 @@ async function executeCallInner(
             }
           : {}),
         projectRoot: workspace.root,
+        ...(workspace.readRoots ? { readRoots: workspace.readRoots } : {}),
         trackSlug: focusedTrackSlug(context.host.snapshot()),
         signal: context.signal ?? new AbortController().signal,
         progress: (line) => {
@@ -1185,8 +1199,10 @@ async function executeCallInner(
   const replace = plan.kind === "replace";
   try {
     if (plan.kind === "replace") {
-      if (call.name !== "load_demo")
-        throw new Error("only a canonical demo may replace the score");
+      if (call.name !== "load_demo" && call.name !== "perform_chart")
+        throw new Error(
+          "only a canonical demo or validated authored chart may replace the score",
+        );
       next = scoreFromJSON(plan.next.toJSON());
     } else {
       const candidates = plan.operations;

@@ -11,7 +11,7 @@ maintainer credential touches a routine release.
 1. In a pull request, set the new `version` in `package.json` and add a
    `## <version>` section to `CHANGELOG.md`. The workflow copies that section
    onto the Release page.
-2. Merge the pull request once the required `check` passes.
+2. Merge the pull request once the required `check` and `site` checks pass.
 3. That is all. When Check passes on a `main` commit whose `package.json`
    version has no tag yet, `auto-tag.yml` creates the annotated tag
    `v<version>` (message `dawg <version>`) on that commit with the
@@ -118,7 +118,7 @@ fallback.
   merge.
 - Ruleset `Protect main delivery` on the default branch, with no bypass actors:
   blocks deletion and non-fast-forward pushes, requires a pull request (0
-  approvals), and requires the `check` status (not strict).
+  approvals), and requires the `check` and `site` statuses (not strict).
 - Ruleset `Immutable version tags` on `refs/tags/v*`, excluding nothing, with no
   bypass actors: blocks tag updates and deletions, so creating a tag is allowed.
 - Environment `npm-release`: `can_admins_bypass` false, no reviewers or wait

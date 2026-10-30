@@ -216,7 +216,7 @@ export const FEATURES: readonly Feature[] = [
     command: "/sessions",
     menu: "Project › session",
     tools: [],
-    agentWords: /session|fork|resume/,
+    agentWords: /(?:^|_)sessions?(?:_|$)|^(?:fork|resume)$/,
     sdk: ["cli:dawg sessions"],
     gap: {
       agent: "the agent works inside one session by design",

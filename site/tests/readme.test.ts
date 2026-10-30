@@ -1,6 +1,6 @@
 /**
  * The README and the site are one system: the README opens with the
- * registry's medium description, and its install commands name the version
+ * approved medium description, and its install commands name the version
  * in package.json, so a release bump cannot leave a stale tarball behind.
  */
 import { describe, expect, test } from "bun:test";
@@ -13,7 +13,7 @@ const repo = resolve(import.meta.dir, "..", "..");
 const readme = readFileSync(join(repo, "README.md"), "utf8");
 
 describe("README", () => {
-  test("opens with the registry description", () => {
+  test("opens with the site's approved product description", () => {
     const opener = readme.split("\n\n")[1]!.replace(/\s+/gu, " ").trim();
     expect(opener).toBe(productMessaging.medium);
   });

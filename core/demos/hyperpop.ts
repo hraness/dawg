@@ -396,6 +396,12 @@ export type VoxBank = Pick<Book, "sample" | "root" | "syllables"> &
   Readonly<{
     lines?: Readonly<Record<string, number>>;
     heads?: readonly string[];
+    /** An immutable project-local vocal take, independent of the demo catalog. */
+    entry?: Readonly<{
+      src: string;
+      sha256: string;
+      slices: readonly Readonly<{ name: string; begin: number; end: number }>[];
+    }>;
   }>;
 
 /** A sung note: beat from the part's downbeat, pitch, beats, syllable. */
@@ -442,7 +448,9 @@ const CHOP_LEAD = 0.08;
 const frac = (x: number) => Math.round(x * 1e6) / 1e6;
 
 const sliceOf = (book: VoxBank, name: string) => {
-  const slice = bundledSample(book.sample)?.slices.find((s) => s.name === name);
+  const slice = (book.entry ?? bundledSample(book.sample))?.slices.find(
+    (s) => s.name === name,
+  );
   if (!slice) throw new Error(`demo slice missing: ${book.sample}/${name}`);
   const line = book.lines?.[name];
   const beats =
@@ -451,11 +459,17 @@ const sliceOf = (book: VoxBank, name: string) => {
   return { ...slice, beat: (slice.end - slice.begin) / span };
 };
 
+/** Pin local takes just as bundled samples are pinned, without publishing them. */
+const bookSampleRef = (book: VoxBank): SampleRef =>
+  book.entry
+    ? { src: book.entry.src, sha256: book.entry.sha256 }
+    : bundledSampleRef(book.sample);
+
 /** A syllable window: from just before its vowel to the end of its slot. */
 function syllable(book: VoxBank, name: string, extra: Partial<SampleRef> = {}) {
   const { begin, end, beat } = sliceOf(book, name);
   return {
-    ...bundledSampleRef(book.sample),
+    ...bookSampleRef(book),
     begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
     end,
     clip: 1,
@@ -472,7 +486,7 @@ const lineVoices = (book: VoxBank, extra: Partial<SampleRef> = {}) =>
       return [
         part,
         {
-          ...bundledSampleRef(book.sample),
+          ...bookSampleRef(book),
           begin,
           end,
           fadeTime: 0.05,
@@ -550,9 +564,19 @@ export function vocalTrack(
   return voice("vox", "Lead vocal", "sampler", level, {
     sampler: { mode: "oneshot", voices: lineVoices(book) },
     filter: { type: "hpf", cutoff: 170, resonance: 0 },
-    fx: LEAD_FX,
-    delay: VOCAL_ECHO,
-    reverb: VOCAL_VERB,
+    fx: book.entry
+      ? {
+          eq: { mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
+          compressor: LAYER_COMP,
+          duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
+        }
+      : LEAD_FX,
+    delay: book.entry
+      ? { beats: 0.75, feedback: 0.42, mix: 0.05, pingpong: true }
+      : VOCAL_ECHO,
+    reverb: book.entry
+      ? { mix: 0.16, size: 0.6, fade: 2.2, lowpass: 11000 }
+      : VOCAL_VERB,
     ...extra,
   });
 }
@@ -563,22 +587,28 @@ export function doubleTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("dbl", "Chipmunk double", "sampler", level * UNDER_WORDS, {
-    sampler: {
-      mode: "oneshot",
-      voices: lineVoices(book, { shift: 12, formant: 5 }),
+  return voice(
+    "dbl",
+    "Chipmunk double",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: {
+        mode: "oneshot",
+        voices: lineVoices(book, { shift: 12, formant: 5 }),
+      },
+      pan: 0.18,
+      filter: { type: "hpf", cutoff: 400, resonance: 0 },
+      fx: {
+        ...orbit,
+        eq: { high: 3, highfreq: 9000 },
+        chorus: { rate: 1.1, depth: 0.5, mix: 0.4 },
+      },
+      delay: { beats: 0.5, feedback: 0.3, mix: 0.12, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    pan: 0.18,
-    filter: { type: "hpf", cutoff: 400, resonance: 0 },
-    fx: {
-      ...orbit,
-      eq: { high: 3, highfreq: 9000 },
-      chorus: { rate: 1.1, depth: 0.5, mix: 0.4 },
-    },
-    delay: { beats: 0.5, feedback: 0.3, mix: 0.12, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /**
@@ -591,28 +621,34 @@ export function chopTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("chops", "Vocal chops", "sampler", level * UNDER_WORDS, {
-    sampler: {
-      mode: "keyed",
-      voices: Object.fromEntries(
-        book.syllables.map((name) => [
-          name,
-          { ...syllable(book, name), root: book.root, rr: "syllables" },
-        ]),
-      ),
+  return voice(
+    "chops",
+    "Vocal chops",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: {
+        mode: "keyed",
+        voices: Object.fromEntries(
+          book.syllables.map((name) => [
+            name,
+            { ...syllable(book, name), root: book.root, rr: "syllables" },
+          ]),
+        ),
+      },
+      pan: -0.08,
+      filter: { type: "hpf", cutoff: 280, resonance: 0 },
+      fx: {
+        ...orbit,
+        formant: { shift: 0, mix: 1 },
+        crush: { bits: 10, coarse: 1, mix: 0 },
+        eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+      },
+      delay: { beats: 0.75, feedback: 0.4, mix: 0.22, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    pan: -0.08,
-    filter: { type: "hpf", cutoff: 280, resonance: 0 },
-    fx: {
-      ...orbit,
-      formant: { shift: 0, mix: 1 },
-      crush: { bits: 10, coarse: 1, mix: 0 },
-      eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
-    },
-    delay: { beats: 0.75, feedback: 0.4, mix: 0.22, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /**
@@ -630,7 +666,7 @@ export function stutterTrack(
     voices[`s_${name}`] = syllable(book, name);
     const { begin, end } = sliceOf(book, name);
     voices[`r_${name}`] = {
-      ...bundledSampleRef(book.sample),
+      ...bookSampleRef(book),
       begin,
       end,
       speed: -1,
@@ -644,19 +680,25 @@ export function stutterTrack(
       clip: 1,
       fadeTime: 0.015,
     };
-  return voice("stut", "Glitch vox", "sampler", level * UNDER_WORDS, {
-    sampler: { mode: "oneshot", voices },
-    pan: 0.12,
-    filter: { type: "hpf", cutoff: 300, resonance: 0 },
-    fx: {
-      ...orbit,
-      crush: { bits: 8, coarse: 2, mix: 0 },
-      eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+  return voice(
+    "stut",
+    "Glitch vox",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: { mode: "oneshot", voices },
+      pan: 0.12,
+      filter: { type: "hpf", cutoff: 300, resonance: 0 },
+      fx: {
+        ...orbit,
+        crush: { bits: 8, coarse: 2, mix: 0 },
+        eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+      },
+      delay: { beats: 0.5, feedback: 0.4, mix: 0.1, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    delay: { beats: 0.5, feedback: 0.4, mix: 0.1, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /** The held vowel looped into a playable voice that doubles the lead. */
@@ -666,31 +708,37 @@ export function voiceLeadTrack(
   extra: Partial<TrackInput> = {},
 ): TrackInput {
   const { begin, end, beat } = sliceOf(book, "hold");
-  return voice("vlead", "Voice lead", "sampler", level * UNDER_WORDS, {
-    sampler: {
-      mode: "keyed",
-      voices: {
-        hold: {
-          ...bundledSampleRef(book.sample),
-          root: book.root,
-          begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
-          end,
-          loop: true,
-          loopBegin: frac(begin + (LEAD + 1) * beat),
-          loopEnd: frac(begin + (LEAD + 3) * beat),
-          fadeTime: 0.08,
-          fadeInTime: 0.006,
+  return voice(
+    "vlead",
+    "Voice lead",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: {
+        mode: "keyed",
+        voices: {
+          hold: {
+            ...bookSampleRef(book),
+            root: book.root,
+            begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
+            end,
+            loop: true,
+            loopBegin: frac(begin + (LEAD + 1) * beat),
+            loopEnd: frac(begin + (LEAD + 3) * beat),
+            fadeTime: 0.08,
+            fadeInTime: 0.006,
+          },
         },
       },
+      pan: -0.14,
+      glide: { time: 0.05, mode: "legato" },
+      filter: { type: "hpf", cutoff: 320, resonance: 0 },
+      fx: { ...orbit, eq: { high: 3, highfreq: 7000 } },
+      delay: { beats: 0.75, feedback: 0.3, mix: 0.14, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    pan: -0.14,
-    glide: { time: 0.05, mode: "legato" },
-    filter: { type: "hpf", cutoff: 320, resonance: 0 },
-    fx: { ...orbit, eq: { high: 3, highfreq: 7000 } },
-    delay: { beats: 0.75, feedback: 0.3, mix: 0.14, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /** The held vowel as a grain cloud, grains locked to 16ths and the chord. */
@@ -700,30 +748,36 @@ export function grainTrack(
   extra: Partial<TrackInput> = {},
 ): TrackInput {
   const { begin, end } = sliceOf(book, "hold");
-  return voice("vgrain", "Voice cloud", "granular", level * UNDER_WORDS, {
-    granular: {
-      src: bundledSampleRef(book.sample),
-      root: book.root,
-      begin: frac(begin + (end - begin) * 0.2),
-      end: frac(end - (end - begin) * 0.1),
-      grain: 0.09,
-      overlap: 3,
-      pos: 0.4,
-      scan: 0.2,
-      spread: 0.9,
-      spray: 0.05,
-      jitter: 0.2,
-      sync: "1/16",
-      quant: "chord",
-      attack: 0.3,
-      release: 0.9,
-      gain: 0.6,
+  return voice(
+    "vgrain",
+    "Voice cloud",
+    "granular",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      granular: {
+        src: bookSampleRef(book),
+        root: book.root,
+        begin: frac(begin + (end - begin) * 0.2),
+        end: frac(end - (end - begin) * 0.1),
+        grain: 0.09,
+        overlap: 3,
+        pos: 0.4,
+        scan: 0.2,
+        spread: 0.9,
+        spray: 0.05,
+        jitter: 0.2,
+        sync: "1/16",
+        quant: "chord",
+        attack: 0.3,
+        release: 0.9,
+        gain: 0.6,
+      },
+      filter: { type: "lpf", cutoff: 5200, resonance: 0.1 },
+      fx: { ...orbit, chorus: { rate: 0.3, depth: 0.6, mix: 0.4 } },
+      reverb: hall,
+      ...extra,
     },
-    filter: { type: "lpf", cutoff: 5200, resonance: 0.1 },
-    fx: { ...orbit, chorus: { rate: 0.3, depth: 0.6, mix: 0.4 } },
-    reverb: hall,
-    ...extra,
-  });
+  );
 }
 
 /**

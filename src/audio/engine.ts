@@ -317,6 +317,8 @@ export type AudioEngineOptions = Readonly<{
   respawnMs?: number;
   /** Player lifecycle notices worth a status line. */
   onStatus?: (status: AudioStatus) => void;
+  /** Observed score identity and PCM coverage; never a play-promise receipt. */
+  onReadiness?: (status: AudioReadiness) => void;
   /** Play-mode lead (default 60 ms; 15 ms on the native sink). */
   playLeadMs?: number;
   /**
@@ -335,6 +337,17 @@ export type AudioEngineOptions = Readonly<{
   choicePath?: string | false;
   /** Native sink device buffer frames (default 128; 0 = device default). */
   bufferFrames?: number;
+}>;
+
+export type AudioReadiness = Readonly<{
+  pendingScore: TrackScore | null;
+  /** The immutable score whose PCM has reached the output queue's heard head. */
+  audibleScore: TrackScore | null;
+  /** Coverage for audibleScore, in one loop's beats, excluding missing windows. */
+  buffered: readonly Readonly<{ fromBeat: number; toBeat: number }>[];
+  preparing: boolean;
+  buffering: boolean;
+  error?: string;
 }>;
 
 export type AudioStatus = Readonly<{
@@ -417,6 +430,7 @@ const wrapFrame = (frame: number, frames: number) =>
   ((frame % frames) + frames) % frames;
 
 type Loop = Readonly<{
+  score: TrackScore;
   monitor?: MonitorStream;
   pcm: Int16Array;
   frames: number;
@@ -574,6 +588,12 @@ export class AudioEngine {
   private monitorWanted = false;
   private readonly respawnMs: number;
   private readonly onStatus: ((status: AudioStatus) => void) | undefined;
+  private readonly onReadiness: ((status: AudioReadiness) => void) | undefined;
+  private requestedScore: TrackScore | null = null;
+  private heardLoop: Loop | undefined;
+  private heardTransitions: { frame: number; loop: Loop }[] = [];
+  private readinessError: string | undefined;
+  private lastReadiness: AudioReadiness | undefined;
   private fallback: LoopPlayer | undefined;
   private child: PlayerProcess | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -661,6 +681,7 @@ export class AudioEngine {
     this.customSpawn = options.spawn;
     this.respawnMs = options.respawnMs ?? 250;
     this.onStatus = options.onStatus;
+    this.onReadiness = options.onReadiness;
     this.progressive = options.progressive ?? true;
     this.renderer = new LoopRenderer({
       sampleRate: this.sampleRate,
@@ -679,6 +700,76 @@ export class AudioEngine {
   /** Whether a streaming player process is currently running. */
   public get streaming(): boolean {
     return this.child !== undefined;
+  }
+
+  /** Snapshot of actual playback, independent of accepted/written score state. */
+  public get readiness(): AudioReadiness {
+    if (this.child) {
+      const heard = this.written - this.queuedFrames();
+      while (
+        this.heardTransitions[0] &&
+        this.heardTransitions[0].frame < this.written &&
+        this.heardTransitions[0].frame < heard
+      )
+        this.heardLoop = this.heardTransitions.shift()!.loop;
+    }
+    const loop = this.child ? this.heardLoop : undefined;
+    const audibleScore = loop?.score ?? null;
+    const ranges = loop?.monitor
+      ? loop.monitor.buffer.ranges()
+      : loop
+        ? [{ fromFrame: 0, toFrame: loop.frames }]
+        : [];
+    const buffered = ranges.map((range) =>
+      Object.freeze({
+        fromBeat: beatOfFrame(loop!, range.fromFrame),
+        toBeat:
+          range.toFrame === loop!.frames
+            ? (loop!.map?.loopBeats ?? loop!.frames / loop!.framesPerBeat)
+            : beatOfFrame(loop!, range.toFrame),
+      }),
+    );
+    return Object.freeze({
+      pendingScore:
+        this.monitorWanted && this.requestedScore !== audibleScore
+          ? this.requestedScore
+          : null,
+      audibleScore,
+      buffered: Object.freeze(buffered),
+      preparing:
+        this.monitorWanted && (this.preparing || this.incoming !== undefined),
+      buffering: Boolean(
+        this.child && this.loop?.monitor && this.monitorBuffering,
+      ),
+      ...(this.readinessError ? { error: this.readinessError } : {}),
+    });
+  }
+
+  private emitReadiness(): void {
+    if (!this.onReadiness) return;
+    const next = this.readiness;
+    const previous = this.lastReadiness;
+    if (
+      previous &&
+      previous.pendingScore === next.pendingScore &&
+      previous.audibleScore === next.audibleScore &&
+      previous.preparing === next.preparing &&
+      previous.buffering === next.buffering &&
+      previous.error === next.error &&
+      previous.buffered.length === next.buffered.length &&
+      previous.buffered.every(
+        (range, index) =>
+          range.fromBeat === next.buffered[index]!.fromBeat &&
+          range.toBeat === next.buffered[index]!.toBeat,
+      )
+    )
+      return;
+    this.lastReadiness = next;
+    try {
+      this.onReadiness(next);
+    } catch {
+      /* an observer never interrupts audio */
+    }
   }
 
   /** Player processes started so far (gapless edits never add one). */
@@ -958,6 +1049,8 @@ export class AudioEngine {
     cued: boolean,
   ): Promise<void> {
     this.monitorWanted = true;
+    this.requestedScore = score;
+    this.readinessError = undefined;
     const revision = ++this.renderRevision;
     // A play supersedes prewarms not yet sent; one in flight runs on.
     this.warmNext = undefined;
@@ -982,6 +1075,7 @@ export class AudioEngine {
         generation: this.generation,
         waiters,
       };
+      this.emitReadiness();
       void this.drain();
     });
   }
@@ -1034,6 +1128,16 @@ export class AudioEngine {
             for (const waiter of request.waiters) waiter.resolve();
             continue;
           }
+          if (
+            request.generation === this.generation &&
+            request.revision === this.renderRevision
+          ) {
+            this.readinessError =
+              error instanceof Error
+                ? error.message.slice(0, 512)
+                : String(error).slice(0, 512);
+            this.emitReadiness();
+          }
           for (const waiter of request.waiters)
             waiter.reject(
               error instanceof Error ? error : new Error(String(error)),
@@ -1045,6 +1149,7 @@ export class AudioEngine {
       this.inflight = undefined;
       this.pendingLoop = undefined;
       this.prefetchMonitor();
+      this.emitReadiness();
     }
   }
 
@@ -1159,6 +1264,7 @@ export class AudioEngine {
       beatAfter(this.loop, beat, this.queuedFrames()),
     );
     this.prefetchMonitor();
+    this.emitReadiness();
   }
 
   /**
@@ -1188,6 +1294,11 @@ export class AudioEngine {
     this.renderRevision += 1;
     this.monitorBuffering = false;
     this.monitorWanted = false;
+    this.requestedScore = null;
+    this.heardLoop = undefined;
+    this.heardTransitions = [];
+    this.readinessError = undefined;
+    this.emitReadiness();
     this.pendingLoop = undefined;
     this.incoming = undefined;
     this.renderer.cancelPending();
@@ -1262,7 +1373,10 @@ export class AudioEngine {
         this.lead;
       remaining = due - this.written;
     }
-    if (remaining <= 0) return;
+    if (remaining <= 0) {
+      this.emitReadiness();
+      return;
+    }
     // Never queue more than one second at once, e.g. after a stalled loop.
     if (remaining > this.sampleRate) {
       const skipped = remaining - this.sampleRate;
@@ -1303,8 +1417,12 @@ export class AudioEngine {
       child.stdin.write(new Uint8Array(out.buffer));
       child.stdin.flush?.();
     } catch {
+      this.heardLoop = undefined;
+      this.heardTransitions = [];
+      this.readinessError = "Audio output write failed";
       /* the exit handler decides whether to restart */
     }
+    this.emitReadiness();
   }
 
   /** Equal-power gain of a fade-in `done` frames along (0 to 1). */
@@ -1428,6 +1546,7 @@ export class AudioEngine {
       : undefined;
     buffer?.add(render);
     return {
+      score,
       ...(buffer ? { monitor: { score, buffer } } : {}),
       pcm: render.monitor ? new Int16Array(0) : render.pcm,
       frames: render.monitor?.loopFrames ?? render.frames,
@@ -1442,6 +1561,7 @@ export class AudioEngine {
     const timeline = playbackTime(score);
     const map = transportMapFor(timeline);
     return {
+      score,
       monitor: { score, buffer: new MonitorBuffer(frames, MONITOR_BYTES) },
       pcm: new Int16Array(0),
       frames,
@@ -1830,15 +1950,24 @@ export class AudioEngine {
         // same missing frame, especially when a cache answers synchronously.
         if (!stream.buffer.at(frame))
           throw new Error("monitor render did not cover the requested frame");
-        if (this.monitorFailed?.stream === stream)
+        if (this.monitorFailed?.stream === stream) {
           this.monitorFailed = undefined;
+          this.readinessError = undefined;
+        }
         this.lastLoopPcm = render.pcm;
         this.checkStart(stream, render);
       })
       .catch((error: unknown) => {
         if (!(error instanceof RenderCancelledError))
           this.checkStart(stream, undefined, true);
-        if (!(error instanceof RenderCancelledError) && this.streamLive(stream))
+        if (
+          !(error instanceof RenderCancelledError) &&
+          this.streamLive(stream)
+        ) {
+          this.readinessError =
+            error instanceof Error
+              ? error.message.slice(0, 512)
+              : String(error).slice(0, 512);
           this.monitorFailed = {
             stream,
             atMs: this.now(),
@@ -1847,11 +1976,13 @@ export class AudioEngine {
                 ? this.monitorFailed.count
                 : 0) + 1,
           };
+        }
       })
       .finally(() => {
         this.fills = this.fills.filter((other) => other !== fill);
         this.trySwapIncoming();
         this.prefetchMonitor();
+        this.emitReadiness();
       });
   }
 
@@ -1895,6 +2026,14 @@ export class AudioEngine {
     }
     this.cursor = cursor;
     this.loop = next;
+    const frame = this.written + (previous && this.child ? this.fadeFrames : 0);
+    while (
+      this.heardTransitions.at(-1) &&
+      this.heardTransitions.at(-1)!.frame >= frame
+    )
+      this.heardTransitions.pop();
+    this.heardTransitions.push({ frame, loop: next });
+    this.emitReadiness();
   }
 
   /** The output device players open; undefined is the system default. */
@@ -2032,7 +2171,11 @@ export class AudioEngine {
     request?: PlayRequest,
   ): Promise<void> {
     const generation = this.generation;
-    if (!(await this.lock.acquire())) return;
+    if (!(await this.lock.acquire())) {
+      this.readinessError = "Playback is owned by another session";
+      this.emitReadiness();
+      return;
+    }
     if (
       generation !== this.generation ||
       (revision !== undefined && revision !== this.renderRevision)
@@ -2045,14 +2188,22 @@ export class AudioEngine {
       child = this.spawnPlayer(this.info.command ?? []);
     } catch {
       await this.lock.release();
+      if (generation === this.generation) {
+        this.readinessError = "Audio player could not start";
+        this.emitReadiness();
+      }
       return;
     }
     this.spawns += 1;
+    if (this.readinessError === "Audio output disconnected")
+      this.readinessError = undefined;
     this.child = child;
     this.loop = loop;
     this.endFades();
     this.startMs = this.now();
     this.written = 0;
+    this.heardLoop = undefined;
+    this.heardTransitions = loop ? [{ frame: 0, loop }] : [];
     this.cursor = loop
       ? this.frameForBeat(
           loop,
@@ -2084,6 +2235,10 @@ export class AudioEngine {
     const lost = this.deviceGone();
     this.child = undefined;
     this.loop = undefined;
+    this.heardLoop = undefined;
+    this.heardTransitions = [];
+    this.readinessError = "Audio output disconnected";
+    this.emitReadiness();
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     void this.lock.release().then(() => {

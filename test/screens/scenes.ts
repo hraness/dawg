@@ -59,27 +59,28 @@ async function song(
 }
 
 /**
- * Plays from the top for `beats` beats at the song tempo. With `framed`, a
- * frame is recorded every quarter beat for the site's animated screens.
+ * Plays from the top for `beats` beats at the song tempo. `frameBeats` samples
+ * the scene's visible motion: one beat for overview cells, quarter beats for a roll.
  */
 async function playFor(
   stage: Stage,
   pty: Pty,
   beats: number,
-  framed = false,
+  frameBeats?: 0.25 | 1,
 ): Promise<void> {
   await stage.type(pty, " ", 4);
   // The header, not any ▶ on screen: TAPE and the highway draw ▶ too.
   await stage.until(has(pty, /▶ \d+ BPM/), "playing", pty);
   // 121 BPM: a beat is ~496 ms; 25 ms steps keep the highway smooth.
-  if (!framed) {
+  if (frameBeats === undefined) {
     await stage.step(Math.round((beats * 496) / 25), 25);
     return;
   }
-  // A frame's capture moves the clock 50 ms, so 3 steps + capture ≈ ¼ beat.
-  for (let i = 0; i < beats * 4; i += 1) {
+  // Capture advances 50 ms; the remaining steps follow the visible beat scale.
+  const steps = Math.round((frameBeats * 496 - 50) / 25);
+  for (let i = 0; i < beats / frameBeats; i += 1) {
     await stage.frame(pty);
-    await stage.step(3, 25);
+    await stage.step(steps, 25);
   }
 }
 
@@ -87,19 +88,19 @@ export const SCENES: Scene[] = [
   {
     id: "highway",
     title:
-      "The highway: a deep-house song playing, notes streaming down to the hit line",
+      "Song studio overview: every track across a playing draft, with listening and chat controls",
     cols: 80,
     rows: 24,
     async run(stage, size) {
       const pty = await song(stage, size, ["--track", "bass"]);
-      await playFor(stage, pty, 6, true);
+      await playFor(stage, pty, 6, 1);
       return stage.capture(pty, "highway");
     },
   },
   {
     id: "tape",
     title:
-      "TAPE (Ctrl-T): every track across the bars, the loop, turning reels and ghost repeats of the form",
+      "TAPE (/tape on): every track across the bars, the loop, turning reels and ghost repeats of the form",
     cols: 80,
     rows: 24,
     async run(stage, size) {
@@ -107,7 +108,7 @@ export const SCENES: Scene[] = [
       await stage.type(pty, "form build drop*2\r");
       await stage.until(has(pty, "✓ form"), "form", pty);
       await stage.type(pty, "loop 5-6\r");
-      await stage.type(pty, CTRL("t"));
+      await stage.type(pty, "/tape on\r");
       await stage.until(has(pty, "range:"), "tape", pty);
       await playFor(stage, pty, 5);
       return stage.capture(pty, "tape");
@@ -116,32 +117,46 @@ export const SCENES: Scene[] = [
   {
     id: "hero",
     title:
-      "dawg playing a four-track deep-house song while the agent types its next command into the prompt",
+      "Song studio: the agent writes a track while playback continues in its following horizontal piano roll",
     cols: 100,
     rows: 30,
     async run(stage, size) {
       const gateway = new FakeGateway();
       stage.onClose(() => gateway.stop());
-      // The first chunk stops mid-command, so nothing is applied before the
-      // capture: an edit landing mid-play re-anchors the transport at a
-      // moment that depends on the runner's speed.
-      const release = gateway.reply([
-        "fx rev",
-        "erb mix 0.4\ntempo 112\n",
-        "Slower and wetter.",
+      const release = gateway.replyTools([
+        {
+          name: "add_notes",
+          args: {
+            trackId: "chords",
+            notes: [{ pitch: 69, start: 26, duration: 3, velocity: 0.7 }],
+          },
+        },
+      ]);
+      const writing = gateway.reply([
+        "Developing the next section.",
+        "The next musical batch is still preparing.",
       ]);
       const pty = await song(stage, size, ["--track", "chords"], gateway.env);
       await stage.type(pty, "loop 1-4\r");
-      await playFor(stage, pty, 3, true);
-      await stage.type(pty, "make it slower and wetter\r", 1);
+      await playFor(stage, pty, 3, 0.25);
+      await stage.type(pty, "develop the chords in the next section\r", 1);
       await stage.until(() => gateway.requests > 0, "request", pty);
       release();
-      // Only the first chunk is out, so the prompt stops at "fx rev";
-      // the typing runs on the clock, so a fixed number of steps lands on
-      // the same keystroke every run.
-      await Bun.sleep(400);
-      await stage.step(40, 25);
-      await stage.until(has(pty, "fx rev▏"), "show-me typing", pty);
+      await stage.until(() => gateway.requests >= 2, "next musical step", pty);
+      // Send the first content chunk, then hold the response open while captured.
+      writing();
+      // Async commits repaint only after the fixture's frozen frame clock advances.
+      await stage.step(4, 25);
+      await stage.until(
+        () =>
+          gateway.requests >= 2 && pty.vt.text().includes("chords · following"),
+        "normal JSON write opens the following piano roll",
+        pty,
+      );
+      for (let frame = 0; frame < 8; frame++) {
+        await stage.frame(pty);
+        await stage.step(3, 25);
+      }
       return stage.capture(pty, "hero");
     },
   },
@@ -177,12 +192,12 @@ export const SCENES: Scene[] = [
   },
   {
     id: "play-mode",
-    title: "Play mode (Ctrl-P): the computer keyboard is a piano",
+    title: "Play mode (/play on): the computer keyboard is a piano",
     cols: 80,
     rows: 24,
     async run(stage, size) {
       const pty = await song(stage, size, ["--track", "keys"]);
-      await stage.type(pty, CTRL("p"));
+      await stage.type(pty, "/play on\r");
       await stage.until(has(pty, /PLAY/), "play mode", pty);
       for (const key of ["a", "s", "d", "f", "g", "d"]) {
         await stage.frame(pty);
@@ -247,6 +262,7 @@ export const SCENES: Scene[] = [
       "Show-me: the agent types commands into the prompt and each one lands as it streams",
     cols: 80,
     rows: 24,
+    env: { DAWG_SHOWME: "on" },
     async run(stage, size) {
       const gateway = new FakeGateway();
       stage.onClose(() => gateway.stop());
@@ -274,9 +290,10 @@ export const SCENES: Scene[] = [
   {
     id: "agent",
     title:
-      "An agent turn's card: what changed, and the command to do it yourself",
+      "Optional show-me receipt: what changed, and the command to do it yourself",
     cols: 80,
     rows: 24,
+    env: { DAWG_SHOWME: "on" },
     async run(stage, size) {
       const gateway = new FakeGateway();
       stage.onClose(() => gateway.stop());
@@ -351,7 +368,7 @@ export const SCENES: Scene[] = [
     rows: 24,
     async run(stage, size) {
       const pty = await song(stage, size, ["--track", "bass"]);
-      await stage.type(pty, CTRL("t"));
+      await stage.type(pty, "/tape on\r");
       await stage.until(has(pty, "range:"), "tape", pty);
       await stage.type(pty, "?");
       await stage.until(has(pty, "loop the section"), "keys", pty);

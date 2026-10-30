@@ -50,7 +50,10 @@ test.skipIf(!supported)(
       await closeMenu();
       const before = await read();
       await t.type("demo redline\r", "load demo");
-      await t.until(() => t.state()?.screen === "tape", "demo timeline");
+      await t.until(
+        () => t.state()?.screen === "home" && t.vt.text().includes("Tracks"),
+        "demo player overview",
+      );
       const demo = await read();
       expect(demo.revision).toBe(before.revision + 1);
       expect(demo.composition.bars).toBeGreaterThan(32);

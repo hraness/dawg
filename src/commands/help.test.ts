@@ -47,7 +47,7 @@ describe("help reference", () => {
       "help [topic]",
       "/transcript",
       "track <name>",
-      "/view focus|all",
+      "/view tracks|<track>|pin|unpin|follow",
       "/theme default|high-contrast|mono",
       "/motion on|off",
       "tracks",

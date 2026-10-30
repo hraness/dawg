@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dawg:workflow-job:v1",
+  "title": "DAWG durable workflow job v1",
+  "description": "Envelope schema. src/workflows/state.ts is the authoritative bounded parser, including stage dependency, readiness and cross-revision invariants.",
+  "type": "object",
+  "required": [
+    "format",
+    "id",
+    "workflowId",
+    "workflowVersion",
+    "profileVersion",
+    "revision",
+    "epoch",
+    "status",
+    "createdAt",
+    "updatedAt",
+    "brief",
+    "sources",
+    "stages",
+    "artifacts",
+    "readiness",
+    "writtenRevision",
+    "audibleRevision",
+    "controlRevision",
+    "bufferedRanges"
+  ],
+  "properties": {
+    "format": { "const": "dawg.workflow-job/v1" },
+    "id": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$" },
+    "workflowId": {
+      "enum": ["original-house", "reference-study", "recreate-source"]
+    },
+    "workflowVersion": {
+      "type": "string",
+      "pattern": "^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$"
+    },
+    "profileVersion": {
+      "type": "string",
+      "pattern": "^\\d{1,5}\\.\\d{1,5}\\.\\d{1,5}$"
+    },
+    "revision": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "epoch": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "status": {
+      "enum": ["queued", "running", "cancelled", "failed", "complete"]
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "brief": { "type": "string", "maxLength": 8000 },
+    "sources": { "type": "array", "maxItems": 16 },
+    "stages": { "type": "array", "minItems": 1, "maxItems": 32 },
+    "artifacts": { "type": "array", "maxItems": 256 },
+    "readiness": { "type": "array", "maxItems": 256 },
+    "writtenRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "audibleRevision": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "controlRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647
+    },
+    "bufferedRanges": { "type": "array", "maxItems": 64 }
+  },
+  "additionalProperties": false
+}

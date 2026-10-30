@@ -1,6 +1,6 @@
 /**
- * Feel end to end at 80x24: the empty hint names play mode, one window's own
- * edits never say "synced", playing keeps the highway's row count and never
+ * Feel end to end at 80x24: the empty hint names playback, one window's own
+ * edits never say "synced", playing keeps the observer's row count and never
  * puts a hint over the ruler, play mode on a kit labels keys by drum, and a
  * /style receipt fits the row.
  */
@@ -9,9 +9,9 @@ import { launch, supported } from "./pty-harness.ts";
 
 const OFFLINE = { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" };
 
-/** Index of the ruler row (the transport glyph at column 1). */
+/** Index of the horizontal observer ruler. */
 function rulerRow(lines: string[]): number {
-  return lines.findIndex((line) => /^ [⏸▶] [━─]/.test(line));
+  return lines.findIndex((line) => /^ ?bar\s/.test(line));
 }
 
 test.skipIf(!supported)(
@@ -22,17 +22,20 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("commands only"), "prompt");
       await t.until(
         () =>
-          t.vt.text().includes("bass · empty · space play · ctrl-p play mode"),
+          t.vt.text().includes("play your saved song") &&
+          t.vt.text().includes("configure a model to generate"),
         "empty hint",
       );
       expect(t.vt.text()).not.toContain("ctrl-p play ·");
 
-      // Playing an empty track keeps the highway the same height (the ruler
+      // Playing an empty track keeps the observer the same height (the ruler
       // stays on its row) and keeps the hint on its reserved row, never on a
       // bar or loop rule.
       const idle = t.vt.lines();
       const idleRuler = rulerRow(idle);
-      const hintRow = idle.findIndex((line) => line.includes("space play"));
+      const hintRow = idle.findIndex((line) =>
+        /\bPlay(?: Space)?\b/.test(line),
+      );
       expect(idleRuler).toBeGreaterThan(0);
       expect(hintRow).toBeGreaterThan(0);
       expect(hintRow).not.toBe(idleRuler);
@@ -41,9 +44,11 @@ test.skipIf(!supported)(
       for (let sample = 0; sample < 6; sample += 1) {
         await Bun.sleep(90);
         const frame = t.vt.lines();
-        const ruler = frame.findIndex((line) => /^ (↻ ═|[⏸▶] [━─])/.test(line));
+        const ruler = rulerRow(frame);
         expect(ruler).toBe(idleRuler);
-        const hint = frame.findIndex((line) => line.includes("space stop"));
+        const hint = frame.findIndex((line) =>
+          /\bPause(?: Space)?\b/.test(line),
+        );
         expect(hint).toBe(hintRow);
         expect(frame[hint]).not.toMatch(/[━═]{3}/);
       }
@@ -58,7 +63,7 @@ test.skipIf(!supported)(
       await Bun.sleep(600);
       expect(t.vt.text()).not.toContain("synced ·");
 
-      // With notes, playing keeps the highway's height: the ruler (the hit
+      // With notes, playing keeps the observer's height: the ruler
       // line) stays on the same row.
       const pausedRuler = rulerRow(t.vt.lines());
       expect(pausedRuler).toBeGreaterThan(0);
@@ -66,9 +71,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("▶ 120 BPM"), "playing");
       await Bun.sleep(300);
       const playing = t.vt.lines();
-      const playingRuler = playing.findIndex((line) =>
-        /^ (↻ ═|[⏸▶] [━─])/.test(line),
-      );
+      const playingRuler = rulerRow(playing);
       expect(playingRuler).toBe(pausedRuler);
       expect(playing[playingRuler]).not.toMatch(/space|ctrl-/);
       await t.send(" ");
@@ -85,7 +88,7 @@ test.skipIf(!supported)(
       await t.send("/track drums\r");
       await t.send("instrument kit\r");
       await t.until(() => t.vt.text().includes("✓ track · drums"), "kit");
-      await t.send("\u0010");
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY MODE"), "play mode");
       await t.until(() => t.vt.text().includes(" kick snr "), "drum keys");
       const text = t.vt.text();

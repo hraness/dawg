@@ -22,7 +22,6 @@ import { launch, supported } from "./pty-harness.ts";
 
 const ESC = "\u001b";
 const CTRL_U = "\u0015";
-const CTRL_P = "\u0010";
 const OFFLINE = { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" };
 
 type Session = Awaited<ReturnType<typeof launch>>;
@@ -309,7 +308,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
       await reset(t);
       record("Space", revision(t) === rev, t.vt.text());
       // Play mode: Space starts and stops the transport without recording.
-      await t.send(CTRL_P);
+      await t.send("/play on\r");
       await t.until(() => t.vt.text().includes("PLAY"), "play mode");
       await t.send(" ");
       await Bun.sleep(300);
@@ -332,6 +331,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
       {
         AI_GATEWAY_BASE_URL: `${origin}/v1`,
         DAWG_MODELS_DEV_URL: `${origin}/api.json`,
+        DAWG_SHOWME: "on",
       },
       ["--track", "drums"],
     );
