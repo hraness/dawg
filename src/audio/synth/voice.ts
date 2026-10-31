@@ -412,7 +412,8 @@ export function renderSynthNote(
 ): void {
   const { sampleRate, samples, samplesPerTick } = context;
   const c = controls(track, note.startTick);
-  const tickAt = (t: number) => note.startTick + (t * sampleRate) / samplesPerTick;
+  const tickAt = (t: number) =>
+    note.startTick + (t * sampleRate) / samplesPerTick;
   const sound = canonicalSound(track.instrument);
   const gate = length / sampleRate;
   const release = Math.max(0, c.number("release"));

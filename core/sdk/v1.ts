@@ -3573,12 +3573,12 @@ export type EffectParams = Readonly<Record<string, number | string | boolean>>;
 /**
  * Insert effects by name, rendered in the fixed chain order
  * filter → djf → autofilter → vowel → crush → distort → stomp → head →
- * cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain →
+ * cab → tremolo → gate → compressor → pan → phaser → chorus → leslie → postgain →
  * delay → reverb. The guitar rig (stomp, head, cab; SDK 1.22.0) is easiest
  * as `...rig("crunch")`.
  * Keys here: djf, autofilter, vowel, crush, distort, stomp, head, cab,
- * tremolo, compressor,
- * phaser, chorus, leslie, postgain, plus the mix-bus keys `orbit`
+ * tremolo, gate (a tempo-synced step gate: `{ pattern: "trance", length: 0.6 }`),
+ * compressor, phaser, chorus, leslie, postgain, plus the mix-bus keys `orbit`
  * (`{ orbit: 2 }`, SDK 1.9.0) and `duck` (`{ orbit: 2, depth: 0.85 }`:
  * this track's onsets duck every other track on that orbit). See
  * docs/project-format.md for every parameter, its range and its Strudel name.
@@ -13979,6 +13979,42 @@ export type PatchNodeTable = {
       out: "a";
     };
   };
+  /** tempo-synced step gate: chops a held sound to a rhythm on the song grid */
+  "fx.gate": {
+    main: "a";
+    params: {
+      /** rhythm of open (x) and shut (.) steps: chop x, eighths x., offbeat ..x., trance x.xx.xx.x.xx.xx., dotted x..x..x.x..x..x., gallop x.xx (default "chop") */
+      pattern?: "chop" | "eighths" | "offbeat" | "trance" | "dotted" | "gallop";
+      /** length of one pattern step in beats (0.25 a 16th) (0.0625..4 beats, default 0.25) */
+      step?: number;
+      /** fraction of an open step that sounds; 1 merges neighbouring open steps (0.05..1, default 0.75) */
+      length?: number;
+      /** how far shut steps dip: 1 to silence, 0 not at all (0..1, default 1) */
+      depth?: number;
+      /** fade-in when a step opens (0.0005..0.1 s, default 0.002) */
+      attack?: number;
+      /** fade-out when a step shuts (0.0005..0.2 s, default 0.01) */
+      release?: number;
+    };
+    inputs: {
+      /** audio in */
+      in: "a";
+      /** length of one pattern step in beats (0.25 a 16th) */
+      step: "c";
+      /** fraction of an open step that sounds; 1 merges neighbouring open steps */
+      length: "c";
+      /** how far shut steps dip: 1 to silence, 0 not at all */
+      depth: "c";
+      /** fade-in when a step opens */
+      attack: "c";
+      /** fade-out when a step shuts */
+      release: "c";
+    };
+    outputs: {
+      /** audio out */
+      out: "a";
+    };
+  };
   /** feed-forward RMS-ish compressor with soft knee and make-up gain */
   "fx.compressor": {
     main: "a";
@@ -15215,6 +15251,19 @@ export const PATCH_NODE_PORTS: Readonly<
       ["depth", "c", 0, 1, 0.5],
       ["skew", "c", 0, 1, 0.5],
       ["phase", "c", 0, 1, 0],
+    ],
+    outputs: [["out", "a"]],
+  },
+  "fx.gate": {
+    rate: "global",
+    params: ["pattern", "step", "length", "depth", "attack", "release"],
+    inputs: [
+      ["in", "a"],
+      ["step", "c", 0.0625, 4, 0.25],
+      ["length", "c", 0.05, 1, 0.75],
+      ["depth", "c", 0, 1, 1],
+      ["attack", "c", 0.0005, 0.1, 0.002],
+      ["release", "c", 0.0005, 0.2, 0.01],
     ],
     outputs: [["out", "a"]],
   },

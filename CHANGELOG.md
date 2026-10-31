@@ -2,6 +2,14 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## Unreleased
+
+### Added
+
+- **Filter lanes sweep held synth notes.** A synth's cutoff and resonance lanes used to be read once, at each note's onset, so a held chord under a rising filter lane stayed dark. Each held note's filter now follows its lanes every 32 samples.
+- **Shaped, tempo-synced ducking.** `fx.duck` takes `curve` (`linear`, `exp` that snaps back early, `pump` that stays down and swells back before the next beat) and `sync`, a recovery length in beats. The new `duck` preset `rave` pumps 0.9 deep over 3/8 of a beat at any tempo.
+- **A step gate.** `fx.gate` chops a held sound to a rhythm on the song's beat grid (`chop`, `eighths`, `offbeat`, `trance`, `dotted`, `gallop`) with a gate length, depth and click-free fades, so one held chord can become 16th-note stabs without a note per stab.
+
 ## 0.38.1
 
 ### Added
