@@ -469,3 +469,25 @@ describe("synth filter envelopes", () => {
     }
   });
 });
+
+test("a cutoff lane sweeps a held note, not just its onset", () => {
+  // One 4-beat sawtooth with the low-pass lane opening 300 Hz -> 6 kHz
+  // across the note: its 16th harmonic (~4.2 kHz) is shut early, open late.
+  const { left } = render(
+    {
+      instrument: "sawtooth",
+      synth: { lpf: 300 },
+      fxAutomation: {
+        "synth-lpf": [
+          { tick: 0, value: 300 },
+          { tick: 4 * 480, value: 6000 },
+        ],
+      },
+    },
+    { beats: 4, bars: 2 },
+  );
+  const hz = 261.63 * 16;
+  const early = bin(left, hz, 0.1 * RATE, 0.4 * RATE);
+  const late = bin(left, hz, 1.6 * RATE, 1.9 * RATE);
+  expect(late).toBeGreaterThan(early * 5);
+});

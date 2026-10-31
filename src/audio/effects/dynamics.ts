@@ -1,8 +1,8 @@
 /**
- * Level stages: tremolo, compressor and post gain.
+ * Level stages: tremolo, step gate, compressor and post gain.
  */
 import type { Track } from "../../../core/score.ts";
-import type { FxValues } from "../../../core/fx.ts";
+import { GATE_PATTERNS, type FxValues } from "../../../core/fx.ts";
 import {
   CONTROL_SAMPLES,
   Phasor,
@@ -11,6 +11,7 @@ import {
   lfo,
   lfoHz,
   tempoAtSample,
+  tickAtSample,
   type EffectContext,
 } from "./common.ts";
 
@@ -50,6 +51,56 @@ export function applyTremolo(
     }
     const u = (lfo(shape, skewCycle(phasor.next(), skew) + 0.25) + 1) / 2;
     buffer[index] = buffer[index]! * (1 - amount * (1 - u));
+  }
+}
+
+/**
+ * Step gate: the song's beat grid cut into `step`-beat steps; an open step
+ * (`x` in the pattern) sounds for its first `length`, a shut one dips by
+ * `depth`. One-pole `attack`/`release` smoothing keeps edges click-free.
+ * Steps count from song beat 0, so a gate stays on the grid in arranged
+ * windows and loops.
+ */
+export function applyGate(
+  buffer: Float64Array,
+  track: Track,
+  values: FxValues,
+  context: EffectContext,
+): void {
+  const read = fxReader(track, "gate", values, context);
+  const pattern =
+    GATE_PATTERNS[read.text("pattern") as keyof typeof GATE_PATTERNS] ?? "x";
+  const step = Math.max(1e-3, read.number("step"));
+  const length = read.number("length");
+  const depth = read.param("depth");
+  const { sampleRate, samplesPerTick, tempoBpm } = context;
+  const coefficient = (seconds: number) =>
+    1 - Math.exp(-1 / Math.max(1, seconds * sampleRate));
+  const rise = coefficient(read.number("attack"));
+  const fall = coefficient(read.number("release"));
+  // Beats per tick from the base tempo; ticks come through the tempo map.
+  const beatsPerTick = (samplesPerTick * tempoBpm) / (60 * sampleRate);
+  const origin = context.warp
+    ? 0
+    : Math.round((context.seedSeconds ?? 0) * sampleRate);
+  const beatAt = (index: number) =>
+    context.warp
+      ? tickAtSample(context, index) * beatsPerTick
+      : ((index + origin) * tempoBpm) / (60 * sampleRate);
+  let amount = depth.at(0);
+  let gain = -1;
+  for (let index = 0; index < buffer.length; index += 1) {
+    if (depth.automated && index % CONTROL_SAMPLES === 0)
+      amount = depth.at(index);
+    const steps = beatAt(index) / step;
+    const which = Math.floor(steps);
+    const open =
+      pattern[((which % pattern.length) + pattern.length) % pattern.length] ===
+        "x" && steps - which < length;
+    const target = open ? 1 : 1 - amount;
+    if (gain < 0) gain = target;
+    else gain += (target - gain) * (target > gain ? rise : fall);
+    buffer[index] = buffer[index]! * gain;
   }
 }
 

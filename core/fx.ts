@@ -69,6 +69,8 @@ export const FX_CHAIN = Object.freeze([
   "bloom",
   "swell",
   "tremolo",
+  // Tempo-synced step gate (src/audio/effects/dynamics.ts).
+  "gate",
   "compressor",
   "pan",
   "double",
@@ -94,6 +96,19 @@ export type EffectSpec = Readonly<{
 
 /** Highest orbit number (`orbit`, `duck.orbit`). */
 export const MAX_ORBIT = 16;
+
+/** Step gate rhythms: x open, . shut, one character per step. */
+export const GATE_PATTERNS = Object.freeze({
+  chop: "x",
+  eighths: "x.",
+  offbeat: "..x.",
+  trance: "x.xx.xx.x.xx.xx.",
+  dotted: "x..x..x.x..x..x.",
+  gallop: "x.xx",
+} as const);
+const GATE_PATTERN_NAMES = Object.keys(
+  GATE_PATTERNS,
+) as (keyof typeof GATE_PATTERNS)[];
 
 const LFO_SHAPES = ["sine", "tri", "square", "saw", "ramp", "random"] as const;
 export type LfoShape = (typeof LFO_SHAPES)[number];
@@ -790,6 +805,64 @@ export const FX_SPECS = Object.freeze({
       },
     },
   },
+  gate: {
+    label: "gate",
+    doc: "tempo-synced step gate: chops a held sound to a rhythm on the song grid",
+    simple: ["pattern", "step", "length", "depth"],
+    strudel: "(no single Strudel equivalent; struct + clip on held notes)",
+    params: {
+      pattern: {
+        kind: "enum",
+        values: GATE_PATTERN_NAMES,
+        default: "chop",
+        doc: "rhythm of open (x) and shut (.) steps: chop x, eighths x., offbeat ..x., trance x.xx.xx.x.xx.xx., dotted x..x..x.x..x..x., gallop x.xx",
+      },
+      step: {
+        kind: "number",
+        min: 0.0625,
+        max: 4,
+        default: 0.25,
+        step: 0.0625,
+        unit: "beats",
+        doc: "length of one pattern step in beats (0.25 a 16th)",
+      },
+      length: {
+        kind: "number",
+        min: 0.05,
+        max: 1,
+        default: 0.75,
+        step: 0.05,
+        doc: "fraction of an open step that sounds; 1 merges neighbouring open steps",
+      },
+      depth: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 1,
+        step: 0.05,
+        automate: true,
+        doc: "how far shut steps dip: 1 to silence, 0 not at all",
+      },
+      attack: {
+        kind: "number",
+        min: 0.0005,
+        max: 0.1,
+        default: 0.002,
+        step: 0.0005,
+        unit: "s",
+        doc: "fade-in when a step opens",
+      },
+      release: {
+        kind: "number",
+        min: 0.0005,
+        max: 0.2,
+        default: 0.01,
+        step: 0.0005,
+        unit: "s",
+        doc: "fade-out when a step shuts",
+      },
+    },
+  },
   compressor: {
     label: "compressor",
     doc: "feed-forward RMS-ish compressor with soft knee and make-up gain",
@@ -1032,6 +1105,25 @@ export const FX_SPECS = Object.freeze({
         default: false,
         optional: true,
         doc: "the dip holds while each note sounds, then recovers (a vocal sidechain); off dips only at onsets",
+      },
+      curve: {
+        kind: "enum",
+        values: ["linear", "exp", "pump"],
+        default: "linear",
+        optional: true,
+        doc: "recovery shape: linear; exp snaps back early and eases in (a compressor); pump stays down, then swells back (a hypertechno pump)",
+        strudel: ["duckcurve"],
+      },
+      sync: {
+        kind: "number",
+        min: 0,
+        max: 4,
+        default: 0,
+        step: 0.0625,
+        unit: "beats",
+        optional: true,
+        doc: "recovery length in beats (tempo-synced); 0 uses attack in seconds",
+        strudel: ["ducksync"],
       },
     },
   },
@@ -1626,6 +1718,7 @@ export const FX_PRESETS: Readonly<
     pump: { orbit: 2, depth: 0.85, attack: 0.25 },
     subtle: { orbit: 2, depth: 0.4, attack: 0.12 },
     gate: { orbit: 2, depth: 1, attack: 0.05 },
+    rave: { orbit: 2, depth: 0.9, curve: "pump", sync: 0.375 },
   },
 } satisfies Partial<Record<EffectName, Record<string, FxValues>>>);
 

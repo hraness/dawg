@@ -612,7 +612,7 @@ export class StemRenderer {
     // Orbit ducking is a gain on finished stems (src/audio/effects/duck.ts).
     const duckers: Ducker[] = [];
     for (const [trackId] of groups) {
-      const settings = duckSettings(tracks.get(trackId));
+      const settings = duckSettings(tracks.get(trackId), 60 / score.tempoBpm);
       if (settings && isTrackAudible(score, trackId)) {
         const { hold, ...duck } = settings;
         const spans = performed
