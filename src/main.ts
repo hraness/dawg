@@ -2012,7 +2012,6 @@ async function runInteractive(): Promise<void> {
   console.error = consoleToTranscript(consoleError);
   console.warn = consoleToTranscript(consoleWarn);
   stdin.setRawMode?.(true);
-  stdin.resume();
   // Alternate screen, hidden cursor, bracketed paste.
   stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
   const inputDecoder = new TerminalInputDecoder();
@@ -2514,6 +2513,8 @@ async function runInteractive(): Promise<void> {
   };
   stdin.on("data", onData);
   stdin.on("end", onEnd);
+  // Keep early keystrokes buffered until startup's async reads have finished.
+  stdin.resume();
   async function* chunks(): AsyncGenerator<string> {
     for (;;) {
       while (inbox.length === 0) {
