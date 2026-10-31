@@ -14,8 +14,10 @@
  *     → amplitude ADSR · velocity · gain · track volume
  *
  * Controls are read once at the note onset (stored value, or the
- * `synth-<param>` lane at that tick); envelopes and LFOs run per sample,
- * filter coefficients every CONTROL_SAMPLES. Everything is a pure function
+ * `synth-<param>` lane at that tick), except filter cutoffs and
+ * resonances, whose lanes keep moving through a held note so a sustained
+ * chord can sweep; envelopes and LFOs run per sample, filter coefficients
+ * every CONTROL_SAMPLES. Everything is a pure function
  * of the score and the note, so cold, cached and worker renders agree.
  */
 import type { Note, Track } from "../../../core/score.ts";
@@ -114,11 +116,22 @@ function controls(track: Track, tick: number) {
       ? stored
       : (SYNTH_PARAMS[name]!.default as string);
   };
+  /** A lane read through the note (`undefined` without one). */
+  const follow = (name: string): ((tick: number) => number) | undefined => {
+    const points = lane(name);
+    if (!points || points.length === 0) return undefined;
+    const stored = synth[name];
+    const base =
+      typeof stored === "number"
+        ? stored
+        : (SYNTH_PARAMS[name]!.default as number);
+    return (at: number) => interpolateAutomation(points, at, base);
+  };
   const list = (name: string): readonly number[] | undefined => {
     const stored = synth[name];
     return Array.isArray(stored) ? (stored as readonly number[]) : undefined;
   };
-  return { has, number, text, list };
+  return { has, number, text, list, follow };
 }
 
 type Controls = ReturnType<typeof controls>;
@@ -213,6 +226,9 @@ class NoteFilter {
     readonly anchor: number,
     readonly envelope: Envelope,
     private readonly sampleRate: number,
+    /** Cutoff and resonance lanes at note time `t` (seconds), when automated. */
+    private readonly cutoffAt?: (t: number) => number,
+    private readonly qAt?: (t: number) => number,
   ) {
     this.svfFirst = new Svf(type);
     this.svfSecond = new Svf(type);
@@ -237,12 +253,13 @@ class NoteFilter {
   /** Recompute coefficients for the envelope at time `t` (seconds). */
   update(t: number): void {
     const e = this.depth === 0 ? 0 : this.envelope.at(t);
+    const cutoff = this.cutoffAt ? this.cutoffAt(t) : this.cutoff;
     const frequency = clamp(
-      this.cutoff * 2 ** (this.depth * (e - this.anchor)),
+      cutoff * 2 ** (this.depth * (e - this.anchor)),
       20,
       this.sampleRate * 0.45,
     );
-    const q = Math.max(0.1, this.q);
+    const q = Math.max(0.1, this.qAt ? this.qAt(t) : this.q);
     if (this.isLadder) {
       this.ladderG = 1 - Math.exp((-2 * Math.PI * frequency) / this.sampleRate);
       // Q 0.7..12 spans the ladder's feedback up to just below oscillation.
@@ -298,6 +315,7 @@ function noteFilters(
   gate: number,
   sampleRate: number,
   accent = false,
+  tickAt?: (t: number) => number,
 ): (() => NoteFilter)[] {
   const out: (() => NoteFilter)[] = [];
   for (const { prefix, type, param } of FILTERS) {
@@ -311,6 +329,11 @@ function noteFilters(
     const q = c.number(`${prefix}q`);
     const slope = type === "lpf" ? c.text("ftype") : "12db";
     const anchor = c.number("fanchor");
+    const cutoffLane = tickAt ? c.follow(param) : undefined;
+    const qLane = tickAt ? c.follow(`${prefix}q`) : undefined;
+    const cutoffAt =
+      cutoffLane && tickAt ? (t: number) => cutoffLane(tickAt(t)) : undefined;
+    const qAt = qLane && tickAt ? (t: number) => qLane(tickAt(t)) : undefined;
     out.push(
       () =>
         new NoteFilter(
@@ -330,6 +353,8 @@ function noteFilters(
               )
             : envelopeFor(c, prefix, "", gate),
           sampleRate,
+          cutoffAt,
+          qAt,
         ),
     );
   }
@@ -387,6 +412,7 @@ export function renderSynthNote(
 ): void {
   const { sampleRate, samples, samplesPerTick } = context;
   const c = controls(track, note.startTick);
+  const tickAt = (t: number) => note.startTick + (t * sampleRate) / samplesPerTick;
   const sound = canonicalSound(track.instrument);
   const gate = length / sampleRate;
   const release = Math.max(0, c.number("release"));
@@ -443,6 +469,7 @@ export function renderSynthNote(
       gate,
       sampleRate,
       performance?.accent === true,
+      tickAt,
     ).map((make) => make());
     for (let elapsed = 0; elapsed < count; elapsed += 1) {
       const t = elapsed / sampleRate;
@@ -541,6 +568,7 @@ export function renderSynthNote(
     gate,
     sampleRate,
     performance?.accent === true,
+    tickAt,
   );
   const filtersL = filterMakers.map((make) => make());
   const filtersR = right ? filterMakers.map((make) => make()) : [];

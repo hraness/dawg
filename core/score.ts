@@ -461,7 +461,8 @@ export type Track = Readonly<{
   /**
    * Optional: synth voice parameters (`core/synth.ts`), Strudel names.
    * Only the parameters a document sets are stored; lanes are
-   * `fxAutomation["synth-<param>"]`, read at note onsets.
+   * `fxAutomation["synth-<param>"]`, read at note onsets (filter cutoff and
+   * resonance lanes are followed through held notes).
    */
   synth?: TrackSynth;
   /**

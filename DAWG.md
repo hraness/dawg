@@ -668,7 +668,7 @@ Presets: `pad` (supersaw: slow, wide detuned saws through a soft low-pass), `lea
 
 The menu's **Parameters** section shows the instrument, preset and the simple parameters (ADSR, lpf/lpq/lpenv, detune, vib, fm); **advanced** groups every parameter (amplitude, oscillator, vibrato, pitch envelope, the three filters, FM 1–8, ZzFX, partials) with its Strudel aliases. The agent's `set_synth` tool takes the same names and presets.
 
-Automation lanes `synth-<param>` are read at each note's onset, as Strudel reads a patterned control once per event. Note velocity scales the voice as Strudel's `velocity` does, and `gain` is the voice gain before the effects chain.
+Automation lanes `synth-<param>` are read at each note's onset, as Strudel reads a patterned control once per event, except the filter cutoffs and resonances (`synth-lpf`, `synth-hpf`, `synth-bpf`, `synth-lpq`, `synth-hpq`, `synth-bpq`), which are followed through a held note every 32 samples, so a sustained chord sweeps open under `automate synth-lpf points 0:300 16:9000`. Note velocity scales the voice as Strudel's `velocity` does, and `gain` is the voice gain before the effects chain.
 
 The DSP is dawg's own, clean-room from public documentation and standard literature (PolyBLEP oscillators, Paul Kellet's pink-noise filter, leaky-integrated brown noise, RBJ biquads and a Stilson/Smith-style ladder, linear and exponential ADSRs, phase-modulation FM), not from Strudel or superdough source (AGPL-3.0). Noise comes from a PRNG seeded by each note, so renders stay byte-identical across cold, cached and worker paths.
 

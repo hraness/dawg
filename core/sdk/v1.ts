@@ -3594,7 +3594,9 @@ export type TrackFxInput = Readonly<{
 /**
  * Synth voice parameters by Strudel name; only the ones given are stored
  * and the rest take dawg's defaults. Lanes go under `automation.fx` as
- * `"synth-<param>"` (e.g. `"synth-lpf"`), read at each note's onset.
+ * `"synth-<param>"` (e.g. `"synth-lpf"`), read at each note's onset; filter
+ * cutoff and resonance lanes (`lpf`/`hpf`/`bpf`, `lpq`/`hpq`/`bpq`) keep
+ * moving through a held note, so a sustained chord sweeps.
  * Every parameter, range and default: **Synth** in DAWG.md.
  */
 /**
