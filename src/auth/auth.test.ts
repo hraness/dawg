@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -477,11 +477,19 @@ describe("saved provider and model", () => {
     const runner = scriptedRunner([]);
     const auth = env(runner);
     await storeGatewayKey(auth, KEY);
-    const bad = await tuiSetModel("key", runner, auth);
-    expect(bad.ok).toBe(false);
-    expect(bad.text).toContain('unknown model "key"');
-    const good = await tuiSetModel("sol-6.1", runner, auth);
-    expect(good).toMatchObject({ ok: true });
+    // Refusal suggestions can read model catalogs; this fixture stays offline.
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      Object.assign(() => offlineFetch(), { preconnect() {} }),
+    );
+    try {
+      const bad = await tuiSetModel("key", runner, auth);
+      expect(bad.ok).toBe(false);
+      expect(bad.text).toContain('unknown model "key"');
+      const good = await tuiSetModel("sol-6.1", runner, auth);
+      expect(good).toMatchObject({ ok: true });
+    } finally {
+      fetcher.mockRestore();
+    }
   });
 
   test("a valid saved choice is reused silently, without discovery", async () => {
