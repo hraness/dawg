@@ -389,9 +389,11 @@ describe("hot reload of external edits", () => {
     const project = await temp();
     await initProject(project);
     const h = host(project, new Attributor(project));
+    // The burst is 20 sequential atomic writes; on a loaded CI runner one
+    // gap can pass 60 ms and split it, so the window covers the slowest gap.
     const sync = startProjectSync(h.api, {
       typecheck,
-      debounceMs: 60,
+      debounceMs: 400,
       pollMs: 60_000,
     });
     try {
