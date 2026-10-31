@@ -5,7 +5,7 @@ import {
   type TrackInput,
 } from "../../../core/score.ts";
 import { applyCrush, applyDistort } from "./drive.ts";
-import { applyCompressor, applyTremolo } from "./dynamics.ts";
+import { applyCompressor, applyGate, applyTremolo } from "./dynamics.ts";
 import {
   applyAutoFilter,
   applyDjFilter,
@@ -296,6 +296,45 @@ describe("dynamics", () => {
     expect(peak(out.map((v, i) => v - input[i]!))).toBeLessThan(1e-12);
   });
 
+  test("gate chops on the beat grid: eighths open each beat's first half", () => {
+    // 120 bpm: a beat is 24,000 samples, an eighth 12,000.
+    const t = track({
+      fx: {
+        gate: { pattern: "eighths", step: 0.5, length: 1, depth: 1 },
+      },
+    });
+    const out = mono(applyGate, t, "gate", sine(1000, 1));
+    const open = rms(out, 1_000, 11_000);
+    // Past the 10 ms release (2,400 samples is five time constants).
+    const shut = rms(out, 14_400, 23_000);
+    expect(open).toBeGreaterThan(0.3);
+    expect(db(open / Math.max(shut, 1e-12))).toBeGreaterThan(50);
+    // The second beat reopens on the grid.
+    expect(rms(out, 25_000, 35_000)).toBeCloseTo(open, 2);
+  });
+
+  test("gate length shortens each open step and depth sets the floor", () => {
+    const t = track({
+      fx: { gate: { pattern: "chop", step: 0.25, length: 0.5, depth: 0.5 } },
+    });
+    const out = mono(applyGate, t, "gate", sine(1000, 0.5));
+    // A 16th is 6,000 samples: open for 3,000, then half level.
+    const open = rms(out, 500, 2_800);
+    const shut = rms(out, 5_000, 5_900);
+    expect(shut / open).toBeCloseTo(0.5, 1);
+  });
+
+  test("gate stays on the song grid in an arranged window", () => {
+    const t = track({
+      fx: { gate: { pattern: "eighths", step: 0.5, length: 1 } },
+    });
+    // A window seeded half a beat in starts on the shut half.
+    const out = sine(1000, 0.5);
+    applyGate(out, t, t.fx!.gate!, { ...context, seedSeconds: 0.25 });
+    expect(rms(out, 1_000, 11_000)).toBeLessThan(1e-3);
+    expect(rms(out, 13_000, 23_000)).toBeGreaterThan(0.3);
+  });
+
   test("compressor narrows the loud/quiet range", () => {
     const input = new Float64Array(RATE);
     for (let i = 0; i < RATE; i += 1)
@@ -452,6 +491,7 @@ describe("determinism", () => {
         crush: {},
         distort: {},
         tremolo: {},
+        gate: {},
         compressor: {},
         phaser: {},
         chorus: {},
@@ -469,6 +509,7 @@ describe("determinism", () => {
         ["crush", applyCrush],
         ["distort", applyDistort],
         ["tremolo", applyTremolo],
+        ["gate", applyGate],
         ["compressor", applyCompressor],
       ] as const)
         apply(m, t, t.fx![name]!, context);

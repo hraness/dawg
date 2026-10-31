@@ -6,8 +6,10 @@
  * falls to `1 - depth` over `onset` seconds and climbs back over `attack`
  * seconds (a new onset during the recovery dips again from where the gain
  * is). With `hold`, the gain stays down until the note ends, then
- * climbs back. Several duckers on one orbit multiply. A ducker never ducks
- * itself.
+ * climbs back. `curve` shapes the recovery (linear; exp, fast then easing;
+ * pump, held down then swelling back) and `sync` sets its length in beats
+ * instead of `attack` seconds. Several duckers on one orbit multiply. A
+ * ducker never ducks itself.
  *
  * Ducking is a gain on finished stems, so it never invalidates a ducked
  * track's cached stem and costs nothing when no track ducks. The curve is
@@ -16,12 +18,23 @@
  */
 import type { Track } from "../../../core/score.ts";
 
+export type DuckCurve = "linear" | "exp" | "pump";
+
+/** Remaining dip (1..0) at recovery progress p (0..1). */
+function recovery(curve: DuckCurve, p: number): number {
+  if (curve === "exp") return (1 - p) ** 3;
+  if (curve === "pump") return 1 - p * p;
+  return 1 - p;
+}
+
 export type Ducker = Readonly<{
   trackId: string;
   target: number;
   depth: number;
   attack: number;
   onset: number;
+  /** Recovery shape; absent is linear. */
+  curve?: DuckCurve;
   /** Note onsets in samples, any order. */
   onsets: readonly number[];
   /** With `hold`: each onset's note end in samples, parallel to `onsets`. */
@@ -37,6 +50,7 @@ export function orbitOf(track: Track | undefined): number {
 /** The track's duck settings without onsets, or undefined when it does not duck. */
 export function duckSettings(
   track: Track | undefined,
+  secondsPerBeat = 0.5,
 ):
   | (Omit<Ducker, "trackId" | "onsets" | "ends"> & { hold: boolean })
   | undefined {
@@ -44,11 +58,14 @@ export function duckSettings(
   if (!duck) return undefined;
   const number = (key: string, fallback: number) =>
     typeof duck[key] === "number" ? duck[key] : fallback;
+  const sync = number("sync", 0);
+  const curve = duck.curve;
   return {
     target: number("orbit", 1),
     depth: number("depth", 1),
-    attack: number("attack", 0.1),
+    attack: sync > 0 ? sync * secondsPerBeat : number("attack", 0.1),
     onset: number("onset", 0.003),
+    ...(curve === "exp" || curve === "pump" ? { curve } : {}),
     hold: duck.hold === true,
   };
 }
@@ -80,12 +97,17 @@ export function duckEnvelope(
   });
   const envelope = new Float64Array(samples);
   const riseSamples = Math.max(1, ducker.onset * sampleRate);
-  const fallStep = 1 / Math.max(1, ducker.attack * sampleRate);
+  const fallSamples = Math.max(1, ducker.attack * sampleRate);
+  const fallStep = 1 / fallSamples;
+  const curve = ducker.curve ?? "linear";
   let level = 0;
   let rising = false;
   let riseFrom = 0;
   let riseAt = 0;
   let heldTo = -1;
+  // Shaped recovery: the level it fell from and samples since.
+  let fallFrom = 0;
+  let fallAt = 0;
   for (let index = 0; index < samples; index += 1) {
     if (marks[index] === 1) {
       rising = true;
@@ -98,8 +120,21 @@ export function duckEnvelope(
       const progress = Math.min(1, riseAt / riseSamples);
       level = riseFrom + (1 - riseFrom) * progress;
       if (progress >= 1) rising = false;
-    } else if (index < heldTo) level = 1;
-    else if (level > 0) level = Math.max(0, level - fallStep);
+      fallFrom = level;
+      fallAt = 0;
+    } else if (index < heldTo) {
+      level = 1;
+      fallFrom = 1;
+      fallAt = 0;
+    } else if (level > 0) {
+      if (curve === "linear") level = Math.max(0, level - fallStep);
+      else {
+        // The shape spans a full dip's recovery; a partial dip starts partway.
+        fallAt += 1;
+        const p = Math.min(1, fallAt / (fallSamples * fallFrom));
+        level = fallFrom * recovery(curve, p);
+      }
+    }
     envelope[index] = level;
   }
   return envelope;

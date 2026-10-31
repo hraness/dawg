@@ -19,10 +19,12 @@ import {
 
 /** Units in processing order. */
 export const MASTER_UNITS = Object.freeze([
+  "trim",
   "eq",
   "glue",
   "tape",
   "width",
+  "clip",
   "limiter",
 ] as const);
 export type MasterUnit = (typeof MASTER_UNITS)[number];
@@ -37,10 +39,12 @@ export type MasterUnitSpec = Readonly<{
 
 /** The stored master. Every field is optional; absent means off. */
 export type SongMaster = Readonly<{
+  trim?: FxValues;
   eq?: FxValues;
   glue?: FxValues;
   tape?: FxValues;
   width?: FxValues;
+  clip?: FxValues;
   limiter?: FxValues;
   /** Integrated loudness target in LUFS; renders normalize to it. */
   target?: number;
@@ -97,6 +101,22 @@ const q = (doc: string): NumberParam => ({
 
 export const MASTER_SPECS: Readonly<Record<MasterUnit, MasterUnitSpec>> =
   Object.freeze({
+    trim: {
+      label: "trim",
+      doc: "gain staging: sets the raw mix to a loudness before the other units, so glue and tape see the same level however loud the tracks are",
+      simple: ["lufs"],
+      params: {
+        lufs: {
+          kind: "number",
+          min: -40,
+          max: -6,
+          default: -16,
+          step: 0.5,
+          unit: "LUFS",
+          doc: "integrated loudness the mix is set to before eq, glue and tape",
+        },
+      },
+    },
     eq: {
       label: "EQ",
       doc: "low shelf, two bells and a high shelf; 0 dB bands are skipped",
@@ -226,6 +246,31 @@ export const MASTER_SPECS: Readonly<Record<MasterUnit, MasterUnitSpec>> =
         },
       },
     },
+    clip: {
+      label: "clip",
+      doc: "soft clipper before the limiter: shaves transient peaks so the limiter holds less and sections keep their shape",
+      simple: ["drive", "ceiling", "softness"],
+      params: {
+        drive: db(0, 18, 3, "push into the clipper (louder, more clipped)"),
+        ceiling: {
+          kind: "number",
+          min: -12,
+          max: 0,
+          default: -1,
+          step: 0.1,
+          unit: "dBFS",
+          doc: "level the clipper never exceeds",
+        },
+        softness: {
+          kind: "number",
+          min: 0,
+          max: 1,
+          default: 0.5,
+          step: 0.05,
+          doc: "0 clips hard at the ceiling; 1 starts rounding 6 dB below it",
+        },
+      },
+    },
     limiter: {
       label: "limiter",
       doc: "true-peak brickwall limiter with lookahead",
@@ -314,6 +359,11 @@ export function isLoudnessTargetName(name: string): name is LoudnessTargetName {
 export const MASTER_PRESETS: Readonly<
   Record<MasterUnit, Readonly<Record<string, FxValues>>>
 > = Object.freeze({
+  trim: {
+    quiet: { lufs: -20 },
+    staged: { lufs: -16 },
+    hot: { lufs: -12 },
+  },
   eq: {
     air: { high: 2, highfreq: 12_000 },
     warm: { low: 1.5, lowfreq: 120, high: -1.5, highfreq: 8_000 },
@@ -340,6 +390,11 @@ export const MASTER_PRESETS: Readonly<
     narrow: { width: 0.7, mono: 150 },
     wide: { width: 1.4, mono: 120 },
     vinyl: { width: 1, mono: 150 },
+  },
+  clip: {
+    gentle: { drive: 2, softness: 0.7 },
+    rave: { drive: 5, softness: 0.4 },
+    hard: { drive: 8, softness: 0 },
   },
   limiter: {
     transparent: { release: 300, lookahead: 5 },

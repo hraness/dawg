@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.40.0";
+export const SDK_VERSION = "1.41.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -3573,12 +3573,12 @@ export type EffectParams = Readonly<Record<string, number | string | boolean>>;
 /**
  * Insert effects by name, rendered in the fixed chain order
  * filter → djf → autofilter → vowel → crush → distort → stomp → head →
- * cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain →
+ * cab → tremolo → gate → compressor → pan → phaser → chorus → leslie → postgain →
  * delay → reverb. The guitar rig (stomp, head, cab; SDK 1.22.0) is easiest
  * as `...rig("crunch")`.
  * Keys here: djf, autofilter, vowel, crush, distort, stomp, head, cab,
- * tremolo, compressor,
- * phaser, chorus, leslie, postgain, plus the mix-bus keys `orbit`
+ * tremolo, gate (a tempo-synced step gate: `{ pattern: "trance", length: 0.6 }`),
+ * compressor, phaser, chorus, leslie, postgain, plus the mix-bus keys `orbit`
  * (`{ orbit: 2 }`, SDK 1.9.0) and `duck` (`{ orbit: 2, depth: 0.85 }`:
  * this track's onsets duck every other track on that orbit). See
  * docs/project-format.md for every parameter, its range and its Strudel name.
@@ -3594,7 +3594,9 @@ export type TrackFxInput = Readonly<{
 /**
  * Synth voice parameters by Strudel name; only the ones given are stored
  * and the rest take dawg's defaults. Lanes go under `automation.fx` as
- * `"synth-<param>"` (e.g. `"synth-lpf"`), read at each note's onset.
+ * `"synth-<param>"` (e.g. `"synth-lpf"`), read at each note's onset; filter
+ * cutoff and resonance lanes (`lpf`/`hpf`/`bpf`, `lpq`/`hpq`/`bpq`) keep
+ * moving through a held note, so a sustained chord sweeps.
  * Every parameter, range and default: **Synth** in DAWG.md.
  */
 /**
@@ -5242,6 +5244,8 @@ export type SongFormEntry = Readonly<{ section: string; repeat?: number }>;
  * ```
  */
 export type MasterInput = Readonly<{
+  /** Gain staging first: `lufs`, the raw mix's loudness before eq, glue and tape (SDK 1.41.0). */
+  trim?: EffectParams;
   /** `low`/`high` shelves and `bell1`/`bell2` gains in dB, with `…freq` and `…q`. */
   eq?: EffectParams;
   /** Bus compressor: threshold, ratio, attack, release (ms), knee, makeup, mix, hpf. */
@@ -5250,6 +5254,8 @@ export type MasterInput = Readonly<{
   tape?: EffectParams;
   /** Stereo width 0..2 (1 unchanged) and `mono` bass below this many Hz. */
   width?: EffectParams;
+  /** Soft clipper before the limiter: drive (dB), ceiling (dBFS), softness 0..1 (SDK 1.41.0). */
+  clip?: EffectParams;
   /** True-peak limiter: ceiling (dBTP), gain, release, lookahead (ms), truepeak. */
   limiter?: EffectParams;
   /** Integrated loudness target in LUFS (a negative number, -40..-3). */
@@ -5512,7 +5518,16 @@ function songStyle(input: unknown): { style?: StyleSpec } {
   return { style: spec };
 }
 
-const MASTER_KEYS = ["eq", "glue", "tape", "width", "limiter", "target"];
+const MASTER_KEYS = [
+  "trim",
+  "eq",
+  "glue",
+  "tape",
+  "width",
+  "clip",
+  "limiter",
+  "target",
+];
 
 /** Shape checks only; dawg validates every value when it loads the song. */
 function masterData(input: unknown): MasterInput | undefined {
@@ -13977,6 +13992,42 @@ export type PatchNodeTable = {
       out: "a";
     };
   };
+  /** tempo-synced step gate: chops a held sound to a rhythm on the song grid */
+  "fx.gate": {
+    main: "a";
+    params: {
+      /** rhythm of open (x) and shut (.) steps: chop x, eighths x., offbeat ..x., trance x.xx.xx.x.xx.xx., dotted x..x..x.x..x..x., gallop x.xx (default "chop") */
+      pattern?: "chop" | "eighths" | "offbeat" | "trance" | "dotted" | "gallop";
+      /** length of one pattern step in beats (0.25 a 16th) (0.0625..4 beats, default 0.25) */
+      step?: number;
+      /** fraction of an open step that sounds; 1 merges neighbouring open steps (0.05..1, default 0.75) */
+      length?: number;
+      /** how far shut steps dip: 1 to silence, 0 not at all (0..1, default 1) */
+      depth?: number;
+      /** fade-in when a step opens (0.0005..0.1 s, default 0.002) */
+      attack?: number;
+      /** fade-out when a step shuts (0.0005..0.2 s, default 0.01) */
+      release?: number;
+    };
+    inputs: {
+      /** audio in */
+      in: "a";
+      /** length of one pattern step in beats (0.25 a 16th) */
+      step: "c";
+      /** fraction of an open step that sounds; 1 merges neighbouring open steps */
+      length: "c";
+      /** how far shut steps dip: 1 to silence, 0 not at all */
+      depth: "c";
+      /** fade-in when a step opens */
+      attack: "c";
+      /** fade-out when a step shuts */
+      release: "c";
+    };
+    outputs: {
+      /** audio out */
+      out: "a";
+    };
+  };
   /** feed-forward RMS-ish compressor with soft knee and make-up gain */
   "fx.compressor": {
     main: "a";
@@ -15213,6 +15264,19 @@ export const PATCH_NODE_PORTS: Readonly<
       ["depth", "c", 0, 1, 0.5],
       ["skew", "c", 0, 1, 0.5],
       ["phase", "c", 0, 1, 0],
+    ],
+    outputs: [["out", "a"]],
+  },
+  "fx.gate": {
+    rate: "global",
+    params: ["pattern", "step", "length", "depth", "attack", "release"],
+    inputs: [
+      ["in", "a"],
+      ["step", "c", 0.0625, 4, 0.25],
+      ["length", "c", 0.05, 1, 0.75],
+      ["depth", "c", 0, 1, 1],
+      ["attack", "c", 0.0005, 0.1, 0.002],
+      ["release", "c", 0.0005, 0.2, 0.01],
     ],
     outputs: [["out", "a"]],
   },
