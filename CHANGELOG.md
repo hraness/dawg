@@ -25,6 +25,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
   layers, with dry words, clean inserts, safe pre-window headroom and fixed monitor
   gain compensation. This balance supersedes earlier caps on vocal prominence;
   the final mix pass preserves authored notes, lyrics, timing and sample files.
+- Glow Stick, Glass Garden, Redline and Candy Fault pump harder in their drops.
+  The kick's duck now uses the tempo-synced `pump` curve, and their held pads,
+  strings or chords pass through a trance `gate` that opens only in choruses
+  and drops. Their notes and vocal books are unchanged.
 
 ### Fixed
 
