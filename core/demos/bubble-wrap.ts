@@ -35,6 +35,13 @@ export const BPM = 100;
 const BARS = 64;
 
 /** The vocal book: lines in beats (scripts/vox/songs.py bubble-wrap-vox). */
+/**
+ * Lines that open on unstressed words start early, so those words are a
+ * pickup and the first stressed syllable lands where the line used to
+ * start (Hannah Diamond's lines start off the beat 75-80% of the time).
+ */
+const PICKUP: Readonly<Record<string, number>> = { v1: -0.25, v2: -0.25, v3: -0.5, v4: -0.5, v5: -0.25, v6: -0.25, v7: -0.25, v8: -0.5, ch4: -0.25 };
+
 export const BOOK: VoxBank = {
   sample: "bubble-wrap-vox",
   root: 70,
@@ -217,6 +224,7 @@ export const bubbleWrap: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
+      beat += PICKUP[part] ?? 0;
       const track = id === "chant" ? chant : vox;
       s.note(
         id,

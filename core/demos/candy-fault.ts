@@ -614,7 +614,7 @@ export const lift = (bar: number): Line => [
 ];
 
 /**
- * "We glow in the static, oh": the title line. "Glow" lands on the 9th
+ * "We shine in the static, oh": the title line. "Shine" lands on the 9th
  * over I and resolves down to the root; "oh" is the 9th over V resolving
  * to its root. `flip` answers with a second "oh" that climbs instead.
  */
@@ -626,12 +626,12 @@ function lineA(bar: number, pickup: boolean, flip: boolean): Line {
       [
         ...(pickup
           ? ([
-              [0, 78, 0.5, 0.86, "glow"],
+              [0, 78, 0.5, 0.86, "shine"],
               [0.5, 76, 1, 0.8, "_"],
             ] as const)
           : ([
               [0, 71, 0.4, 0.8, "We"],
-              [0.5, 78, 0.4, 0.86, "glow"],
+              [0.5, 78, 0.4, 0.86, "shine"],
               [0.9, 76, 0.6, 0.8, "_"],
             ] as const)),
         [1.5, 73, 0.4, 0.7, "in"],
@@ -814,7 +814,7 @@ export const LAST: Line = [
     64,
     [
       [0.5, 68, 0.45, 0.5, "We"],
-      [1, 71, 1.4, 0.56, "glow"],
+      [1, 71, 1.4, 0.56, "shine"],
     ],
   ],
   [

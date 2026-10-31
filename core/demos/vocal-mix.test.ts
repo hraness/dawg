@@ -17,18 +17,18 @@ import {
 
 const musicalBaseline: Readonly<Record<string, string>> = {
   "candy-fault":
-    "f3c472bb6a2dceef2e9609d442deed6b97d183fd4c2dfd3aa7c563aef51f962d",
+    "494cace369a7b6a1f7b81e1d3af449b8485d5fa946efee0becf08fb12c44f4a5",
   redline: "d3b29d13564cf4409e3fc5ab937cfb53d895a287f8227103e0a21940006ab87b",
   "glass-garden":
     "8739af97a90677fba27eb6a981d010e9559b35588342eb0d1c10632e692e749a",
   "night-swim":
-    "da413140c6373bc50d54f06ab6118171f6d4636b09e463a899144f457a3baaed",
+    "aa19cbd9be922e74c7e2d7a3116c226adb87756c2ac69192b9a165b4a1b413be",
   "kite-season":
-    "bb006401e1d6d09698b51eadc98381162816b8540e94f4dfc07a028ab2d3c0f3",
+    "c0bdd90e8bd84972833b6dd7259013fd0ce4c335a6a55712c4aaaf775a00f1fe",
   "bubble-wrap":
-    "d1a8f38ecdafd0928c4567800adadce22d7a1e7a911599b82381554a6f7d5e86",
+    "c94d1a7fa835a9b1c1eeb6d9c704855cf9e0ea6663ab37628047343ee0a3b4d8",
   "glow-stick":
-    "09447e62f1fa78cb340ae6232919a688626406d0532ba93ef0e6910901548e81",
+    "89d620f23fb283c3256c73c13acd2adf0d00ec887fdf46e0168aabe73982ee8c",
   "window-seat":
     "7ccecdbe5c7917e1b000a571a2ba4d45a87ed92a48f8896d763bbe52e2f123b0",
   "light-one":

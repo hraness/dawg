@@ -40,6 +40,13 @@ export const BPM = 146;
 const BARS = 74;
 
 /** The vocal book: lines in beats (scripts/vox/songs.py kite-season-vox). */
+/**
+ * Lines that open on unstressed words start early, so those words are a
+ * pickup and the first stressed syllable lands where the line used to
+ * start (Hannah Diamond's lines start off the beat 75-80% of the time).
+ */
+const PICKUP: Readonly<Record<string, number>> = { v2: -0.25, v3: -0.5, v4: -0.5, v6: -0.25, v7: -0.5, ch4: -0.25, br: -0.25 };
+
 export const BOOK: VoxBank = {
   sample: "kite-season-vox",
   root: 64,
@@ -260,6 +267,7 @@ export const kiteSeason: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
+      beat += PICKUP[part] ?? 0;
       const track = id === "echo" ? echo : vox;
       s.note(
         id,

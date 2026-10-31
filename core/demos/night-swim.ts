@@ -39,6 +39,13 @@ export const BPM = 122;
 const BARS = 84;
 
 /** The vocal book: lines in beats (scripts/vox/songs.py night-swim-vox). */
+/**
+ * Lines that open on unstressed words start early, so those words are a
+ * pickup and the first stressed syllable lands where the line used to
+ * start (Hannah Diamond's lines start off the beat 75-80% of the time).
+ */
+const PICKUP: Readonly<Record<string, number>> = { v3: -0.25, v4: -0.5, br: -0.25 };
+
 export const BOOK: VoxBank = {
   sample: "night-swim-vox",
   root: 62,
@@ -303,6 +310,7 @@ export const nightSwim: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
+      beat += PICKUP[part] ?? 0;
       const track =
         id === "echo"
           ? echo
