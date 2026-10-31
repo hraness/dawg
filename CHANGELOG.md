@@ -2,7 +2,7 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
-## 0.38.0
+## 0.38.1
 
 ### Added
 
@@ -38,6 +38,9 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Every demo vocal book now sings in Kokoro's British `bf_emma` voice.** Redline, Glass Garden, Night Swim and Kite Season were re-sung to match Bubble Wrap. Candy Fault trades its synth singer for a new book, `candy-fault-vox`, that sings its topline note for note. The final chorus is sung a half step up there, so the lift needs no re-pitching, and the glitch-break "pix" stutters come from the book's chops. On Candy Fault, whisper now hears nearly every line of the mix, where it heard almost none from the synth singer. Clef scores its vocals 7.8 against 5.2, with polish level. Each book takes the clearest of several takes line by line. Redline, Glass Garden and Kite Season read their words at `speed: 0.8` before WORLD fits them to the melody, which keeps fast lines like "neon on the highway" from slurring. Whisper misses fewer words than with the old voices on Glass Garden (0.03 against 0.17) and Kite Season (0.10 against 0.11), and about as many on Night Swim (0.07 against 0.06) and Redline (0.21 against 0.21). `songs.py` takes a song-wide `speed`.
 
 ### Fixed
+
+- Input typed during slow project startup is buffered until the command listeners
+  are ready, preserving the first request shown in the chat prompt.
 
 - Demo vocals sit ahead of competing instruments and vocal layers, with drier
   words, cleaner lead inserts and headroom before long-song rendering. The mix
