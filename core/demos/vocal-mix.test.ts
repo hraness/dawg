@@ -17,22 +17,22 @@ import {
 
 const musicalBaseline: Readonly<Record<string, string>> = {
   "candy-fault":
-    "494cace369a7b6a1f7b81e1d3af449b8485d5fa946efee0becf08fb12c44f4a5",
-  redline: "60d681980f216039d8a8d99046641783fb7a03dea708a1f53a440b748183f116",
+    "338a9d88acf2ad8f0e56b812e2c9112fd4948f0b14237faebf334312cf3b1d66",
+  redline: "f36bfe2bf247224ae05448f337eb294cc127edc9a5b6125e377cf37ff3866d72",
   "glass-garden":
-    "ddad6ac7883700a1dacbb962ab060af9da06ee1b84e17caef9958a171d48c0e3",
+    "9d394db2545dee3fcd109d50f30a1935b99f0ffec8c166503d78ebf5360a3778",
   "night-swim":
-    "aa19cbd9be922e74c7e2d7a3116c226adb87756c2ac69192b9a165b4a1b413be",
+    "164915fb05a28c016c2e4ff6cf0065839e670136822f569b2dbdfc3d4ab0c563",
   "kite-season":
-    "c0bdd90e8bd84972833b6dd7259013fd0ce4c335a6a55712c4aaaf775a00f1fe",
+    "cae1128780c82059367d19b62cd75a3164555f11c95183a968fe72a90cc48934",
   "bubble-wrap":
-    "c94d1a7fa835a9b1c1eeb6d9c704855cf9e0ea6663ab37628047343ee0a3b4d8",
+    "3cbc0dbf8c96183f956fe36bdcece68cba2dfb7bb7514b7c0e1318464d529fc0",
   "glow-stick":
-    "89d620f23fb283c3256c73c13acd2adf0d00ec887fdf46e0168aabe73982ee8c",
+    "e50d1482b1c281e4572bdbf1202b8bd17a0f2cc70e5adc2f9749d6cdb68d8151",
   "window-seat":
-    "7ccecdbe5c7917e1b000a571a2ba4d45a87ed92a48f8896d763bbe52e2f123b0",
+    "6fd86df0074b0660648997f56f9a65a3831521226e8c020c170b10f751b649ae",
   "light-one":
-    "370cf48ba74894568c54d692fb766e6e1286edf4723abca2c34bdb197dd89697",
+    "d341e4ae9c52aaef0c733b4e6c9f8203870de79abb1e3a9ca69f4f3183b54b76",
 };
 const mixFields = new Set([
   "volume",
