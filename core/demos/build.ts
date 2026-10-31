@@ -195,7 +195,12 @@ export class Composer {
       ticksPerBeat: TPB,
       beatsPerBar: 4,
       calibration: 1,
-      tracks: foregroundVocalTracks(this.tracks, this.info.id),
+      tracks: foregroundVocalTracks(
+        this.tracks,
+        this.info.id,
+        this.sections,
+        TPB * 4,
+      ),
       notes: this.notes,
       sections: this.sections,
       form: this.sections.map(({ name }) => ({ section: name })),

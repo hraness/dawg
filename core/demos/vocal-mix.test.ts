@@ -4,8 +4,11 @@ import { DEMOS, createDemo } from "./index.ts";
 import { normalizeMaster } from "../master.ts";
 import { applyMasterPcm, applyMonitorMaster } from "../../src/audio/master.ts";
 import {
+  BED_POCKET,
+  CHORUS_RIDE,
   foregroundVocalTracks,
   vocalMonitorGain,
+  VOCAL_DUCK_DEPTH,
   VOCAL_OUTPUT_HEADROOM,
   WORD_DELAY_MIX,
   WORD_REVERB_MIX,
@@ -95,11 +98,20 @@ test("words lead the backing through clean, dry gain stages with pre-window head
       )!;
     const gain = Number(lead.fx?.postgain?.gain);
     expect(gain, demo.id).toBeGreaterThan(0);
-    for (const track of score.tracks.filter((track) => track.id !== lead.id))
-      expect(
-        Number(track.fx?.postgain?.gain),
-        demo.id + ":" + track.id,
-      ).toBeLessThan(gain);
+    // Balance is measured against the backing as heard, not by gain order:
+    // a light duck, a presence pocket in pitched parts and a chorus ride.
+    expect(lead.fx?.duck?.depth, demo.id).toBe(VOCAL_DUCK_DEPTH);
+    const ride = lead.fxAutomation?.["postgain-gain"] ?? [];
+    expect(ride[0]?.value, demo.id).toBe(gain);
+    expect(Math.max(...ride.map((point) => point.value)), demo.id).toBeCloseTo(
+      gain * CHORUS_RIDE,
+      9,
+    );
+    const pocketed = score.tracks.filter(
+      (track) => track.fx?.eq?.mid === BED_POCKET.mid,
+    );
+    expect(pocketed.length, demo.id).toBeGreaterThan(0);
+    expect(pocketed.map((track) => track.id)).not.toContain(lead.id);
     expect(lead.fx?.crush).toBeUndefined();
     expect(Number(lead.reverb?.mix ?? 0)).toBeLessThanOrEqual(WORD_REVERB_MIX);
     expect(Number(lead.delay?.mix ?? 0)).toBeLessThanOrEqual(WORD_DELAY_MIX);
@@ -180,4 +192,42 @@ test("fixed vocal monitoring restores headroom without changing target-mastered 
   const power = (values: Int16Array) =>
     values.reduce((sum, value) => sum + value ** 2, 0);
   expect(Math.sqrt(power(newMonitor) / power(oldMonitor))).toBeCloseTo(4, 2);
+});
+
+test("the lead rides up over choruses and drops, staying up across adjacent ones", () => {
+  const bar = 1920;
+  const [lead] = foregroundVocalTracks(
+    [
+      {
+        id: "vox",
+        sampler: {
+          mode: "oneshot",
+          voices: { line: { src: "pack:studio/redline-vox" } },
+        },
+      },
+      { id: "pad" },
+    ],
+    "new-original",
+    [
+      { name: "Verse 1", startBar: 0, bars: 8 },
+      { name: "Chorus 1", startBar: 8, bars: 8 },
+      { name: "Drop 1", startBar: 16, bars: 8 },
+      { name: "Verse 2", startBar: 24, bars: 8 },
+      { name: "Last chorus", startBar: 32, bars: 8 },
+    ],
+    bar,
+  );
+  const base = Number(lead!.fx?.postgain?.gain);
+  const up = base * CHORUS_RIDE;
+  expect(lead!.fxAutomation?.["postgain-gain"]).toEqual([
+    { tick: 0, value: base },
+    { tick: 8 * bar - bar / 4, value: base },
+    { tick: 8 * bar, value: up },
+    { tick: 24 * bar, value: up },
+    { tick: 24 * bar + bar / 4, value: base },
+    { tick: 32 * bar - bar / 4, value: base },
+    { tick: 32 * bar, value: up },
+    { tick: 40 * bar, value: up },
+    { tick: 40 * bar + bar / 4, value: base },
+  ]);
 });
