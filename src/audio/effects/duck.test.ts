@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createScore, type TrackInput } from "../../../core/score.ts";
 import { LoopRenderer } from "../renderer.ts";
 import { renderScorePcm } from "../wav.ts";
-import { duckEnvelope, duckGains, orbitOf } from "./duck.ts";
+import { duckEnvelope, duckGains, duckSettings, orbitOf } from "./duck.ts";
 
 const RATE = 8_000;
 
@@ -87,6 +87,54 @@ describe("orbit and duck", () => {
     expect(env[1_499]).toBe(1);
     expect(env[1_500 + 400]!).toBeCloseTo(0.5, 2);
     expect(env[1_500 + 801]).toBe(0);
+  });
+
+  test("curve shapes the recovery: exp snaps back early, pump stays down", () => {
+    const shaped = (curve?: "linear" | "exp" | "pump") =>
+      duckEnvelope(
+        {
+          trackId: "k",
+          target: 1,
+          depth: 1,
+          attack: 0.1,
+          onset: 0,
+          onsets: [0],
+          ...(curve && { curve }),
+        },
+        1_000,
+        RATE,
+      );
+    const linear = shaped();
+    const exp = shaped("exp");
+    const pump = shaped("pump");
+    expect(shaped("linear")).toEqual(linear);
+    // Half way through the 800-sample recovery.
+    expect(linear[400]!).toBeCloseTo(0.5, 2);
+    expect(exp[400]!).toBeCloseTo(0.125, 2);
+    expect(pump[400]!).toBeCloseTo(0.75, 2);
+    for (const env of [linear, exp, pump]) {
+      expect(env[0]).toBe(1);
+      expect(env[801]).toBe(0);
+    }
+  });
+
+  test("sync sets the recovery in beats at the song tempo", () => {
+    const settings = (bpm: number) =>
+      duckSettings(
+        score({}, { fx: { duck: { orbit: 2, sync: 0.5, curve: "pump" } } })
+          .tracks[1],
+        60 / bpm,
+      );
+    expect(settings(120)?.attack).toBeCloseTo(0.25, 9);
+    expect(settings(160)?.attack).toBeCloseTo(0.1875, 9);
+    expect(settings(120)?.curve).toBe("pump");
+    // Absent, attack seconds hold and the curve stays linear.
+    const plain = duckSettings(
+      score({}, { fx: { duck: { orbit: 2, attack: 0.3 } } }).tracks[1],
+      0.25,
+    );
+    expect(plain?.attack).toBe(0.3);
+    expect(plain && "curve" in plain).toBe(false);
   });
 
   test("a ducker never ducks itself and only hits its target orbit", () => {

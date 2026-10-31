@@ -1033,6 +1033,25 @@ export const FX_SPECS = Object.freeze({
         optional: true,
         doc: "the dip holds while each note sounds, then recovers (a vocal sidechain); off dips only at onsets",
       },
+      curve: {
+        kind: "enum",
+        values: ["linear", "exp", "pump"],
+        default: "linear",
+        optional: true,
+        doc: "recovery shape: linear; exp snaps back early and eases in (a compressor); pump stays down, then swells back (a hypertechno pump)",
+        strudel: ["duckcurve"],
+      },
+      sync: {
+        kind: "number",
+        min: 0,
+        max: 4,
+        default: 0,
+        step: 0.0625,
+        unit: "beats",
+        optional: true,
+        doc: "recovery length in beats (tempo-synced); 0 uses attack in seconds",
+        strudel: ["ducksync"],
+      },
     },
   },
 } satisfies Record<string, EffectSpec>);
@@ -1626,6 +1645,7 @@ export const FX_PRESETS: Readonly<
     pump: { orbit: 2, depth: 0.85, attack: 0.25 },
     subtle: { orbit: 2, depth: 0.4, attack: 0.12 },
     gate: { orbit: 2, depth: 1, attack: 0.05 },
+    rave: { orbit: 2, depth: 0.9, curve: "pump", sync: 0.375 },
   },
 } satisfies Partial<Record<EffectName, Record<string, FxValues>>>);
 
