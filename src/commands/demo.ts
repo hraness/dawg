@@ -2,6 +2,13 @@
 import { createDemo, DEMOS, type DemoInfo } from "../../core/demos/index.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { fuzzyScore } from "../../tui/search.ts";
+import {
+  findShelfStudy,
+  listShelf,
+  SHELF_PREFIX,
+  shelfInfoLines,
+  type ShelfStudy,
+} from "./shelf.ts";
 
 export type DemoCommand =
   | { type: "demo-list"; query: string }
@@ -85,26 +92,50 @@ export function applyDemoCommand(command: DemoCommand): {
   next?: TrackScore;
   kind?: string;
   payload?: Record<string, unknown>;
+  /** A local study to load: evaluating it and copying samples is async. */
+  study?: ShelfStudy;
 } {
   if (command.type === "demo-bad")
     return { ok: false, message: command.message };
   if (command.type === "demo-list") {
     const found = searchDemos(command.query);
+    const query = command.query.trim().toLowerCase();
+    const local = listShelf().filter(
+      (study) =>
+        !query ||
+        `${study.slug} ${study.title} ${study.style}`
+          .toLowerCase()
+          .includes(query),
+    );
     return {
       ok: true,
-      message: found.length
-        ? [
-            "Demo songs · complete editable arrangements",
-            ...found.map(
-              (demo) =>
-                `${demo.id} · ${demo.title} · ${demo.style} · ${demoDuration(demo)}`,
-            ),
-            "demo <id> loads · demo info <id> explains the arrangement",
-          ].join("\n")
-        : `No demo matches “${command.query}” · demo list`,
+      message:
+        found.length || local.length
+          ? [
+              "Demo songs · complete editable arrangements",
+              ...found.map(
+                (demo) =>
+                  `${demo.id} · ${demo.title} · ${demo.style} · ${demoDuration(demo)}`,
+              ),
+              ...local.map(
+                (study) =>
+                  `${SHELF_PREFIX}${study.slug} · ${study.title} · ${study.style} · local`,
+              ),
+              "demo <id> loads · demo info <id> explains the arrangement",
+            ].join("\n")
+          : `No demo matches “${command.query}” · demo list`,
     };
   }
   const demo = findDemo(command.id);
+  const study = demo ? undefined : findShelfStudy(command.id);
+  if (study)
+    return command.type === "demo-info"
+      ? { ok: true, message: shelfInfoLines(study).join("\n") }
+      : {
+          ok: true,
+          message: `${study.title} · local study · Space plays · Ctrl-Z restores`,
+          study,
+        };
   if (!demo)
     return { ok: false, message: `No demo “${command.id}” · demo list` };
   if (command.type === "demo-info")
