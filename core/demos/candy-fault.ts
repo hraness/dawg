@@ -2445,7 +2445,7 @@ export const candyFault: DemoDefinition = {
         s.notes[i] = { ...n, pitch: n.pitch! + KEY_SHIFT };
     }
     rave(s, {
-      gated: ["chords"],
+      gated: ["chords", "keys"],
       open: ["Bright fault", "Fault return", "Overload"],
     });
     return s.finish();

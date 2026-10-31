@@ -1934,6 +1934,13 @@ export function rave(
     /** Pump depth and recovery in beats. */
     pump?: number;
     sync?: number;
+    /**
+     * Level of the gated tracks in each open section against closed ones
+     * (default 2, +6 dB): a gated pad loses ~40% of its energy and must come
+     * forward to read as stabs. Lift instrumental drops more than sung
+     * choruses, which keep the lead's balance. Capped where the fader reaches 1.
+     */
+    lift?: number | ((section: string) => number);
   }>,
 ): void {
   const kick = trackOf(s, o.kick ?? "kick");
@@ -1951,20 +1958,31 @@ export function rave(
     },
   });
   const depth = o.depth ?? 0.85;
+  const isOpen = (name: string) =>
+    o.open ? o.open.includes(name) : /chorus|drop/i.test(name);
   const lane = steps(
-    ...s.sections.map(
-      (p) =>
-        [
-          p.startBar,
-          (o.open ? o.open.includes(p.name) : /chorus|drop/i.test(p.name))
-            ? depth
-            : 0,
-        ] as const,
-    ),
+    ...s.sections.map((p) => [p.startBar, isOpen(p.name) ? depth : 0] as const),
   );
   for (const id of o.gated) {
     const t = trackOf(s, id);
+    const vol = t.volume ?? 1;
+    const gain = (name: string) =>
+      !isOpen(name)
+        ? 1
+        : typeof o.lift === "function"
+          ? o.lift(name)
+          : (o.lift ?? 2);
+    const most = Math.max(...s.sections.map((p) => gain(p.name)));
+    const up = Math.min(1, vol * most);
+    const shape = steps(
+      ...s.sections.map(
+        (p) => [p.startBar, Math.min(1, (vol * gain(p.name)) / up)] as const,
+      ),
+    );
     patch(s, id, {
+      volume: up,
+      volumeAutomation: times(t.volumeAutomation ?? [], shape),
+
       fx: {
         ...t.fx,
         gate: {
@@ -1979,6 +1997,30 @@ export function rave(
       fxAutomation: { ...t.fxAutomation, "gate-depth": lane },
     });
   }
+}
+
+/** The product of two automation lanes (absent points read as 1). */
+function times(
+  a: readonly AutomationPoint[],
+  b: readonly AutomationPoint[],
+): AutomationPoint[] {
+  const at = (lane: readonly AutomationPoint[], t: number) => {
+    if (lane.length === 0) return 1;
+    if (t <= lane[0]!.tick) return lane[0]!.value;
+    for (let i = 1; i < lane.length; i++) {
+      const p = lane[i - 1]!,
+        q = lane[i]!;
+      if (t <= q.tick)
+        return q.tick === p.tick
+          ? q.value
+          : p.value + ((q.value - p.value) * (t - p.tick)) / (q.tick - p.tick);
+    }
+    return lane.at(-1)!.value;
+  };
+  const ticks = [...new Set([...a, ...b].map((p) => p.tick))].sort(
+    (x, y) => x - y,
+  );
+  return ticks.map((t) => ({ tick: t, value: at(a, t) * at(b, t) }));
 }
 
 /** Per-song levels and patch tweaks for the kit's tracks. */

@@ -755,7 +755,18 @@ export const glassGarden: DemoDefinition = {
         [BARS, 700],
       ),
     });
-    rave(s, { gated: ["pad"] });
+    rave(s, {
+      gated: ["pad"],
+      open: [
+        "Chorus 1",
+        "Bloom 1",
+        "Chorus 2",
+        "Bloom 2",
+        "Last chorus",
+        "Last bloom",
+      ],
+      lift: (n) => (/bloom/i.test(n) ? 3.5 : 1.6),
+    });
     return s.finish();
   },
 };

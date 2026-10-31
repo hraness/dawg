@@ -426,7 +426,11 @@ export const glowStick: DemoDefinition = {
           filterAutomation: filterArc(s.sections, 2200, 7500),
         };
     });
-    rave(s, { gated: ["pump", "strings"] });
+    rave(s, {
+      gated: ["pump", "voices", "strings"],
+      open: ["Chorus 1", "Chorus 2", "Break", "Last chorus"],
+      lift: (n) => (n === "Break" ? 4 : 2.5),
+    });
     return s.finish();
   },
 };

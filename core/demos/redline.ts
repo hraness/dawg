@@ -768,7 +768,10 @@ export const redline: DemoDefinition = {
         [BARS, 500],
       ),
     });
-    rave(s, { gated: ["pad"] });
+    rave(s, {
+      gated: ["pad"],
+      lift: (n) => (/drop/i.test(n) ? 3.5 : 1.6),
+    });
     return s.finish();
   },
 };

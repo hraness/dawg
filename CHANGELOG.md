@@ -28,7 +28,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - Glow Stick, Glass Garden, Redline and Candy Fault pump harder in their drops.
   The kick's duck now uses the tempo-synced `pump` curve, and their held pads,
   strings or chords pass through a trance `gate` that opens only in choruses
-  and drops. Their notes and vocal books are unchanged.
+  and drops, lifted most in the instrumental drops and breaks. Their notes and
+  vocal books are unchanged.
 
 ### Fixed
 
