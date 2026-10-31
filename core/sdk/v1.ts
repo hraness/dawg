@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.40.0";
+export const SDK_VERSION = "1.41.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -5244,6 +5244,8 @@ export type SongFormEntry = Readonly<{ section: string; repeat?: number }>;
  * ```
  */
 export type MasterInput = Readonly<{
+  /** Gain staging first: `lufs`, the raw mix's loudness before eq, glue and tape (SDK 1.41.0). */
+  trim?: EffectParams;
   /** `low`/`high` shelves and `bell1`/`bell2` gains in dB, with `…freq` and `…q`. */
   eq?: EffectParams;
   /** Bus compressor: threshold, ratio, attack, release (ms), knee, makeup, mix, hpf. */
@@ -5252,6 +5254,8 @@ export type MasterInput = Readonly<{
   tape?: EffectParams;
   /** Stereo width 0..2 (1 unchanged) and `mono` bass below this many Hz. */
   width?: EffectParams;
+  /** Soft clipper before the limiter: drive (dB), ceiling (dBFS), softness 0..1 (SDK 1.41.0). */
+  clip?: EffectParams;
   /** True-peak limiter: ceiling (dBTP), gain, release, lookahead (ms), truepeak. */
   limiter?: EffectParams;
   /** Integrated loudness target in LUFS (a negative number, -40..-3). */
@@ -5514,7 +5518,16 @@ function songStyle(input: unknown): { style?: StyleSpec } {
   return { style: spec };
 }
 
-const MASTER_KEYS = ["eq", "glue", "tape", "width", "limiter", "target"];
+const MASTER_KEYS = [
+  "trim",
+  "eq",
+  "glue",
+  "tape",
+  "width",
+  "clip",
+  "limiter",
+  "target",
+];
 
 /** Shape checks only; dawg validates every value when it loads the song. */
 function masterData(input: unknown): MasterInput | undefined {

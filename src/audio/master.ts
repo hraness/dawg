@@ -1,7 +1,7 @@
 /**
- * The song master (core/master.ts) as DSP: EQ, glue compressor, tape,
- * width and a true-peak limiter on the summed mix, then the loudness
- * target. Everything is offline over whole buffers in float64 with a fixed
+ * The song master (core/master.ts) as DSP: trim (gain staging), EQ, glue
+ * compressor, tape, width, a soft clipper and a true-peak limiter on the
+ * summed mix, then the loudness target. Everything is offline over whole buffers in float64 with a fixed
  * order of operations, so masters render deterministically.
  *
  * Loops are processed as if they played forever: the chain runs over
@@ -92,10 +92,13 @@ export function applyMaster(
         : mixR[source]!;
     }
   }
+  if (song.trim)
+    applyTrim(left, right, song.trim, sampleRate, warm, frames, loop);
   if (song.eq) applyEq(left, right, song.eq, sampleRate);
   if (song.glue) applyGlue(left, right, song.glue, sampleRate);
   if (song.tape) applyTape(left, right, song.tape, sampleRate);
   if (song.width) applyWidth(left, right, song.width, sampleRate);
+  if (song.clip) applyClip(left, right, song.clip);
   const kept = (buffer: Float64Array) => buffer.subarray(warm, warm + frames);
   let gainDb = 0;
   let runs = 0;
@@ -196,7 +199,7 @@ const EMPTY_INPUT = new Float64Array(0);
 
 /**
  * Bounded audition: fixed manual limiter drive, no target normalization,
- * whole-buffer trim or loudness scan. Filter state warms in the render window's
+ * whole-buffer trim, `trim` unit or loudness scan. Filter state warms in the render window's
  * pre-roll; this deliberately does not claim exact whole-song mastering.
  */
 export function applyMonitorMaster(
@@ -212,10 +215,13 @@ export function applyMonitorMaster(
     left[i] = pcm[i * 2]! / 32767;
     right[i] = pcm[i * 2 + 1]! / 32767;
   }
+  // No trim here: a window's loudness is not the song's, and a per-window
+  // gain would level the sections the way the target must not.
   if (song.eq) applyEq(left, right, song.eq, sampleRate);
   if (song.glue) applyGlue(left, right, song.glue, sampleRate);
   if (song.tape) applyTape(left, right, song.tape, sampleRate);
   if (song.width) applyWidth(left, right, song.width, sampleRate);
+  if (song.clip) applyClip(left, right, song.clip);
   let outputL: Float64Array = left,
     outputR: Float64Array = right;
   if (song.limiter) {
@@ -327,6 +333,62 @@ export function seekTarget(
     }
   }
   return best().gain;
+}
+
+/**
+ * Gain staging: one static gain that sets the kept pass to `lufs`, so the
+ * units after it see the same level whatever the track faders sum to. A
+ * silent mix passes unchanged.
+ */
+function applyTrim(
+  left: Float64Array,
+  right: Float64Array,
+  values: FxValues,
+  sampleRate: number,
+  warm: number,
+  frames: number,
+  loop: boolean,
+): void {
+  const before = integratedLoudness(
+    left.subarray(warm, warm + frames),
+    right.subarray(warm, warm + frames),
+    sampleRate,
+    loop,
+  );
+  if (!Number.isFinite(before)) return;
+  scale(left, right, 10 ** (clampGain(Number(values.lufs) - before) / 20));
+}
+
+/**
+ * Soft clipper: `drive` dB in, linear up to the knee, then a tanh curve
+ * that approaches `ceiling` and never passes it. `softness` 0 is a hard
+ * clip at the ceiling; 1 puts the knee 6 dB below it. Memoryless, so it
+ * is the same on every render path; the limiter after it catches the
+ * inter-sample peaks the curve leaves.
+ */
+function applyClip(
+  left: Float64Array,
+  right: Float64Array,
+  values: FxValues,
+): void {
+  const drive = 10 ** (Number(values.drive) / 20);
+  const ceiling = 10 ** (Number(values.ceiling) / 20);
+  const knee = ceiling * 10 ** ((-6 * Number(values.softness)) / 20);
+  const room = ceiling - knee;
+  const curve = (x: number) => {
+    const a = Math.abs(x * drive);
+    const y =
+      a <= knee
+        ? a
+        : room <= 0
+          ? ceiling
+          : knee + room * Math.tanh((a - knee) / room);
+    return x < 0 ? -y : y;
+  };
+  for (let index = 0; index < left.length; index += 1) {
+    left[index] = curve(left[index]!);
+    right[index] = curve(right[index]!);
+  }
 }
 
 function scale(left: Float64Array, right: Float64Array, gain: number): void {

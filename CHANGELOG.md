@@ -9,6 +9,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Filter lanes sweep held synth notes.** A synth's cutoff and resonance lanes used to be read once, at each note's onset, so a held chord under a rising filter lane stayed dark. Each held note's filter now follows its lanes every 32 samples.
 - **Shaped, tempo-synced ducking.** `fx.duck` takes `curve` (`linear`, `exp` that snaps back early, `pump` that stays down and swells back before the next beat) and `sync`, a recovery length in beats. The new `duck` preset `rave` pumps 0.9 deep over 3/8 of a beat at any tempo.
 - **A step gate.** `fx.gate` chops a held sound to a rhythm on the song's beat grid (`chop`, `eighths`, `offbeat`, `trance`, `dotted`, `gallop`) with a gate length, depth and click-free fades, so one held chord can become 16th-note stabs without a note per stab.
+- **Loud masters that keep their sections.** Two optional master units: `trim` sets the raw mix to a loudness before EQ, glue and tape (gain staging), and `clip` is a soft clipper before the limiter. With both, a -8 LUFS target no longer comes from pushing a quiet mix 20 dB or more into the limiter, so verses stay quieter than drops (in a test with a 20 dB verse-to-drop step, 17.4 dB survives against 15.6 with the limiter alone). Presets: trim `quiet staged hot`, clip `gentle rave hard`. SDK 1.41.0.
 
 ## 0.38.1
 

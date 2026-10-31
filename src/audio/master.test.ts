@@ -529,3 +529,94 @@ describe("song master: EQ near Nyquist", () => {
     expect(Math.abs(gainAt(200))).toBeLessThan(0.5);
   });
 });
+
+describe("trim and clip", () => {
+  /** Two seconds of a quiet verse, then two of the beat: a section contrast. */
+  function sections(scaleBy: number): readonly [Float64Array, Float64Array] {
+    const [beatL, beatR] = beat();
+    const half = 2 * RATE;
+    const left = new Float64Array(2 * half);
+    const right = new Float64Array(2 * half);
+    for (let index = 0; index < half; index += 1) {
+      left[index] = beatL[index]! * 0.1 * scaleBy;
+      right[index] = beatR[index]! * 0.1 * scaleBy;
+      left[half + index] = beatL[index]! * scaleBy;
+      right[half + index] = beatR[index]! * scaleBy;
+    }
+    return [left, right];
+  }
+  const contrast = (out: { left: Float64Array }) => {
+    const half = 2 * RATE;
+    return (
+      rmsDb(out.left.subarray(half, 2 * half)) -
+      rmsDb(out.left.subarray(0, half))
+    );
+  };
+
+  test("trim makes the chain see the same level however loud the faders are", () => {
+    const song = master({ trim: { lufs: -18 }, glue: {}, tape: {} });
+    const [quietL, quietR] = sections(0.05);
+    const [loudL, loudR] = sections(0.5);
+    const quiet = applyMaster(
+      quietL,
+      quietR,
+      quietL.length,
+      RATE,
+      song,
+      false,
+    )!;
+    const loud = applyMaster(loudL, loudR, loudL.length, RATE, song, false)!;
+    expect(quiet.report.integrated).toBeCloseTo(loud.report.integrated, 1);
+    expect(contrast(quiet)).toBeCloseTo(contrast(loud), 1);
+  });
+
+  test("clip never passes its ceiling and is transparent below the knee", () => {
+    const song = master({ clip: { drive: 12, ceiling: -3, softness: 0.5 } });
+    const [left, right] = beat();
+    const out = applyMaster(left, right, left.length, RATE, song, false)!;
+    const ceiling = 10 ** (-3 / 20);
+    for (const value of out.left)
+      expect(Math.abs(value)).toBeLessThanOrEqual(ceiling + 1e-12);
+    const [quietL, quietR] = sine(440, -40, 0.5);
+    const quiet = applyMaster(
+      quietL,
+      quietR,
+      quietL.length,
+      RATE,
+      master({ clip: { drive: 0 } }),
+      false,
+    )!;
+    expect(quiet.left).toEqual(quietL);
+  });
+
+  test("a loud target keeps more section contrast with trim and clip", () => {
+    const [left, right] = sections(0.03);
+    const before = contrast({ left });
+    const limiterOnly = applyMaster(
+      left,
+      right,
+      left.length,
+      RATE,
+      master({ limiter: { release: 60, lookahead: 2 }, target: -8 }),
+      false,
+    )!;
+    const staged = applyMaster(
+      left,
+      right,
+      left.length,
+      RATE,
+      master({
+        trim: { lufs: -14 },
+        clip: { drive: 6, softness: 0.4 },
+        limiter: { release: 60, lookahead: 2 },
+        target: -8,
+      }),
+      false,
+    )!;
+    expect(limiterOnly.report.integrated).toBeCloseTo(-8, 0);
+    expect(staged.report.integrated).toBeCloseTo(-8, 0);
+    // The limiter alone eats into the contrast; the staged master keeps more of it.
+    expect(contrast(staged) - contrast(limiterOnly)).toBeGreaterThan(1);
+    expect(contrast(staged)).toBeLessThanOrEqual(before + 0.5);
+  });
+});
