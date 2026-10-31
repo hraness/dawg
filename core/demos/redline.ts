@@ -34,6 +34,7 @@ import {
   VOCAL_VERB,
   writeSong,
   sungAt,
+  rave,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -593,7 +594,11 @@ export const redline: DemoDefinition = {
         if (!part || !p.words) return;
         const bar = p.start + i;
         const notes = sungAt(BOOK, part);
-        for (let b = Math.floor(notes[0]![0] / 4); b * 4 < notes.at(-1)![0]; b++) {
+        for (
+          let b = Math.floor(notes[0]![0] / 4);
+          b * 4 < notes.at(-1)![0];
+          b++
+        ) {
           const sung = notes.filter(([beat]) => Math.floor(beat / 4) === b);
           if (sung.length === 0) continue;
           const low = Math.min(...sung.map(([, pitch]) => pitch));
@@ -763,6 +768,7 @@ export const redline: DemoDefinition = {
         [BARS, 500],
       ),
     });
+    rave(s, { gated: ["pad"] });
     return s.finish();
   },
 };

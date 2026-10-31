@@ -32,6 +32,7 @@ import {
   VOCAL_ECHO,
   writeSong,
   sungAt,
+  rave,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -754,6 +755,7 @@ export const glassGarden: DemoDefinition = {
         [BARS, 700],
       ),
     });
+    rave(s, { gated: ["pad"] });
     return s.finish();
   },
 };

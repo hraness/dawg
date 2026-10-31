@@ -30,6 +30,7 @@ import {
   UNDER_WORDS,
   VOCAL_ECHO,
   vocalTrack,
+  rave,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -425,6 +426,7 @@ export const glowStick: DemoDefinition = {
           filterAutomation: filterArc(s.sections, 2200, 7500),
         };
     });
+    rave(s, { gated: ["pump", "strings"] });
     return s.finish();
   },
 };

@@ -1913,6 +1913,74 @@ export function patch(
   s.tracks[i] = { ...s.tracks[i]!, ...extra };
 }
 
+/**
+ * The hypertechno treatment (see the hypertechno skill): the kick's pump
+ * takes the swelling `pump` curve and a tempo-synced recovery, and held
+ * chord tracks get a step gate that opens only in choruses and drops, so a
+ * held chord turns into stabs there and stays a pad elsewhere. Call after
+ * every section and track is in place.
+ */
+export function rave(
+  s: Composer,
+  o: Readonly<{
+    /** Held-chord tracks to gate in the drops. */
+    gated: readonly string[];
+    kick?: string;
+    pattern?: "chop" | "eighths" | "offbeat" | "trance" | "dotted" | "gallop";
+    length?: number;
+    depth?: number;
+    /** Sections where the gate opens; absent, those named chorus or drop. */
+    open?: readonly string[];
+    /** Pump depth and recovery in beats. */
+    pump?: number;
+    sync?: number;
+  }>,
+): void {
+  const kick = trackOf(s, o.kick ?? "kick");
+  const duck = kick.fx?.duck ?? {};
+  patch(s, o.kick ?? "kick", {
+    fx: {
+      ...kick.fx,
+      duck: {
+        ...duck,
+        orbit: 2,
+        depth: o.pump ?? (typeof duck.depth === "number" ? duck.depth : 0.86),
+        curve: "pump",
+        sync: o.sync ?? 0.4,
+      },
+    },
+  });
+  const depth = o.depth ?? 0.85;
+  const lane = steps(
+    ...s.sections.map(
+      (p) =>
+        [
+          p.startBar,
+          (o.open ? o.open.includes(p.name) : /chorus|drop/i.test(p.name))
+            ? depth
+            : 0,
+        ] as const,
+    ),
+  );
+  for (const id of o.gated) {
+    const t = trackOf(s, id);
+    patch(s, id, {
+      fx: {
+        ...t.fx,
+        gate: {
+          pattern: o.pattern ?? "trance",
+          step: 0.25,
+          length: o.length ?? 0.6,
+          depth: 0,
+          attack: 0.002,
+          release: 0.015,
+        },
+      },
+      fxAutomation: { ...t.fxAutomation, "gate-depth": lane },
+    });
+  }
+}
+
 /** Per-song levels and patch tweaks for the kit's tracks. */
 export type KitOptions = Readonly<{
   bpm: number;

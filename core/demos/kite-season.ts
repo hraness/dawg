@@ -45,7 +45,15 @@ const BARS = 74;
  * pickup and the first stressed syllable lands where the line used to
  * start (Hannah Diamond's lines start off the beat 75-80% of the time).
  */
-const PICKUP: Readonly<Record<string, number>> = { v2: -0.25, v3: -0.5, v4: -0.5, v6: -0.25, v7: -0.5, ch4: -0.25, br: -0.25 };
+const PICKUP: Readonly<Record<string, number>> = {
+  v2: -0.25,
+  v3: -0.5,
+  v4: -0.5,
+  v6: -0.25,
+  v7: -0.5,
+  ch4: -0.25,
+  br: -0.25,
+};
 
 export const BOOK: VoxBank = {
   sample: "kite-season-vox",

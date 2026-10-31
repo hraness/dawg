@@ -24,6 +24,7 @@ import {
   VOCAL_ECHO,
   VOCAL_VERB,
   vocalTrack,
+  rave,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -2443,6 +2444,10 @@ export const candyFault: DemoDefinition = {
       if (LIFTED.has(n.trackId!))
         s.notes[i] = { ...n, pitch: n.pitch! + KEY_SHIFT };
     }
+    rave(s, {
+      gated: ["chords"],
+      open: ["Bright fault", "Fault return", "Overload"],
+    });
     return s.finish();
   },
 };
