@@ -31,6 +31,7 @@ import {
   VOCAL_DUCK,
   VOCAL_ECHO,
   writeSong,
+  sungAt,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -42,6 +43,8 @@ export const BOOK: Book = {
   sample: "glass-garden-vox",
   root: 69,
   syllables: ["glass", "bloom", "glow", "grow", "ah", "ooh"],
+  // "I" is a pickup, so "give" lands on the downbeat.
+  pickup: { v7: -0.75 },
   ends: {
     v1: 3,
     v2: 3,
@@ -558,7 +561,7 @@ export const glassGarden: DemoDefinition = {
       if (p.kind === "chorus")
         (p.lines ?? []).forEach((part, i) => {
           if (!part) return;
-          for (const [beat, pitch, beats, lyric] of BOOK.melody[part])
+          for (const [beat, pitch, beats, lyric] of sungAt(BOOK, part))
             if (beats >= 0.45 && beats < 0.8)
               s.note(
                 "harm",

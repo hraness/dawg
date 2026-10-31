@@ -18,9 +18,9 @@ import {
 const musicalBaseline: Readonly<Record<string, string>> = {
   "candy-fault":
     "494cace369a7b6a1f7b81e1d3af449b8485d5fa946efee0becf08fb12c44f4a5",
-  redline: "d3b29d13564cf4409e3fc5ab937cfb53d895a287f8227103e0a21940006ab87b",
+  redline: "60d681980f216039d8a8d99046641783fb7a03dea708a1f53a440b748183f116",
   "glass-garden":
-    "8739af97a90677fba27eb6a981d010e9559b35588342eb0d1c10632e692e749a",
+    "ddad6ac7883700a1dacbb962ab060af9da06ee1b84e17caef9958a171d48c0e3",
   "night-swim":
     "aa19cbd9be922e74c7e2d7a3116c226adb87756c2ac69192b9a165b4a1b413be",
   "kite-season":

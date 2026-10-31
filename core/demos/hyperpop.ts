@@ -385,7 +385,25 @@ export type Book = Readonly<{
   ends: Readonly<Record<Part, number>>;
   /** Every part's tune, as the book sings it; the synth singer sings it too. */
   melody: Readonly<Record<Part, readonly Sung[]>>;
+  /**
+   * Beats a part starts before its bar (negative), so a line opening on
+   * unstressed words ("I don't") sings them as a pickup and its first
+   * stressed word lands on the downbeat.
+   */
+  pickup?: Readonly<Partial<Record<Part, number>>>;
 }>;
+
+/** A part's beat offset from its bar: its pickup, or 0. */
+export const pickupOf = (book: Pick<Book, "pickup">, part: Part): number =>
+  book.pickup?.[part] ?? 0;
+
+/** A part's tune as placed in its bar, pickup included. */
+export function sungAt(book: Book, part: Part): readonly Sung[] {
+  const k = pickupOf(book, part);
+  return k === 0
+    ? book.melody[part]
+    : book.melody[part].map(([beat, ...rest]) => [beat + k, ...rest] as Sung);
+}
 
 /**
  * What the vocal tracks need from a book. A chart's book names its own line
@@ -1629,14 +1647,15 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       // Sung lines; the double sings with them where the section asks.
       const part = p.lines?.[i] ?? null;
       if (part) {
-        singPart(s, bar, book.melody[part], {
+        const pk = pickupOf(book, part);
+        singPart(s, bar, sungAt(book, part), {
           thirds: p.thirds ? plan.scale : undefined,
         });
         if (p.words)
           s.note(
             "vox",
             bar,
-            -LEAD,
+            pk - LEAD,
             slot(voxTrack, part),
             partBeats(part) + LEAD,
             p.words,
@@ -1645,12 +1664,12 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
           s.note(
             "dbl",
             bar,
-            -LEAD,
+            pk - LEAD,
             slot(voxTrack, part),
             partBeats(part) + LEAD,
             0.7,
           );
-        throwsAt.push(bar + book.ends[part] / 4);
+        throwsAt.push(bar + (book.ends[part] + pk) / 4);
       }
       // The chop riff answers the singer: in a bar a line is singing, only
       // the steps from just after its last word play.
@@ -1663,7 +1682,10 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
         const owner = k >= 0 ? p.lines![k]! : null;
         const busy = owner !== null && i < k + partBeats(owner) / 4;
         const from = busy
-          ? Math.max(0, book.ends[owner] - (i - k) * 4 + 0.75)
+          ? Math.max(
+              0,
+              book.ends[owner] + pickupOf(book, owner) - (i - k) * 4 + 0.75,
+            )
           : 0;
         if (from < 4)
           cell(
@@ -1684,14 +1706,21 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       if (p.bursts && i % 4 === 3 && !(on("riff") && riff)) {
         const singing = (p.lines ?? []).some(
           (q, j) =>
-            q !== null && j <= i && (i - j) * 4 + 2.5 < book.ends[q] + 0.5,
+            q !== null &&
+            j <= i &&
+            (i - j) * 4 + 2.5 < book.ends[q] + pickupOf(book, q) + 0.5,
         );
         if (!singing) burst(s, bar, chord, bursts++);
       }
     }
     // Section seams: a reversed syllable swells into each new section but a verse,
     // and pre-choruses and builds end on a stutter of the chorus head.
-    if (p.start > 0 && p.kind !== "verse") {
+    const opens = p.lines?.[0];
+    if (
+      p.start > 0 &&
+      p.kind !== "verse" &&
+      !(opens && pickupOf(book, opens) < 0)
+    ) {
       const syl = book.syllables[p.index % book.syllables.length]!;
       s.note("stut", p.start - 1, 2.7, stut(`r_${syl}`), 1.3, 0.62);
     }

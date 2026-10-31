@@ -33,6 +33,7 @@ import {
   VOCAL_ECHO,
   VOCAL_VERB,
   writeSong,
+  sungAt,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -51,6 +52,8 @@ export const BOOK: Book = {
   sample: "redline-vox",
   root: 68,
   syllables: ["red", "line", "go", "up", "hey", "oh"],
+  // "I" is a pickup, so "don't" lands on the downbeat.
+  pickup: { pre1: -0.5 },
   ends: {
     v1: 3,
     v2: 3,
@@ -589,8 +592,8 @@ export const redline: DemoDefinition = {
       (p.lines ?? []).forEach((part, i) => {
         if (!part || !p.words) return;
         const bar = p.start + i;
-        const notes = BOOK.melody[part];
-        for (let b = 0; b * 4 < notes.at(-1)![0]; b++) {
+        const notes = sungAt(BOOK, part);
+        for (let b = Math.floor(notes[0]![0] / 4); b * 4 < notes.at(-1)![0]; b++) {
           const sung = notes.filter(([beat]) => Math.floor(beat / 4) === b);
           if (sung.length === 0) continue;
           const low = Math.min(...sung.map(([, pitch]) => pitch));
