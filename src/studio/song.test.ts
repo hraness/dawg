@@ -61,6 +61,32 @@ test("performer resolves all sampled vocal layers from a local immutable book", 
     },
   };
   const score = performChart(chart, book).score;
+  // Shared legacy-demo helpers must preserve normalized-stock conditioning.
+  // A stronger makeup or a second layer trim can overload or mask a new take.
+  const lead = score.tracks.find((track) => track.id === "bvox")!;
+  expect(lead.fx?.compressor?.makeup).toBe(8);
+  expect(lead.fx?.eq?.low).toBe(0);
+  expect(lead.delay?.feedback).toBe(0.42);
+  expect(lead.reverb?.fade).toBe(2.2);
+  expect(lead.fx?.postgain?.gain).toBe(1.1);
+  expect(score.master?.glue?.ratio).toBe(1.5);
+  expect(score.master?.tape).toBeUndefined();
+  expect(score.master?.width?.width).toBe(1);
+  expect(score.master?.limiter?.gain).toBe(0);
+  expect(
+    score.tracks.find((track) => track.id === "snare")?.fx?.eq,
+  ).toBeUndefined();
+  expect(score.tracks.find((track) => track.id === "hats")?.fx?.eq?.high).toBe(
+    8,
+  );
+  for (const track of [
+    doubleTrack(book, 0.5),
+    chopTrack(book, 0.5),
+    stutterTrack(book, 0.5),
+    voiceLeadTrack(book, 0.5),
+    grainTrack(book, 0.5),
+  ])
+    expect(track.volume).toBe(0.5);
   const refs = [
     vocalTrack(book, 0.5),
     doubleTrack(book, 0.2),

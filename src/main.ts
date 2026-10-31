@@ -243,6 +243,7 @@ import {
 } from "./commands/master.ts";
 import { applyStyleCommand, parseStyleCommand } from "./commands/style.ts";
 import { applyDemoCommand, parseDemoCommand } from "./commands/demo.ts";
+import { loadShelfStudy } from "./commands/shelf.ts";
 import { readBundledSample } from "./audio/bundled-samples.ts";
 import { exportSampleRate } from "./audio/measure.ts";
 import { IdleMeasurement } from "./audio/idle-measure.ts";
@@ -3897,6 +3898,22 @@ async function submit(prompt: string): Promise<string | Receipt> {
     }
     const result = applyDemoCommand(demoCommand);
     if (!result.ok) return fail(result.message);
+    if (result.study) {
+      if (!(await isProject(process.cwd())))
+        return fail(
+          "local studies load into a project, where their samples are copied · dawg init, then demo again",
+        );
+      let next;
+      try {
+        next = await loadShelfStudy(result.study, process.cwd());
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
+      if (!stageCapture && clock.playing) await setTransport("pause");
+      await commitScore(next, "demo.load", { study: result.study.slug });
+      if (!stageCapture) await revealLoadedDemo();
+      return ok(result.message);
+    }
     if (result.next && result.kind) {
       if (!stageCapture && clock.playing) await setTransport("pause");
       await commitScore(result.next, result.kind, result.payload);

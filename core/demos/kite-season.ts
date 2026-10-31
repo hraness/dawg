@@ -11,6 +11,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -18,14 +19,20 @@ import {
   grainTrack,
   hold,
   ladder,
+  LAYER_COMP,
+  LEAD_FX,
   LINE_LEAD,
   roll,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_COMP,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -33,6 +40,21 @@ export const BPM = 146;
 const BARS = 74;
 
 /** The vocal book: lines in beats (scripts/vox/songs.py kite-season-vox). */
+/**
+ * Lines that open on unstressed words start early, so those words are a
+ * pickup and the first stressed syllable lands where the line used to
+ * start (Hannah Diamond's lines start off the beat 75-80% of the time).
+ */
+const PICKUP: Readonly<Record<string, number>> = {
+  v2: -0.25,
+  v3: -0.5,
+  v4: -0.5,
+  v6: -0.25,
+  v7: -0.5,
+  ch4: -0.25,
+  br: -0.25,
+};
+
 export const BOOK: VoxBank = {
   sample: "kite-season-vox",
   root: 64,
@@ -176,11 +198,15 @@ export const kiteSeason: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
+    // The words about 5 dB over the bed where consonants live, and no
+    // louder than the whole beat.
     const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.14, size: 0.6, fade: 2, lowpass: 8000 },
+      fx: { ...LEAD_FX, compressor: { ...VOCAL_COMP, makeup: 17 } },
     });
-    const echo = vocalTrack(BOOK, 0.8, {
+
+    const echo = vocalTrack(BOOK, 0.8 * UNDER_WORDS, {
       id: "echo",
+      fx: { compressor: LAYER_COMP },
       name: "Low answer",
       pan: 0.24,
       filter: { type: "lpf", cutoff: 3000, resonance: 0 },
@@ -189,10 +215,13 @@ export const kiteSeason: DemoDefinition = {
     });
     for (const track of [
       sounds.kick(BPM, "acoustic", 0.45, 0.9),
-      sounds.snare(1, "acoustic", {
-        reverb: { mix: 0.22, size: 0.6, fade: 1.2 },
-      }),
-      sounds.hats(1, "lofi", { name: "Hats & rim" }),
+      sounds.snare(
+        1,
+        "acoustic",
+        { reverb: { mix: 0.22, size: 0.6, fade: 1.2 } },
+        false,
+      ),
+      sounds.hats(1, "lofi", { name: "Hats & rim" }, 8),
       preset("bass", "Plucked bass", "pluck-bass", 0.16, {
         fx: { ...orbit },
       }),
@@ -246,6 +275,7 @@ export const kiteSeason: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
+      beat += PICKUP[part] ?? 0;
       const track = id === "echo" ? echo : vox;
       s.note(
         id,
@@ -447,7 +477,7 @@ export const kiteSeason: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.28, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "fuzz")
         s.tracks[i] = {
@@ -462,13 +492,7 @@ export const kiteSeason: DemoDefinition = {
       if (t.id === "organ")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1600],
-            [8, 2400],
-            [16, 3200],
-            [48, 1800],
-            [56, 3400],
-          ),
+          filterAutomation: filterArc(s.sections, 3000, 5000),
         };
     });
     return s.finish();

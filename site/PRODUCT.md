@@ -45,7 +45,7 @@ Category label: “Song studio for your terminal.”
 Only what `README.md`, `DAWG.md` and `CHANGELOG.md` on `main` describe:
 
 - Instruments sine, piano, pluck, bass, saw, square, triangle and a synthesized drum kit (kick, snare, clap, rim, tom, hat, openhat).
-- Six editable original hyperpop demos. Saved scores/assets render repeatably; fresh voice inference is not promised to produce identical bytes.
+- Nine editable original hyperpop demos. Saved scores/assets render repeatably; fresh voice inference is not promised to produce identical bytes.
 - Per-track volume, pan, mute, solo, low-pass filter, ping-pong stereo delay, Freeverb-style reverb, and automation lanes for volume, pan, filter cutoff, resonance, delay feedback and delay mix.
 - Gapless playback through a native audio sink (prebuilt for macOS and Linux, arm64 and x64), with `ffplay`, SoX `play` or `afplay` as fallbacks.
 - Undo and redo from the shared session log.

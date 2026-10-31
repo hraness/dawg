@@ -60,44 +60,59 @@
       "bytes": 434160
     },
     "soft-reboot-vox": {
-      "sha256": "0ff75944741f0e4c520f72432bfcc67afcbcd7fb34313d43a2486e8222902be9",
+      "sha256": "cc1778404bffc09e19710764842a04dbde6fafd7b7e6ad38e30a3cd7def9b049",
       "seconds": 33.85695833333333,
       "bytes": 1625178
     },
     "low-battery-vox": {
-      "sha256": "8b3424c25822b4b0fcaf9aa7933fb147a7ab5a4bb60cc49ce2d508f6d344cf32",
+      "sha256": "2b1a6a45fb1765ecc1cc86cc9060b041b410fd5235fc1dfbab031c3de720d490",
       "seconds": 31.6,
       "bytes": 1516844
     },
     "glass-garden-vox": {
-      "sha256": "58706df68af0d72d6935ad7e235e206df974da464c4927fecb44473e99c4e80b",
+      "sha256": "21c218867e2e8bd6fe5e28d4aeb7e7f36809e2e5e048acd8d848868a4fbcba1b",
       "seconds": 37.030833333333334,
       "bytes": 1777524
     },
     "redline-vox": {
-      "sha256": "c0bc849da1d4c4f017881d5347646a88ebc4bfdd27680acc5fe53ddb189aa1b8",
+      "sha256": "75993e4c8fe8e2dc82fd24bb866433896960e19f7dd36eebb8d2226ac9e9bd49",
       "seconds": 27.557958333333332,
       "bytes": 1322826
     },
     "night-swim-vox": {
-      "sha256": "fb2de3b16e9e5988ab734ceb0825338c3db7b0f3d835d74a74107f094bb3148c",
+      "sha256": "3747332dee501f95e87afef97a9d67b9c027856b1318e1cfcfd9bae1f9b922e1",
       "seconds": 49.057375,
       "bytes": 2354798
     },
     "kite-season-vox": {
-      "sha256": "57a46f728edf42e9acff5e97a45976b9ece6f2d30a28b9cae369bfd7f8447966",
+      "sha256": "b993809174385b7e4f9ff37c0ebe0f928a8bb6098d5a784a40ed03c7b3279875",
       "seconds": 50.65083333333333,
       "bytes": 2431284
     },
     "bubble-wrap-vox": {
-      "sha256": "b21570977e21a76a9e718cd5da4e4b862223999573a676de7678c1f60c03755c",
+      "sha256": "32d575190568e647f1dcaff630890ad8f18c2801ce3ee58ca056188f0d8edeae",
       "seconds": 86.55,
       "bytes": 4154444
     },
     "candy-fault-vox": {
-      "sha256": "c9b79428c5ca09bcc57391180707e7f19efb72d5f6f394a0660846909b864281",
+      "sha256": "21470ba58398f0bd04d0d8379bb56709e2e5c1f12102a24816677b14650844a5",
       "seconds": 75.57679166666667,
       "bytes": 3627730
+    },
+    "glow-stick-vox": {
+      "sha256": "8a29615c11c76d77c1973a319553a3c71dc4a512337da369b8204752f9b624d5",
+      "seconds": 64.80425,
+      "bytes": 3110648
+    },
+    "window-seat-vox": {
+      "sha256": "ad7133b63f6f0a3bce0d2646ad8aa57d76d30424d2ec818edd936407139de52c",
+      "seconds": 93.9705,
+      "bytes": 4510628
+    },
+    "light-one-vox": {
+      "sha256": "98569e0738ca1ddaab4c963a58408d556caf5a9c88f8dbaf97955e7b55d5d8ce",
+      "seconds": 69.95895833333333,
+      "bytes": 3358074
     }
   }
 }

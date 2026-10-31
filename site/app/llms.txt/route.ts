@@ -49,7 +49,7 @@ ${installLines}
 - Playback starts with the first ready musical draft. A person's later pause or seek remains in control while generation continues.
 - Three bundled workflows: original-house, reference-study and recreate-source. House hyperpop originals use stock British bf_emma/Kokoro+WORLD singing. Reference work uses supplied or transcribed lyrics, retains the original vocal for comparison and reports timing, pitch, words and tone separately.
 - Project-local songs, vocal takes and resumable progress. Accepted voice takes are reused; fresh voice inference is not promised to produce identical bytes.
-- Six complete editable original hyperpop demos, available offline through \`demo\`.
+- Nine complete editable original hyperpop demos, available offline through \`demo\`.
 - Optional advanced commands and editors remain available, including \`/play\` for keyboard recording, \`/patch\` for sound design and \`/showme on\` for command receipts.
 - Instruments: sine, piano, pluck, bass, saw, square, triangle, and a synthesized drum kit (kick, snare, clap, rim, tom, hat, openhat).
 - Per-track volume, pan, mute, solo, low-pass filter, ping-pong stereo delay, Freeverb-style reverb, and automation lanes for volume, pan, filter cutoff, resonance, delay feedback and delay mix.

@@ -109,8 +109,16 @@ export const sounds = {
         duck: { orbit: 2, depth, attack: pump(bpm), onset: 0.004 },
       },
     }),
-  /** A driven snare with a short room, cracking above the bed. */
-  snare: (level = 0.42, kit = "syn909", extra: Partial<TrackInput> = {}) =>
+  /**
+   * A driven snare with a short room, cracking above the bed. `body` lifts
+   * 250 Hz and 1.2 kHz for thin electronic kits; acoustic kits have their own.
+   */
+  snare: (
+    level = 0.42,
+    kit = "syn909",
+    extra: Partial<TrackInput> = {},
+    body = true,
+  ) =>
     voice("snare", "Snare", "kit", level, {
       kit,
       filter: { type: "hpf", cutoff: 160, resonance: 0 },
@@ -123,13 +131,24 @@ export const sounds = {
           release: 0.09,
           makeup: 3,
         },
+        ...(body
+          ? { eq: { low: 1.5, lowfreq: 250, mid: 2.5, midfreq: 1200 } }
+          : {}),
       },
       reverb: { mix: 0.1, size: 0.3, fade: 0.7 },
       humanize: { timing: 2, velocity: 4, seed: 31 },
       ...extra,
     }),
-  /** Closed and open hats, rim clicks (37) for the computery taps. */
-  hats: (level = 0.46, kit = "syn606", extra: Partial<TrackInput> = {}) =>
+  /**
+   * Closed and open hats, rim clicks (37) for the computery taps. `air` is
+   * the 8 kHz shelf: +4 keeps bright kits from hissing; dull kits want more.
+   */
+  hats: (
+    level = 0.46,
+    kit = "syn606",
+    extra: Partial<TrackInput> = {},
+    air = 4,
+  ) =>
     voice("hats", "Hats & clicks", "kit", level, {
       kit,
       pan: 0.12,
@@ -142,7 +161,7 @@ export const sounds = {
           release: 0.08,
           makeup: 7,
         },
-        eq: { high: 8, highfreq: 8000 },
+        eq: { high: air, highfreq: 8000 },
       },
       humanize: { timing: 5, velocity: 6, seed: 32 },
       ...extra,
@@ -366,7 +385,25 @@ export type Book = Readonly<{
   ends: Readonly<Record<Part, number>>;
   /** Every part's tune, as the book sings it; the synth singer sings it too. */
   melody: Readonly<Record<Part, readonly Sung[]>>;
+  /**
+   * Beats a part starts before its bar (negative), so a line opening on
+   * unstressed words ("I don't") sings them as a pickup and its first
+   * stressed word lands on the downbeat.
+   */
+  pickup?: Readonly<Partial<Record<Part, number>>>;
 }>;
+
+/** A part's beat offset from its bar: its pickup, or 0. */
+export const pickupOf = (book: Pick<Book, "pickup">, part: Part): number =>
+  book.pickup?.[part] ?? 0;
+
+/** A part's tune as placed in its bar, pickup included. */
+export function sungAt(book: Book, part: Part): readonly Sung[] {
+  const k = pickupOf(book, part);
+  return k === 0
+    ? book.melody[part]
+    : book.melody[part].map(([beat, ...rest]) => [beat + k, ...rest] as Sung);
+}
 
 /**
  * What the vocal tracks need from a book. A chart's book names its own line
@@ -488,6 +525,54 @@ export function slot(track: TrackInput, name: string): number {
   return found;
 }
 
+/**
+ * Raw legacy-book conditioning. Composer.finish applies the current
+ * foreground balance, dry-word limits and output headroom in vocal-mix.ts;
+ * these constants alone do not describe the finished lead/bed balance.
+ */
+export const VOCAL_COMP = {
+  threshold: -24,
+  ratio: 4,
+  attack: 0.004,
+  release: 0.1,
+  makeup: 16,
+} as const;
+/** Echoes of the lead keep the old, softer makeup. */
+export const LAYER_COMP = { ...VOCAL_COMP, makeup: 8 } as const;
+export const VOCAL_DUCK = {
+  orbit: 2,
+  depth: 0.5,
+  attack: 0.6,
+  onset: 0.08,
+  hold: true,
+} as const;
+export const VOCAL_VERB = { mix: 0.08, size: 0.5, fade: 1.4, lowpass: 9000 };
+export const VOCAL_ECHO = {
+  beats: 0.75,
+  feedback: 0.25,
+  mix: 0.04,
+  pingpong: true,
+};
+/**
+ * Delay throws on the lead: peak wet mix. Throw only after a line's last
+ * word, and at this level the tail is gone before the next line starts.
+ */
+export const THROW_PEAK = 0.18;
+/**
+ * Layers that share the lead's timbre (chops, stutters, doubles, the synth
+ * singer and harmony, the voiced lead and grains) play at this share of
+ * their level, about 4.4 dB lower, so they never compete with a word.
+ */
+export const UNDER_WORDS = 0.6;
+
+/** Legacy-book insert conditioning; final foreground gain belongs to vocal-mix.ts. */
+// Keep the low end clear while preserving the book's recorded character.
+export const LEAD_FX = {
+  eq: { low: -6, lowfreq: 200, mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
+  compressor: VOCAL_COMP,
+  duck: VOCAL_DUCK,
+};
+
 /** The lead vocal: every sung line as a oneshot, on top of the mix. */
 export function vocalTrack(
   book: VoxBank,
@@ -497,20 +582,19 @@ export function vocalTrack(
   return voice("vox", "Lead vocal", "sampler", level, {
     sampler: { mode: "oneshot", voices: lineVoices(book) },
     filter: { type: "hpf", cutoff: 170, resonance: 0 },
-    fx: {
-      eq: { mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
-      compressor: {
-        threshold: -24,
-        ratio: 4,
-        attack: 0.004,
-        release: 0.1,
-        makeup: 8,
-      },
-      // While a line sings, the bed on orbit 2 sits about 2.5 dB lower.
-      duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
-    },
-    delay: { beats: 0.75, feedback: 0.42, mix: 0.05, pingpong: true },
-    reverb: { mix: 0.16, size: 0.6, fade: 2.2, lowpass: 11000 },
+    fx: book.entry
+      ? {
+          eq: { mid: 2, midfreq: 3200, high: 5, highfreq: 8000 },
+          compressor: LAYER_COMP,
+          duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
+        }
+      : LEAD_FX,
+    delay: book.entry
+      ? { beats: 0.75, feedback: 0.42, mix: 0.05, pingpong: true }
+      : VOCAL_ECHO,
+    reverb: book.entry
+      ? { mix: 0.16, size: 0.6, fade: 2.2, lowpass: 11000 }
+      : VOCAL_VERB,
     ...extra,
   });
 }
@@ -521,22 +605,28 @@ export function doubleTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("dbl", "Chipmunk double", "sampler", level, {
-    sampler: {
-      mode: "oneshot",
-      voices: lineVoices(book, { shift: 12, formant: 5 }),
+  return voice(
+    "dbl",
+    "Chipmunk double",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: {
+        mode: "oneshot",
+        voices: lineVoices(book, { shift: 12, formant: 5 }),
+      },
+      pan: 0.18,
+      filter: { type: "hpf", cutoff: 400, resonance: 0 },
+      fx: {
+        ...orbit,
+        eq: { high: 3, highfreq: 9000 },
+        chorus: { rate: 1.1, depth: 0.5, mix: 0.4 },
+      },
+      delay: { beats: 0.5, feedback: 0.3, mix: 0.12, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    pan: 0.18,
-    filter: { type: "hpf", cutoff: 400, resonance: 0 },
-    fx: {
-      ...orbit,
-      eq: { high: 3, highfreq: 9000 },
-      chorus: { rate: 1.1, depth: 0.5, mix: 0.4 },
-    },
-    delay: { beats: 0.5, feedback: 0.3, mix: 0.12, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /**
@@ -549,28 +639,34 @@ export function chopTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("chops", "Vocal chops", "sampler", level, {
-    sampler: {
-      mode: "keyed",
-      voices: Object.fromEntries(
-        book.syllables.map((name) => [
-          name,
-          { ...syllable(book, name), root: book.root, rr: "syllables" },
-        ]),
-      ),
+  return voice(
+    "chops",
+    "Vocal chops",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: {
+        mode: "keyed",
+        voices: Object.fromEntries(
+          book.syllables.map((name) => [
+            name,
+            { ...syllable(book, name), root: book.root, rr: "syllables" },
+          ]),
+        ),
+      },
+      pan: -0.08,
+      filter: { type: "hpf", cutoff: 280, resonance: 0 },
+      fx: {
+        ...orbit,
+        formant: { shift: 0, mix: 1 },
+        crush: { bits: 10, coarse: 1, mix: 0 },
+        eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+      },
+      delay: { beats: 0.75, feedback: 0.4, mix: 0.22, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    pan: -0.08,
-    filter: { type: "hpf", cutoff: 280, resonance: 0 },
-    fx: {
-      ...orbit,
-      formant: { shift: 0, mix: 1 },
-      crush: { bits: 10, coarse: 1, mix: 0 },
-      eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
-    },
-    delay: { beats: 0.75, feedback: 0.4, mix: 0.22, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /**
@@ -602,19 +698,25 @@ export function stutterTrack(
       clip: 1,
       fadeTime: 0.015,
     };
-  return voice("stut", "Glitch vox", "sampler", level, {
-    sampler: { mode: "oneshot", voices },
-    pan: 0.12,
-    filter: { type: "hpf", cutoff: 300, resonance: 0 },
-    fx: {
-      ...orbit,
-      crush: { bits: 8, coarse: 2, mix: 0 },
-      eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+  return voice(
+    "stut",
+    "Glitch vox",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: { mode: "oneshot", voices },
+      pan: 0.12,
+      filter: { type: "hpf", cutoff: 300, resonance: 0 },
+      fx: {
+        ...orbit,
+        crush: { bits: 8, coarse: 2, mix: 0 },
+        eq: { mid: 2, midfreq: 3000, high: 3, highfreq: 8000 },
+      },
+      delay: { beats: 0.5, feedback: 0.4, mix: 0.1, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    delay: { beats: 0.5, feedback: 0.4, mix: 0.1, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /** The held vowel looped into a playable voice that doubles the lead. */
@@ -624,31 +726,37 @@ export function voiceLeadTrack(
   extra: Partial<TrackInput> = {},
 ): TrackInput {
   const { begin, end, beat } = sliceOf(book, "hold");
-  return voice("vlead", "Voice lead", "sampler", level, {
-    sampler: {
-      mode: "keyed",
-      voices: {
-        hold: {
-          ...bookSampleRef(book),
-          root: book.root,
-          begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
-          end,
-          loop: true,
-          loopBegin: frac(begin + (LEAD + 1) * beat),
-          loopEnd: frac(begin + (LEAD + 3) * beat),
-          fadeTime: 0.08,
-          fadeInTime: 0.006,
+  return voice(
+    "vlead",
+    "Voice lead",
+    "sampler",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      sampler: {
+        mode: "keyed",
+        voices: {
+          hold: {
+            ...bookSampleRef(book),
+            root: book.root,
+            begin: frac(begin + (LEAD - CHOP_LEAD) * beat),
+            end,
+            loop: true,
+            loopBegin: frac(begin + (LEAD + 1) * beat),
+            loopEnd: frac(begin + (LEAD + 3) * beat),
+            fadeTime: 0.08,
+            fadeInTime: 0.006,
+          },
         },
       },
+      pan: -0.14,
+      glide: { time: 0.05, mode: "legato" },
+      filter: { type: "hpf", cutoff: 320, resonance: 0 },
+      fx: { ...orbit, eq: { high: 3, highfreq: 7000 } },
+      delay: { beats: 0.75, feedback: 0.3, mix: 0.14, pingpong: true },
+      reverb: room,
+      ...extra,
     },
-    pan: -0.14,
-    glide: { time: 0.05, mode: "legato" },
-    filter: { type: "hpf", cutoff: 320, resonance: 0 },
-    fx: { ...orbit, eq: { high: 3, highfreq: 7000 } },
-    delay: { beats: 0.75, feedback: 0.3, mix: 0.14, pingpong: true },
-    reverb: room,
-    ...extra,
-  });
+  );
 }
 
 /** The held vowel as a grain cloud, grains locked to 16ths and the chord. */
@@ -658,30 +766,36 @@ export function grainTrack(
   extra: Partial<TrackInput> = {},
 ): TrackInput {
   const { begin, end } = sliceOf(book, "hold");
-  return voice("vgrain", "Voice cloud", "granular", level, {
-    granular: {
-      src: bookSampleRef(book),
-      root: book.root,
-      begin: frac(begin + (end - begin) * 0.2),
-      end: frac(end - (end - begin) * 0.1),
-      grain: 0.09,
-      overlap: 3,
-      pos: 0.4,
-      scan: 0.2,
-      spread: 0.9,
-      spray: 0.05,
-      jitter: 0.2,
-      sync: "1/16",
-      quant: "chord",
-      attack: 0.3,
-      release: 0.9,
-      gain: 0.6,
+  return voice(
+    "vgrain",
+    "Voice cloud",
+    "granular",
+    level * (book.entry ? 1 : UNDER_WORDS),
+    {
+      granular: {
+        src: bookSampleRef(book),
+        root: book.root,
+        begin: frac(begin + (end - begin) * 0.2),
+        end: frac(end - (end - begin) * 0.1),
+        grain: 0.09,
+        overlap: 3,
+        pos: 0.4,
+        scan: 0.2,
+        spread: 0.9,
+        spray: 0.05,
+        jitter: 0.2,
+        sync: "1/16",
+        quant: "chord",
+        attack: 0.3,
+        release: 0.9,
+        gain: 0.6,
+      },
+      filter: { type: "lpf", cutoff: 5200, resonance: 0.1 },
+      fx: { ...orbit, chorus: { rate: 0.3, depth: 0.6, mix: 0.4 } },
+      reverb: hall,
+      ...extra,
     },
-    filter: { type: "lpf", cutoff: 5200, resonance: 0.1 },
-    fx: { ...orbit, chorus: { rate: 0.3, depth: 0.6, mix: 0.4 } },
-    reverb: hall,
-    ...extra,
-  });
+  );
 }
 
 /**
@@ -693,7 +807,7 @@ export function singerTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("sing", "Synth singer", "sing", level, {
+  return voice("sing", "Synth singer", "sing", level * UNDER_WORDS, {
     sing: {
       preset: "aah",
       voice: "soprano",
@@ -721,7 +835,7 @@ export function harmonyTrack(
   level: number,
   extra: Partial<TrackInput> = {},
 ): TrackInput {
-  return voice("harm", "Synth double", "sing", level, {
+  return voice("harm", "Synth double", "sing", level * UNDER_WORDS, {
     pan: 0.3,
     sing: {
       preset: "aah",
@@ -1533,14 +1647,15 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       // Sung lines; the double sings with them where the section asks.
       const part = p.lines?.[i] ?? null;
       if (part) {
-        singPart(s, bar, book.melody[part], {
+        const pk = pickupOf(book, part);
+        singPart(s, bar, sungAt(book, part), {
           thirds: p.thirds ? plan.scale : undefined,
         });
         if (p.words)
           s.note(
             "vox",
             bar,
-            -LEAD,
+            pk - LEAD,
             slot(voxTrack, part),
             partBeats(part) + LEAD,
             p.words,
@@ -1549,12 +1664,12 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
           s.note(
             "dbl",
             bar,
-            -LEAD,
+            pk - LEAD,
             slot(voxTrack, part),
             partBeats(part) + LEAD,
             0.7,
           );
-        throwsAt.push(bar + book.ends[part] / 4);
+        throwsAt.push(bar + (book.ends[part] + pk) / 4);
       }
       // The chop riff answers the singer: in a bar a line is singing, only
       // the steps from just after its last word play.
@@ -1567,7 +1682,10 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
         const owner = k >= 0 ? p.lines![k]! : null;
         const busy = owner !== null && i < k + partBeats(owner) / 4;
         const from = busy
-          ? Math.max(0, book.ends[owner] - (i - k) * 4 + 0.75)
+          ? Math.max(
+              0,
+              book.ends[owner] + pickupOf(book, owner) - (i - k) * 4 + 0.75,
+            )
           : 0;
         if (from < 4)
           cell(
@@ -1588,14 +1706,21 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       if (p.bursts && i % 4 === 3 && !(on("riff") && riff)) {
         const singing = (p.lines ?? []).some(
           (q, j) =>
-            q !== null && j <= i && (i - j) * 4 + 2.5 < book.ends[q] + 0.5,
+            q !== null &&
+            j <= i &&
+            (i - j) * 4 + 2.5 < book.ends[q] + pickupOf(book, q) + 0.5,
         );
         if (!singing) burst(s, bar, chord, bursts++);
       }
     }
     // Section seams: a reversed syllable swells into each new section but a verse,
     // and pre-choruses and builds end on a stutter of the chorus head.
-    if (p.start > 0 && p.kind !== "verse") {
+    const opens = p.lines?.[0];
+    if (
+      p.start > 0 &&
+      p.kind !== "verse" &&
+      !(opens && pickupOf(book, opens) < 0)
+    ) {
       const syl = book.syllables[p.index % book.syllables.length]!;
       s.note("stut", p.start - 1, 2.7, stut(`r_${syl}`), 1.3, 0.62);
     }
@@ -1692,6 +1817,91 @@ export const riserLane = (builds: Song["builds"]): AutomationPoint[] =>
     ),
   );
 
+/** A section's job in the filter arc, read from its name. */
+export function arcKind(name: string): SectionKind {
+  const n = name.toLowerCase();
+  if (/^(intro|ignition|seed)/.test(n)) return "intro";
+  if (/verse/.test(n)) return "verse";
+  if (/^pre|chant/.test(n)) return "pre";
+  if (/chorus|drop/.test(n)) return "chorus";
+  if (/bloom|interlude|post/.test(n)) return "post";
+  if (/break|bridge|headlights|greenhouse|false end|fugue/.test(n))
+    return "break";
+  if (/redline|sunlight|build/.test(n)) return "build";
+  if (/outro|end$|taillights|glass$/.test(n)) return "outro";
+  throw new Error(`hyperpop: no filter-arc kind for section "${name}"`);
+}
+
+/**
+ * Every Night's filter moves, as a cutoff lane in Hz from `closed` (the
+ * verse floor) to `open` (the chorus ceiling). Verses sit low and open a
+ * little; a pre-chorus or build shuts, then sweeps open, steepest in its
+ * last bars; a section that runs straight into a chorus sweeps its last
+ * bars instead; choruses and drops are wide open, posts bright, breaks
+ * half shut, and the outro closes.
+ */
+export function filterArc(
+  sections: readonly Readonly<{
+    name: string;
+    startBar: number;
+    bars: number;
+  }>[],
+  closed: number,
+  open: number,
+): AutomationPoint[] {
+  const mid = Math.sqrt(closed * open);
+  const points: [number, number][] = [];
+  sections.forEach((p, i) => {
+    const kind = arcKind(p.name);
+    const next = sections[i + 1];
+    const end = p.startBar + p.bars;
+    const into = next !== undefined && arcKind(next.name) === "chorus";
+    const level = {
+      intro: closed * 0.75,
+      verse: closed,
+      pre: closed * 0.8,
+      build: closed * 0.6,
+      chorus: open,
+      post: open * 0.8,
+      break: mid * 0.8,
+      outro: open * 0.6,
+    }[kind];
+    points.push([p.startBar, level]);
+    if (kind === "pre" || kind === "build") {
+      // An exponential climb, the last bars doing most of the work.
+      for (let b = 1; b <= p.bars; b++) {
+        const t = (b / p.bars) ** 2;
+        points.push([
+          p.startBar + b - (b === p.bars ? 0.02 : 0),
+          level * (open / level) ** t,
+        ]);
+      }
+      return;
+    }
+    if (kind === "outro") {
+      points.push([end - 0.02, closed * 0.5]);
+      return;
+    }
+    const rest = kind === "verse" ? closed * 1.4 : level;
+    if (into && kind !== "chorus") {
+      const sweep = Math.min(4, Math.floor(p.bars / 2));
+      points.push([end - sweep, rest]);
+      for (let b = 1; b <= sweep; b++)
+        points.push([
+          end - sweep + b - (b === sweep ? 0.02 : 0),
+          rest * ((open * 0.8) / rest) ** ((b / sweep) ** 2),
+        ]);
+      return;
+    }
+    points.push([end - 0.02, rest]);
+  });
+  return ramps(
+    ...points.map(
+      ([bar, hz]) => [bar, Math.round(Math.min(14000, hz))] as const,
+    ),
+  );
+}
+
 /** Replace a track's fields once the song (and its lanes) is known. */
 export function patch(
   s: Composer,
@@ -1701,6 +1911,116 @@ export function patch(
   const i = s.tracks.findIndex((t) => t.id === id);
   if (i < 0) throw new Error(`demo track missing: ${id}`);
   s.tracks[i] = { ...s.tracks[i]!, ...extra };
+}
+
+/**
+ * The hypertechno treatment (see the hypertechno skill): the kick's pump
+ * takes the swelling `pump` curve and a tempo-synced recovery, and held
+ * chord tracks get a step gate that opens only in choruses and drops, so a
+ * held chord turns into stabs there and stays a pad elsewhere. Call after
+ * every section and track is in place.
+ */
+export function rave(
+  s: Composer,
+  o: Readonly<{
+    /** Held-chord tracks to gate in the drops. */
+    gated: readonly string[];
+    kick?: string;
+    pattern?: "chop" | "eighths" | "offbeat" | "trance" | "dotted" | "gallop";
+    length?: number;
+    depth?: number;
+    /** Sections where the gate opens; absent, those named chorus or drop. */
+    open?: readonly string[];
+    /** Pump depth and recovery in beats. */
+    pump?: number;
+    sync?: number;
+    /**
+     * Level of the gated tracks in each open section against closed ones
+     * (default 2, +6 dB): a gated pad loses ~40% of its energy and must come
+     * forward to read as stabs. Lift instrumental drops more than sung
+     * choruses, which keep the lead's balance. Capped where the fader reaches 1.
+     */
+    lift?: number | ((section: string) => number);
+  }>,
+): void {
+  const kick = trackOf(s, o.kick ?? "kick");
+  const duck = kick.fx?.duck ?? {};
+  patch(s, o.kick ?? "kick", {
+    fx: {
+      ...kick.fx,
+      duck: {
+        ...duck,
+        orbit: 2,
+        depth: o.pump ?? (typeof duck.depth === "number" ? duck.depth : 0.86),
+        curve: "pump",
+        sync: o.sync ?? 0.4,
+      },
+    },
+  });
+  const depth = o.depth ?? 0.85;
+  const isOpen = (name: string) =>
+    o.open ? o.open.includes(name) : /chorus|drop/i.test(name);
+  const lane = steps(
+    ...s.sections.map((p) => [p.startBar, isOpen(p.name) ? depth : 0] as const),
+  );
+  for (const id of o.gated) {
+    const t = trackOf(s, id);
+    const vol = t.volume ?? 1;
+    const gain = (name: string) =>
+      !isOpen(name)
+        ? 1
+        : typeof o.lift === "function"
+          ? o.lift(name)
+          : (o.lift ?? 2);
+    const most = Math.max(...s.sections.map((p) => gain(p.name)));
+    const up = Math.min(1, vol * most);
+    const shape = steps(
+      ...s.sections.map(
+        (p) => [p.startBar, Math.min(1, (vol * gain(p.name)) / up)] as const,
+      ),
+    );
+    patch(s, id, {
+      volume: up,
+      volumeAutomation: times(t.volumeAutomation ?? [], shape),
+
+      fx: {
+        ...t.fx,
+        gate: {
+          pattern: o.pattern ?? "trance",
+          step: 0.25,
+          length: o.length ?? 0.6,
+          depth: 0,
+          attack: 0.002,
+          release: 0.015,
+        },
+      },
+      fxAutomation: { ...t.fxAutomation, "gate-depth": lane },
+    });
+  }
+}
+
+/** The product of two automation lanes (absent points read as 1). */
+function times(
+  a: readonly AutomationPoint[],
+  b: readonly AutomationPoint[],
+): AutomationPoint[] {
+  const at = (lane: readonly AutomationPoint[], t: number) => {
+    if (lane.length === 0) return 1;
+    if (t <= lane[0]!.tick) return lane[0]!.value;
+    for (let i = 1; i < lane.length; i++) {
+      const p = lane[i - 1]!,
+        q = lane[i]!;
+      if (t <= q.tick)
+        return q.tick === p.tick
+          ? q.value
+          : p.value + ((q.value - p.value) * (t - p.tick)) / (q.tick - p.tick);
+    }
+    return lane.at(-1)!.value;
+  };
+  const ticks = [...new Set([...a, ...b].map((p) => p.tick))].sort(
+    (x, y) => x - y,
+  );
+  return ticks.map((t) => ({ tick: t, value: at(a, t) * at(b, t) }));
 }
 
 /** Per-song levels and patch tweaks for the kit's tracks. */

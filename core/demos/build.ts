@@ -11,7 +11,11 @@ import {
   type TrackScore,
 } from "../score.ts";
 import type { DemoInfo } from "./types.ts";
-import { foregroundVocalTracks, vocalMonitorGain } from "./vocal-mix.ts";
+import {
+  foregroundVocalTracks,
+  hasNormalizedStockVocals,
+  vocalMonitorGain,
+} from "./vocal-mix.ts";
 
 export const TPB = 480;
 export const BAR = 4 * TPB;
@@ -183,6 +187,7 @@ export class Composer {
   }
   /** Keep each instrument independently editable; forms expose scene navigation. */
   finish(): TrackScore {
+    const localStock = hasNormalizedStockVocals(this.tracks);
     return createScore({
       tempoBpm: this.info.tempoBpm,
       key: this.info.key,
@@ -190,14 +195,22 @@ export class Composer {
       ticksPerBeat: TPB,
       beatsPerBar: 4,
       calibration: 1,
-      tracks: foregroundVocalTracks(this.tracks, this.info.id),
+      tracks: foregroundVocalTracks(
+        this.tracks,
+        this.info.id,
+        this.sections,
+        TPB * 4,
+      ),
       notes: this.notes,
       sections: this.sections,
       form: this.sections.map(({ name }) => ({ section: name })),
       master: {
         eq: { bell1: -1.2, bell1freq: 280, bell1q: 0.8 },
-        glue: { threshold: -16, ratio: 1.5, attack: 30, release: 220 },
-        width: { width: 1, mono: 120 },
+        glue: localStock
+          ? { threshold: -16, ratio: 1.5, attack: 30, release: 220 }
+          : { threshold: -16, ratio: 2, attack: 20, release: 180 },
+        ...(localStock ? {} : { tape: { drive: 2, mix: 0.5 } }),
+        width: { width: localStock ? 1 : 1.15, mono: 120 },
         limiter: {
           ceiling: -1.1,
           gain: vocalMonitorGain(this.tracks),

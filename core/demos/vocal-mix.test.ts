@@ -4,8 +4,11 @@ import { DEMOS, createDemo } from "./index.ts";
 import { normalizeMaster } from "../master.ts";
 import { applyMasterPcm, applyMonitorMaster } from "../../src/audio/master.ts";
 import {
+  BED_POCKET,
+  CHORUS_RIDE,
   foregroundVocalTracks,
   vocalMonitorGain,
+  VOCAL_DUCK_DEPTH,
   VOCAL_OUTPUT_HEADROOM,
   WORD_DELAY_MIX,
   WORD_REVERB_MIX,
@@ -14,16 +17,22 @@ import {
 
 const musicalBaseline: Readonly<Record<string, string>> = {
   "candy-fault":
-    "adf8de9c3c91d299a27d2df43fb1ace7dd74be88ba4b3d9af0b2ac2dc21620ee",
-  redline: "0c604e35acb0e4ad38f8cb03f80d9bcb3f3c2c6bd5d7fd13b9457b6182b49cb8",
+    "338a9d88acf2ad8f0e56b812e2c9112fd4948f0b14237faebf334312cf3b1d66",
+  redline: "f36bfe2bf247224ae05448f337eb294cc127edc9a5b6125e377cf37ff3866d72",
   "glass-garden":
-    "4f65659505cdd6392dbe930f92e90a7011bef2509186a06a742442be9855ada8",
+    "9d394db2545dee3fcd109d50f30a1935b99f0ffec8c166503d78ebf5360a3778",
   "night-swim":
-    "50e91e843ae8fcaed31aff001417a6294700ae4cc26f6c652f62f0756d1c808a",
+    "164915fb05a28c016c2e4ff6cf0065839e670136822f569b2dbdfc3d4ab0c563",
   "kite-season":
-    "17328d0aaa85c7124d7d417c6786cc9b8b90987c3c7373905a4fbcc50f94a6f4",
+    "cae1128780c82059367d19b62cd75a3164555f11c95183a968fe72a90cc48934",
   "bubble-wrap":
-    "805bd60f5241c6dece041908a91544eb9054e68e044727f76bb63dac1cc29ceb",
+    "3cbc0dbf8c96183f956fe36bdcece68cba2dfb7bb7514b7c0e1318464d529fc0",
+  "glow-stick":
+    "e50d1482b1c281e4572bdbf1202b8bd17a0f2cc70e5adc2f9749d6cdb68d8151",
+  "window-seat":
+    "6fd86df0074b0660648997f56f9a65a3831521226e8c020c170b10f751b649ae",
+  "light-one":
+    "d341e4ae9c52aaef0c733b4e6c9f8203870de79abb1e3a9ca69f4f3183b54b76",
 };
 const mixFields = new Set([
   "volume",
@@ -89,11 +98,20 @@ test("words lead the backing through clean, dry gain stages with pre-window head
       )!;
     const gain = Number(lead.fx?.postgain?.gain);
     expect(gain, demo.id).toBeGreaterThan(0);
-    for (const track of score.tracks.filter((track) => track.id !== lead.id))
-      expect(
-        Number(track.fx?.postgain?.gain),
-        demo.id + ":" + track.id,
-      ).toBeLessThan(gain);
+    // Balance is measured against the backing as heard, not by gain order:
+    // a light duck, a presence pocket in pitched parts and a chorus ride.
+    expect(lead.fx?.duck?.depth, demo.id).toBe(VOCAL_DUCK_DEPTH);
+    const ride = lead.fxAutomation?.["postgain-gain"] ?? [];
+    expect(ride[0]?.value, demo.id).toBe(gain);
+    expect(Math.max(...ride.map((point) => point.value)), demo.id).toBeCloseTo(
+      gain * CHORUS_RIDE,
+      9,
+    );
+    const pocketed = score.tracks.filter(
+      (track) => track.fx?.eq?.mid === BED_POCKET.mid,
+    );
+    expect(pocketed.length, demo.id).toBeGreaterThan(0);
+    expect(pocketed.map((track) => track.id)).not.toContain(lead.id);
     expect(lead.fx?.crush).toBeUndefined();
     expect(Number(lead.reverb?.mix ?? 0)).toBeLessThanOrEqual(WORD_REVERB_MIX);
     expect(Number(lead.delay?.mix ?? 0)).toBeLessThanOrEqual(WORD_DELAY_MIX);
@@ -174,4 +192,42 @@ test("fixed vocal monitoring restores headroom without changing target-mastered 
   const power = (values: Int16Array) =>
     values.reduce((sum, value) => sum + value ** 2, 0);
   expect(Math.sqrt(power(newMonitor) / power(oldMonitor))).toBeCloseTo(4, 2);
+});
+
+test("the lead rides up over choruses and drops, staying up across adjacent ones", () => {
+  const bar = 1920;
+  const [lead] = foregroundVocalTracks(
+    [
+      {
+        id: "vox",
+        sampler: {
+          mode: "oneshot",
+          voices: { line: { src: "pack:studio/redline-vox" } },
+        },
+      },
+      { id: "pad" },
+    ],
+    "new-original",
+    [
+      { name: "Verse 1", startBar: 0, bars: 8 },
+      { name: "Chorus 1", startBar: 8, bars: 8 },
+      { name: "Drop 1", startBar: 16, bars: 8 },
+      { name: "Verse 2", startBar: 24, bars: 8 },
+      { name: "Last chorus", startBar: 32, bars: 8 },
+    ],
+    bar,
+  );
+  const base = Number(lead!.fx?.postgain?.gain);
+  const up = base * CHORUS_RIDE;
+  expect(lead!.fxAutomation?.["postgain-gain"]).toEqual([
+    { tick: 0, value: base },
+    { tick: 8 * bar - bar / 4, value: base },
+    { tick: 8 * bar, value: up },
+    { tick: 24 * bar, value: up },
+    { tick: 24 * bar + bar / 4, value: base },
+    { tick: 32 * bar - bar / 4, value: base },
+    { tick: 32 * bar, value: up },
+    { tick: 40 * bar, value: up },
+    { tick: 40 * bar + bar / 4, value: base },
+  ]);
 });

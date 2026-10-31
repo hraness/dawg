@@ -10,6 +10,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -20,10 +21,13 @@ import {
   LINE_LEAD,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -31,6 +35,23 @@ export const BPM = 100;
 const BARS = 64;
 
 /** The vocal book: lines in beats (scripts/vox/songs.py bubble-wrap-vox). */
+/**
+ * Lines that open on unstressed words start early, so those words are a
+ * pickup and the first stressed syllable lands where the line used to
+ * start (Hannah Diamond's lines start off the beat 75-80% of the time).
+ */
+const PICKUP: Readonly<Record<string, number>> = {
+  v1: -0.25,
+  v2: -0.25,
+  v3: -0.5,
+  v4: -0.5,
+  v5: -0.25,
+  v6: -0.25,
+  v7: -0.25,
+  v8: -0.5,
+  ch4: -0.25,
+};
+
 export const BOOK: VoxBank = {
   sample: "bubble-wrap-vox",
   root: 70,
@@ -150,10 +171,10 @@ export const bubbleWrap: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.12, size: 0.5, fade: 1.6, lowpass: 9000 },
-    });
-    const chant = vocalTrack(BOOK, 0.85, {
+    // The lead 1.5 dB under the shelf's level, conversational.
+    const vox = vocalTrack(BOOK, 0.84);
+
+    const chant = vocalTrack(BOOK, 0.85 * UNDER_WORDS, {
       id: "chant",
       name: "Low chant",
       filter: { type: "lpf", cutoff: 4200, resonance: 0 },
@@ -213,6 +234,7 @@ export const bubbleWrap: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
+      beat += PICKUP[part] ?? 0;
       const track = id === "chant" ? chant : vox;
       s.note(
         id,
@@ -405,20 +427,12 @@ export const bubbleWrap: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.3, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "pad")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1600],
-            [15.9, 1600],
-            [16, 3200],
-            [24, 1600],
-            [36, 3200],
-            [44, 1600],
-            [54, 3600],
-          ),
+          filterAutomation: filterArc(s.sections, 1500, 5000),
         };
     });
     return s.finish();

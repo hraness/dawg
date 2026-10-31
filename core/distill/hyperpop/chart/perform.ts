@@ -1385,7 +1385,7 @@ export function performChart(chart: Chart, book?: VoxBank): Performed {
 
   // ── tracks ─────────────────────────────────────────────────────────────
   const used = new Set(s.notes.map((n) => n.trackId));
-  for (const t of tracksFor(chart, used, lanes, s.notes))
+  for (const t of tracksFor(chart, used, lanes, s.notes, !!book?.entry))
     // Under a book the synth singer and its chops blend in behind the takes.
     s.track(book && SUNG_UNDER[t.id] ? withGain(t, SUNG_UNDER[t.id]!) : t);
   for (const t of bookTracks) {
@@ -1573,6 +1573,7 @@ function tracksFor(
   used: ReadonlySet<string>,
   lanes: ReadonlyMap<string, Record<string, AutomationPoint[]>>,
   notes: readonly NoteInput[],
+  localBook = false,
 ): TrackInput[] {
   const d = chart.sounds.design;
   const sound = chart.sounds;
@@ -1673,7 +1674,13 @@ function tracksFor(
     hats: sound.kit.hats,
     perc: sound.kit.snare,
   };
-  const out: TrackInput[] = drumTracks(chart.bpm, sound.kit, d)
+  // Normalized local books retain the released stock path's drum balance.
+  const out: TrackInput[] = drumTracks(
+    chart.bpm,
+    sound.kit,
+    d,
+    localBook ? { snareBody: false, hatAir: 8 } : undefined,
+  )
     .filter((t) => used.has(t.id))
     .map((t) =>
       withGain(

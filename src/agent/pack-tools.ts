@@ -59,10 +59,19 @@ function defaultStore(): PackStore {
   return shared;
 }
 
-function bounded(value: unknown): string {
-  const text = JSON.stringify(value);
-  return text.length <= 24_000 ? text : `${text.slice(0, 24_000)}…`;
+/** Slice bounds to the millisecond keep the studio listing within bounds. */
+function roundSlice<T extends { begin: number; end: number }>(slice: T): T {
+  const ms = (n: number) => Math.round(n * 1000) / 1000;
+  return { ...slice, begin: ms(slice.begin), end: ms(slice.end) };
 }
+
+function bounded(value: unknown, limit = 24_000): string {
+  const text = JSON.stringify(value);
+  return text.length <= limit ? text : `${text.slice(0, limit)}…`;
+}
+
+/** The studio pack lists every vocal book's slices, so it gets more room. */
+const STUDIO_DETAIL_LIMIT = 40_000;
 
 const wavetableParamSchema = Object.fromEntries(
   (Object.keys(WAVETABLE_PARAMS) as WavetableParam[]).map((name) => [
@@ -171,24 +180,30 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
                 : `${sound} (${entry.files.length})`,
             );
           return {
-            content: bounded({
-              ok: true,
-              pack: info.name,
-              license: info.license,
-              ...(info.attribution ? { attribution: info.attribution } : {}),
-              kits: await kitsWithNicknames(packs, info.name, manifest),
-              sounds,
-              ...(info.name === "studio"
-                ? {
-                    offline: true,
-                    samples: BUNDLED_SAMPLES.map((sample) => ({
-                      ...sample,
-                      ref: bundledSampleRef(sample.id),
-                    })),
-                  }
-                : {}),
-              total: manifest.sounds.size,
-            }),
+            content: bounded(
+              {
+                ok: true,
+                pack: info.name,
+                license: info.license,
+                ...(info.attribution ? { attribution: info.attribution } : {}),
+                kits: await kitsWithNicknames(packs, info.name, manifest),
+                sounds,
+                ...(info.name === "studio"
+                  ? {
+                      offline: true,
+                      samples: BUNDLED_SAMPLES.map((sample) => ({
+                        ...sample,
+                        ...(sample.slices
+                          ? { slices: sample.slices.map(roundSlice) }
+                          : {}),
+                        ref: bundledSampleRef(sample.id),
+                      })),
+                    }
+                  : {}),
+                total: manifest.sounds.size,
+              },
+              info.name === "studio" ? STUDIO_DETAIL_LIMIT : undefined,
+            ),
             summary: `${info.name} · ${manifest.sounds.size} sounds`,
           };
         },

@@ -200,6 +200,11 @@ def shift_env(sp, semis):
     return out
 
 
+AUDIBLE = 1.5 * np.log(10)  # 15 dB in natural-log power
+FLOOR = 1.5 * np.log(10)
+MAX_SHIFT = 8  # frames (40 ms): a longer move eats the previous syllable on fast lines
+
+
 def main():
     spec = json.loads(open(sys.argv[1]).read())
     notes = spec["notes"]
@@ -237,6 +242,8 @@ def main():
             src = i
             full.append((i, *by_note[i]))
     segs = full
+    peaks = [env[a:b].max() for _, a, b in segs if b > a]
+    ref_lvl = float(np.percentile(peaks, 90)) if peaks else 0.0
     human = spec.get("human", 0.0)
     rng = np.random.default_rng(spec.get("seed", 0))
     lead = spec.get("lead", 0.0)
@@ -259,6 +266,14 @@ def main():
             vb = a + len(v) - int(np.argmax(v[::-1]))
         else:
             va, vb = a, b
+        # A voiced-stop closure (b/d/g) or a soft vowel attack counts as voiced
+        # but is near-silent; stretched as nucleus it lands a quiet smear on the
+        # beat. Start the nucleus at its first audible frame (within 15 dB of
+        # its peak) so the closure goes before the beat with the onset.
+        if vb - va > 6:
+            lv = env[va:vb]
+            hit = np.flatnonzero(lv >= lv.max() - AUDIBLE)
+            va = va + min(int(hit[0]) if len(hit) else 0, (vb - va) // 3, MAX_SHIFT)
         onset = (a, va)
         nucleus = (va, vb)
         coda = (vb, b)
@@ -285,6 +300,11 @@ def main():
         L = sum(len(p[0]) for p in pieces)
         q_lsp = np.concatenate([p[0] for p in pieces])
         q_ap = np.concatenate([p[1] for p in pieces])
+        # Level floor: no syllable more than FLOOR under the line's loud ones,
+        # so a weak function word ("to", "in") is never a gap.
+        lvl = env[nucleus[0]:max(nucleus[0] + 1, nucleus[1])].max()
+        if lvl < ref_lvl - FLOOR:
+            q_lsp = q_lsp + min(ref_lvl - FLOOR - lvl, FLOOR)
         dyn = n.get("dyn", 1.0)
         air = n.get("air", 0.0) + max(0.0, 1 - dyn) * 0.5
         if dyn != 1.0:

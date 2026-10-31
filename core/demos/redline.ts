@@ -8,6 +8,7 @@
 import type { NoteInput, TrackInput } from "../score.ts";
 import { Composer, voice } from "./build.ts";
 import {
+  filterArc,
   dropout,
   flick,
   glitch,
@@ -19,13 +20,21 @@ import {
   steps,
   stutter,
   sungLine,
+  THROW_PEAK,
   throws,
-  writeSong,
   type Book,
   type Chord,
-  type Part,
   type KitOptions,
+  type Part,
   type SongSection,
+  UNDER_WORDS,
+  VOCAL_COMP,
+  VOCAL_DUCK,
+  VOCAL_ECHO,
+  VOCAL_VERB,
+  writeSong,
+  sungAt,
+  rave,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -44,6 +53,8 @@ export const BOOK: Book = {
   sample: "redline-vox",
   root: 68,
   syllables: ["red", "line", "go", "up", "hey", "oh"],
+  // "I" is a pickup, so "don't" lands on the downbeat.
+  pickup: { pre1: -0.5 },
   ends: {
     v1: 3,
     v2: 3,
@@ -53,49 +64,44 @@ export const BOOK: Book = {
     v6: 2,
     v7: 2,
     v8: 2,
-    pre1: 3,
+    pre1: 2,
     pre2: 2,
     ch1: 5,
     ch2: 4.5,
     ch3: 5,
   },
   melody: {
-    v1: sungLine("ne- on on the high- way", E1, [72, 72, 68, 72, 75, 72], E1L),
-    v2: sungLine("cit- y in the mir- ror", E2, [70, 70, 67, 70, 75, 70], E2L),
-    v3: sungLine(
-      "hands up out the win- dow",
+    v1: sungLine(
+      "win- dows down at mid- night",
       E1,
-      [72, 72, 75, 72, 77, 75],
+      [65, 65, 63, 65, 68, 65],
       E1L,
     ),
-    v4: sungLine("no- bod- y can catch us", E2, [75, 72, 70, 67, 70, 67], E2L),
-    v5: sungLine("fast- er than the fear", Q5, [77, 75, 72, 75, 72], Q5L),
-    v6: sungLine("no- where but here", Q4, [75, 70, 67, 70], Q4L),
-    v7: sungLine("en- gine in my chest", Q5, [72, 75, 77, 75, 80], Q5L),
-    v8: sungLine("nev- er gon- na rest", Q5, [79, 77, 75, 70, 75], Q5L),
-    pre1: sungLine(
-      "turn it up turn it up",
-      [0, 0.5, 1, 2, 2.5, 3],
-      [68, 68, 73, 73, 73, 77],
-      [0.45, 0.45, 0.9, 0.45, 0.45, 0.9],
-    ),
-    pre2: sungLine("take it to the red", Q5, [75, 75, 77, 75, 80], Q5L),
+    v2: sungLine("cit- y in the mir- ror", E2, [63, 63, 60, 63, 67, 63], E2L),
+    v3: sungLine("turn the ra- di- o up", E1, [68, 68, 72, 68, 65, 68], E1L),
+    v4: sungLine("no- bod- y can see us", E2, [67, 65, 63, 63, 65, 63], E2L),
+    v5: sungLine("white lines like a pulse", Q5, [68, 68, 65, 63, 65], Q5L),
+    v6: sungLine("all the way home", Q4, [63, 65, 67, 63], Q4L),
+    v7: sungLine("en- gine in my chest", Q5, [65, 68, 65, 63, 60], Q5L),
+    v8: sungLine("beat- ing like a drum", Q5, [67, 70, 67, 65, 63], Q5L),
+    pre1: sungLine("I don't wan- na go", Q5, [61, 61, 63, 65, 68], Q5L),
+    pre2: sungLine("take me to the line", Q5, [61, 63, 65, 68, 73], Q5L),
     ch1: sungLine(
-      "red- line we're on the red- line",
-      [0, 1, 2.5, 3, 3.5, 4, 5],
-      [80, 77, 75, 75, 77, 80, 77],
-      [0.9, 1.4, 0.45, 0.45, 0.45, 0.9, 2.8],
+      "red- line take me to the red- line",
+      [0, 1, 2.5, 3, 3.5, 3.75, 4, 5],
+      [72, 68, 68, 70, 72, 72, 73, 68],
+      [0.9, 1.4, 0.45, 0.45, 0.25, 0.25, 0.9, 2.8],
     ),
     ch2: sungLine(
       "don't you slow it down to- night",
       [0, 0.5, 1, 2, 2.5, 4, 4.5],
-      [75, 75, 80, 77, 75, 77, 79],
+      [72, 72, 75, 72, 70, 67, 70],
       [0.45, 0.45, 0.9, 0.45, 1.4, 0.45, 3],
     ),
     ch3: sungLine(
       "hold on tight 'til the sky turns white",
       [0, 0.5, 1, 2, 2.5, 3, 4, 5],
-      [75, 77, 80, 77, 75, 80, 77, 79],
+      [68, 70, 72, 72, 70, 72, 70, 67],
       [0.45, 0.45, 0.9, 0.45, 0.45, 0.9, 0.9, 2.8],
     ),
   },
@@ -384,7 +390,7 @@ export const SECTIONS: readonly SongSection[] = [
  * supersaw that plays the melody and two chord tones under it.
  */
 export const vocoderTrack = (src = "vox"): TrackInput =>
-  voice("voc", "Vocoder stack", "vocoder", 0.5, {
+  voice("voc", "Vocoder stack", "vocoder", 0.34 * UNDER_WORDS, {
     vocoder: {
       src,
       preset: "classic",
@@ -410,8 +416,8 @@ export const KIT: Omit<KitOptions, "bpm"> = {
   hats: "syn909",
   levels: {
     kick: 0.5,
-    snare: 0.54,
-    hats: 0.13,
+    snare: 0.4,
+    hats: 0.1,
     sub: 0.42,
     saw: 0.19,
     pad: 0.3,
@@ -420,8 +426,8 @@ export const KIT: Omit<KitOptions, "bpm"> = {
     bells: 0.15,
     lead: 0.2,
     vox: 1,
-    sing: 0.22,
-    harm: 0.26,
+    sing: 0.13,
+    harm: 0.17,
     dbl: 0.34,
     chops: 1,
     stut: 1,
@@ -460,9 +466,11 @@ export const KIT: Omit<KitOptions, "bpm"> = {
       },
       humanize: { timing: 3, velocity: 5, seed: 41 },
     },
-    // The kit's driven snare with its fizz shelved off: a crack, not a hiss.
+    // The kit's driven snare with its fizz shelved off and its crack
+    // carved out of the consonant band, pumped with the bed.
     snare: {
       fx: {
+        orbit: { orbit: 2 },
         distort: { type: "soft", drive: 2.6, tone: 5200, mix: 0.45 },
         compressor: {
           threshold: -16,
@@ -471,33 +479,29 @@ export const KIT: Omit<KitOptions, "bpm"> = {
           release: 0.09,
           makeup: 3,
         },
-        eq: { high: -4, highfreq: 8000 },
+        eq: { mid: -6, midfreq: 2500, high: -4, highfreq: 8000 },
       },
       reverb: { mix: 0.12, size: 0.35, fade: 0.8 },
       humanize: { timing: 2, velocity: 4, seed: 31 },
     },
-    // The words, close and bright, with a plate behind them.
+    hats: { fx: { orbit: { orbit: 2 } } },
+    // The words inside the track, not on top of it: the low end cut so the
+    // voice owns only its band, a presence lift for the consonants, and a
+    // slower attack that lets each one through before the compressor grabs.
     vox: {
       fx: {
-        eq: { mid: 3, midfreq: 3000, high: 5, highfreq: 8000 },
-        compressor: {
-          threshold: -24,
-          ratio: 4,
-          attack: 0.004,
-          release: 0.1,
-          makeup: 8,
+        eq: {
+          low: -6,
+          lowfreq: 200,
+          mid: 3,
+          midfreq: 4000,
+          high: 4,
+          highfreq: 8000,
         },
-        // A deeper pocket than the kit's: the bed sits about 4 dB
-        // lower while a line sings.
-        duck: {
-          orbit: 2,
-          depth: 0.4,
-          attack: 0.5,
-          onset: 0.06,
-          hold: true,
-        },
+        compressor: { ...VOCAL_COMP, makeup: 14, attack: 0.015 },
+        duck: VOCAL_DUCK,
       },
-      reverb: { mix: 0.14, size: 0.55, fade: 1.8, lowpass: 12000 },
+      reverb: VOCAL_VERB,
     },
     // The synth singer as a high, breathy sheen over the words.
     sing: {
@@ -567,9 +571,9 @@ export const redline: DemoDefinition = {
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
       "the words lead; the vocoder sits about 10 dB under them, wide",
-      "the bed ducks about 4 dB while a line sings",
+      "the bed ducks about 6 dB while a line sings",
       "chorus stabs and arp sit an octave above the singer's register",
-      "delay throws open on the last word of every line",
+      "short delay throws after the last word of every line",
       "kick pumps the bed on orbit 2; the voice stays out of the pump",
     ],
   }),
@@ -589,8 +593,12 @@ export const redline: DemoDefinition = {
       (p.lines ?? []).forEach((part, i) => {
         if (!part || !p.words) return;
         const bar = p.start + i;
-        const notes = BOOK.melody[part];
-        for (let b = 0; b * 4 < notes.at(-1)![0]; b++) {
+        const notes = sungAt(BOOK, part);
+        for (
+          let b = Math.floor(notes[0]![0] / 4);
+          b * 4 < notes.at(-1)![0];
+          b++
+        ) {
           const sung = notes.filter(([beat]) => Math.floor(beat / 4) === b);
           if (sung.length === 0) continue;
           const low = Math.min(...sung.map(([, pitch]) => pitch));
@@ -682,7 +690,11 @@ export const redline: DemoDefinition = {
     s.note("pad", out + 2, 0, 53, 8, 0.4, flick.dive(-1200, 0.5));
 
     // ---------------------------------------------------------- lanes
-    for (const id of ["vox", "sing", "voc"])
+    // The words throw short and low; the sung layers can throw wide.
+    patch(s, "vox", {
+      delayMixAutomation: throws(song.throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
+    });
+    for (const id of ["sing", "voc"])
       patch(s, id, {
         delayMixAutomation: throws(song.throwsAt, 0.06, 0.38, 1),
       });
@@ -730,6 +742,13 @@ export const redline: DemoDefinition = {
         ),
       },
     });
+    // The stabs and arp follow the filter arc, read at each hit.
+    patch(s, "stabs", {
+      fxAutomation: { "synth-lpf": filterArc(s.sections, 1100, 6000) },
+    });
+    patch(s, "arp", {
+      fxAutomation: { "synth-lpf": filterArc(s.sections, 1600, 7000) },
+    });
     patch(s, "pad", {
       filterAutomation: ramps(
         [0, 700],
@@ -748,6 +767,10 @@ export const redline: DemoDefinition = {
         [out, 1800],
         [BARS, 500],
       ),
+    });
+    rave(s, {
+      gated: ["pad"],
+      lift: (n) => (/drop/i.test(n) ? 3.5 : 1.6),
     });
     return s.finish();
   },

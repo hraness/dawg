@@ -207,6 +207,13 @@ export function degreePitch(key: Key, degree: number): number {
   return key.base + key.steps[((index % 7) + 7) % 7]! + 12 * octave;
 }
 
+/**
+ * The sung range in degrees, from an octave under the tonic (whose octave
+ * starts at middle C) up to 15. Low verses sit under the tonic.
+ */
+const LINE_LOW = -6;
+const LINE_HIGH = 15;
+
 const NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII"];
 
 /** The scale degree (1..7) a roman numeral names, ignoring case and suffixes. */
@@ -448,7 +455,7 @@ export function validateSheet(raw: unknown): Validated {
         }
         notes.push([
           Math.round(beat * 4) / 4,
-          Math.max(-3, Math.min(15, Math.round(degree))),
+          Math.max(LINE_LOW, Math.min(LINE_HIGH, Math.round(degree))),
           Math.max(0, Math.min(longest(palette as Palette), beats)),
           syllable.replace(/\s+/g, "").slice(0, 12) || "ah",
         ]);
@@ -803,7 +810,7 @@ export function settleSheet(sheet: SongSheet): SongSheet {
     lines[part] = line.map((note, k): SheetNote => {
       const [beat, degree, beats, lyric] = note;
       if (beat % 1 !== 0 || leans(line, k)) return note;
-      return [beat, best(slots[k]!, degree, -3, 15), beats, lyric];
+      return [beat, best(slots[k]!, degree, LINE_LOW, LINE_HIGH), beats, lyric];
     });
   }
 

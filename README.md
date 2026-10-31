@@ -105,8 +105,10 @@ for an agent/driver; `dawg make` runs the original-song driver.
 
 ## Existing songs and advanced editing
 
-`demo` opens the editable offline song shelf. `sample library` opens the original
-sample shelf. Agent requests such as “bring the words forward” or “make the second
+`demo` opens nine editable offline hyperpop songs: Candy Fault, Redline, Glass
+Garden, Night Swim, Kite Season, Bubble Wrap, Glow Stick, Window Seat and Light
+One. Each retains its authored notes, original vocal book and production notes.
+`sample library` opens the original sample shelf. Agent requests such as “bring the words forward” or “make the second
 chorus busier” operate on the same score and remain undoable with Ctrl-Z.
 
 The command and instrument reference remains available through `/help` and F1.

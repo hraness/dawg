@@ -102,7 +102,7 @@ const depths: readonly {
     title: "Demo songs",
     body: (
       <>
-        <code>demo</code> opens six complete, editable hyperpop songs with
+        <code>demo</code> opens nine complete, editable hyperpop songs with
         original vocals.
       </>
     ),

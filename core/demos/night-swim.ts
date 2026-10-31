@@ -12,6 +12,7 @@
  */
 import { Composer, lanes, orbit, preset } from "./build.ts";
 import {
+  filterArc,
   bassLine,
   cell,
   chopTrack,
@@ -19,14 +20,18 @@ import {
   grainTrack,
   hold,
   ladder,
+  LAYER_COMP,
   LINE_LEAD,
   roll,
   slot,
   sounds,
+  THROW_PEAK,
   throws,
-  vocalTrack,
   type Chord,
   type VoxBank,
+  UNDER_WORDS,
+  VOCAL_ECHO,
+  vocalTrack,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -34,6 +39,17 @@ export const BPM = 122;
 const BARS = 84;
 
 /** The vocal book: lines in beats (scripts/vox/songs.py night-swim-vox). */
+/**
+ * Lines that open on unstressed words start early, so those words are a
+ * pickup and the first stressed syllable lands where the line used to
+ * start (Hannah Diamond's lines start off the beat 75-80% of the time).
+ */
+const PICKUP: Readonly<Record<string, number>> = {
+  v3: -0.25,
+  v4: -0.5,
+  br: -0.25,
+};
+
 export const BOOK: VoxBank = {
   sample: "night-swim-vox",
   root: 62,
@@ -198,11 +214,12 @@ export const nightSwim: DemoDefinition = {
   }),
   build() {
     const s = new Composer(this.info);
-    const vox = vocalTrack(BOOK, 1, {
-      reverb: { mix: 0.12, size: 0.5, fade: 1.8, lowpass: 9000 },
-    });
-    const echo = vocalTrack(BOOK, 0.8, {
+    // The lead 3 dB under the shelf's level: inside the water, not over it.
+    const vox = vocalTrack(BOOK, 0.71);
+
+    const echo = vocalTrack(BOOK, 0.8 * UNDER_WORDS, {
       id: "echo",
+      fx: { compressor: LAYER_COMP },
       name: "Low echo",
       pan: -0.22,
       filter: { type: "lpf", cutoff: 3200, resonance: 0 },
@@ -212,7 +229,7 @@ export const nightSwim: DemoDefinition = {
     // Chorus doubles: the same lines a few cents sharp and flat, panned wide
     // and a hair late, through a chorus. They never duck the bed.
     const double = (id: string, cents: number, pan: number, seed: number) =>
-      vocalTrack(BOOK, 0.42, {
+      vocalTrack(BOOK, 0.42 * UNDER_WORDS, {
         id,
         name: cents > 0 ? "Double high" : "Double low",
         pan,
@@ -297,6 +314,7 @@ export const nightSwim: DemoDefinition = {
 
     const throwsAt: number[] = [];
     const sing = (id: string, part: string, bar: number, beat = 0, v = 0.9) => {
+      beat += PICKUP[part] ?? 0;
       const track =
         id === "echo"
           ? echo
@@ -509,7 +527,7 @@ export const nightSwim: DemoDefinition = {
     ]);
 
     // Lanes: delay throws on the last word of every line; the acid opens
-    // across the break; the pad brightens in the choruses.
+    // across the break; the pad follows the filter arc.
     const acidOpen = lanes(
       [0, 700],
       [20, 1200],
@@ -525,25 +543,13 @@ export const nightSwim: DemoDefinition = {
       if (t.id === "vox")
         s.tracks[i] = {
           ...t,
-          delayMixAutomation: throws(throwsAt, 0.04, 0.3, 1),
+          delayMixAutomation: throws(throwsAt, VOCAL_ECHO.mix, THROW_PEAK, 1),
         };
       if (t.id === "acid") s.tracks[i] = { ...t, filterAutomation: acidOpen };
       if (t.id === "pad")
         s.tracks[i] = {
           ...t,
-          filterAutomation: lanes(
-            [0, 1400],
-            [19.9, 1400],
-            [20, 2600],
-            [27.9, 2600],
-            [28, 1600],
-            [47.9, 1600],
-            [48, 2600],
-            [55.9, 2600],
-            [56, 1800],
-            [63.9, 1800],
-            [64, 3000],
-          ),
+          filterAutomation: filterArc(s.sections, 1300, 4200),
         };
     });
     return s.finish();

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { scoreFromJSON, SCORE_LIMITS } from "../score.ts";
 import { arrangedBars, barsToSeconds } from "../sections.ts";
 import { DEMOS, createDemo } from "./index.ts";
+import { THROW_PEAK } from "./hyperpop.ts";
 
 // Longest run of consecutive bars after the intro where no kick lands; every
 // demo keeps a real break so the drop has somewhere to return from.
@@ -25,7 +26,7 @@ const HYPER = ["redline", "glass-garden"];
 
 describe("complete demo songs", () => {
   test("hyperpop entries expose truthful form and duration metadata", () => {
-    expect(DEMOS).toHaveLength(6);
+    expect(DEMOS).toHaveLength(9);
     expect(new Set(DEMOS.map((demo) => demo.id)).size).toBe(DEMOS.length);
     expect(new Set(DEMOS.map((demo) => demo.title)).size).toBe(DEMOS.length);
     expect(DEMOS.filter((demo) => HYPER.includes(demo.id))).toHaveLength(2);
@@ -165,8 +166,13 @@ describe("complete demo songs", () => {
         Math.max(...notesOf("vox").map((note) => note.velocity)),
         demo.id,
       ).toBeLessThanOrEqual(0.95);
+      // Words throw short and low: never wetter than THROW_PEAK.
       expect(
         vox?.delayMixAutomation?.some((point) => point.value > 0.025),
+        demo.id,
+      ).toBe(true);
+      expect(
+        vox?.delayMixAutomation?.every((point) => point.value <= THROW_PEAK),
         demo.id,
       ).toBe(true);
       // The syllables as an instrument: a round-robin keyed riff, glitch
@@ -251,7 +257,7 @@ describe("complete demo songs", () => {
       DEMOS.filter((demo) => !HYPER.includes(demo.id))
         .map((demo) => demo.style)
         .sort(),
-    ).toEqual(["Hyperpop", "Hyperpop", "Hyperpop", "Hyperpop"]);
+    ).toEqual(Array(7).fill("Hyperpop"));
     const hyper = createDemo("candy-fault");
     expect(
       hyper.tracks.find((track) => track.id === "hook")?.fx?.distort,

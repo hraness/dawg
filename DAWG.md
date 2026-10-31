@@ -991,8 +991,9 @@ The organ models are dawg's own, from public descriptions of the tonewheel gener
 
 ### Offline studio library and demo songs
 
-`demo` opens six original, editable hyperpop songs: Candy Fault, Redline,
-Glass Garden, Night Swim, Kite Season and Bubble Wrap. They share the kit in
+`demo` opens nine original, editable hyperpop songs: Candy Fault, Redline,
+Glass Garden, Night Swim, Kite Season, Bubble Wrap, Glow Stick, Window Seat and
+Light One. They share the kit in
 `core/demos/hyperpop.ts`: sung words, syllable riffs, stutters, reversals, a looped
 vowel lead and a grain cloud. `demo search <words>` filters metadata;
 `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the

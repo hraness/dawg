@@ -183,7 +183,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 33.85695833333333,
       bpm: 140,
       sha256:
-        "0ff75944741f0e4c520f72432bfcc67afcbcd7fb34313d43a2486e8222902be9",
+        "cc1778404bffc09e19710764842a04dbde6fafd7b7e6ad38e30a3cd7def9b049",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053797 },
         { name: "v2", begin: 0.053797, end: 0.107595 },
@@ -217,7 +217,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 31.6,
       bpm: 150,
       sha256:
-        "8b3424c25822b4b0fcaf9aa7933fb147a7ab5a4bb60cc49ce2d508f6d344cf32",
+        "2b1a6a45fb1765ecc1cc86cc9060b041b410fd5235fc1dfbab031c3de720d490",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053797 },
         { name: "v2", begin: 0.053797, end: 0.107595 },
@@ -251,7 +251,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 37.030833333333334,
       bpm: 128,
       sha256:
-        "58706df68af0d72d6935ad7e235e206df974da464c4927fecb44473e99c4e80b",
+        "21c218867e2e8bd6fe5e28d4aeb7e7f36809e2e5e048acd8d848868a4fbcba1b",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053798 },
         { name: "v2", begin: 0.053798, end: 0.107595 },
@@ -268,7 +268,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
         { name: "ch3", begin: 0.746837, end: 0.851268 },
         { name: "glass", begin: 0.851268, end: 0.86709 },
         { name: "bloom", begin: 0.86709, end: 0.882913 },
-        { name: "gold", begin: 0.882913, end: 0.898735 },
+        { name: "glow", begin: 0.882913, end: 0.898735 },
         { name: "grow", begin: 0.898735, end: 0.914558 },
         { name: "ah", begin: 0.914558, end: 0.93038 },
         { name: "ooh", begin: 0.93038, end: 0.946202 },
@@ -285,7 +285,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 27.557958333333332,
       bpm: 172,
       sha256:
-        "c0bc849da1d4c4f017881d5347646a88ebc4bfdd27680acc5fe53ddb189aa1b8",
+        "75993e4c8fe8e2dc82fd24bb866433896960e19f7dd36eebb8d2226ac9e9bd49",
       slices: [
         { name: "v1", begin: 0.0, end: 0.053797 },
         { name: "v2", begin: 0.053797, end: 0.107594 },
@@ -310,6 +310,111 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       ],
     },
     {
+      id: "light-one-vox",
+      title: "Light One Vox",
+      description:
+        "The Light One vocal book: verse, chorus and break lines in F major at 122, sung by the synthetic Kokoro voice bf_emma, with one-word chops and a held ah.",
+      tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "book"],
+      root: 65,
+      seconds: 69.95895833333333,
+      bpm: 122,
+      sha256:
+        "98569e0738ca1ddaab4c963a58408d556caf5a9c88f8dbaf97955e7b55d5d8ce",
+      slices: [
+        { name: "v1", begin: 0.0, end: 0.057997 },
+        { name: "v2", begin: 0.057997, end: 0.115993 },
+        { name: "v3", begin: 0.115993, end: 0.17399 },
+        { name: "v4", begin: 0.17399, end: 0.231986 },
+        { name: "v5", begin: 0.231986, end: 0.289983 },
+        { name: "v6", begin: 0.289983, end: 0.347979 },
+        { name: "v7", begin: 0.347979, end: 0.405976 },
+        { name: "v8", begin: 0.405976, end: 0.463972 },
+        { name: "ch1", begin: 0.463972, end: 0.521969 },
+        { name: "ch2", begin: 0.521969, end: 0.579965 },
+        { name: "ch3", begin: 0.579965, end: 0.637962 },
+        { name: "ch4", begin: 0.637962, end: 0.695958 },
+        { name: "br1", begin: 0.695958, end: 0.753955 },
+        { name: "br2", begin: 0.753955, end: 0.811951 },
+        { name: "last", begin: 0.811951, end: 0.898067 },
+        { name: "light", begin: 0.898067, end: 0.906854 },
+        { name: "oh", begin: 0.906854, end: 0.915642 },
+        { name: "ah", begin: 0.915642, end: 0.924429 },
+        { name: "one", begin: 0.924429, end: 0.933216 },
+        { name: "mm", begin: 0.933216, end: 0.942003 },
+        { name: "hold", begin: 0.942003, end: 1.0 },
+      ],
+    },
+    {
+      id: "window-seat-vox",
+      title: "Window Seat Vox",
+      description:
+        "The Window Seat vocal book: half-time verse, chorus and break lines in G major at 170, sung by the synthetic Kokoro voice bf_emma, with one-word chops and a held ah.",
+      tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "book"],
+      root: 67,
+      seconds: 93.9705,
+      bpm: 170,
+      sha256:
+        "ad7133b63f6f0a3bce0d2646ad8aa57d76d30424d2ec818edd936407139de52c",
+      slices: [
+        { name: "v1", begin: 0.0, end: 0.061033 },
+        { name: "v2", begin: 0.061033, end: 0.122066 },
+        { name: "v3", begin: 0.122066, end: 0.183099 },
+        { name: "v4", begin: 0.183099, end: 0.244132 },
+        { name: "v5", begin: 0.244132, end: 0.305164 },
+        { name: "v6", begin: 0.305164, end: 0.366197 },
+        { name: "v7", begin: 0.366197, end: 0.42723 },
+        { name: "v8", begin: 0.42723, end: 0.488263 },
+        { name: "ch1", begin: 0.488263, end: 0.549296 },
+        { name: "ch2", begin: 0.549296, end: 0.610329 },
+        { name: "ch3", begin: 0.610329, end: 0.671362 },
+        { name: "ch4", begin: 0.671362, end: 0.732395 },
+        { name: "br1", begin: 0.732395, end: 0.793428 },
+        { name: "br2", begin: 0.793428, end: 0.854461 },
+        { name: "last", begin: 0.854461, end: 0.945541 },
+        { name: "oh", begin: 0.945541, end: 0.950235 },
+        { name: "ah", begin: 0.950235, end: 0.95493 },
+        { name: "seat", begin: 0.95493, end: 0.959625 },
+        { name: "hey", begin: 0.959625, end: 0.964319 },
+        { name: "mm", begin: 0.964319, end: 0.969014 },
+        { name: "hold", begin: 0.969014, end: 1.0 },
+      ],
+    },
+    {
+      id: "glow-stick-vox",
+      title: "Glow Stick Vox",
+      description:
+        "The Glow Stick vocal book: verse, chorus and break lines in Db major at 128, sung by the synthetic Kokoro voice bf_emma, with one-word chops and a held ooh.",
+      tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "book"],
+      root: 61,
+      seconds: 64.80425,
+      bpm: 128,
+      sha256:
+        "8a29615c11c76d77c1973a319553a3c71dc4a512337da369b8204752f9b624d5",
+      slices: [
+        { name: "v1", begin: 0.0, end: 0.059675 },
+        { name: "v2", begin: 0.059675, end: 0.119349 },
+        { name: "v3", begin: 0.119349, end: 0.179024 },
+        { name: "v4", begin: 0.179024, end: 0.238698 },
+        { name: "v5", begin: 0.238698, end: 0.298373 },
+        { name: "v6", begin: 0.298373, end: 0.358048 },
+        { name: "v7", begin: 0.358048, end: 0.417722 },
+        { name: "v8", begin: 0.417722, end: 0.477397 },
+        { name: "ch1", begin: 0.477397, end: 0.537071 },
+        { name: "ch2", begin: 0.537071, end: 0.596746 },
+        { name: "ch3", begin: 0.596746, end: 0.65642 },
+        { name: "ch4", begin: 0.65642, end: 0.716095 },
+        { name: "br1", begin: 0.716095, end: 0.77577 },
+        { name: "br2", begin: 0.77577, end: 0.835444 },
+        { name: "last", begin: 0.835444, end: 0.924052 },
+        { name: "glow", begin: 0.924052, end: 0.933093 },
+        { name: "oh", begin: 0.933093, end: 0.942135 },
+        { name: "ah", begin: 0.942135, end: 0.951176 },
+        { name: "hey", begin: 0.951176, end: 0.960217 },
+        { name: "mm", begin: 0.960217, end: 0.969259 },
+        { name: "hold", begin: 0.969259, end: 1.0 },
+      ],
+    },
+    {
       id: "bubble-wrap-vox",
       title: "Bubble Wrap Vox",
       description:
@@ -319,7 +424,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 86.55,
       bpm: 100,
       sha256:
-        "b21570977e21a76a9e718cd5da4e4b862223999573a676de7678c1f60c03755c",
+        "32d575190568e647f1dcaff630890ad8f18c2801ce3ee58ca056188f0d8edeae",
       slices: [
         { name: "v1", begin: 0.0, end: 0.057192 },
         { name: "v2", begin: 0.057192, end: 0.114385 },
@@ -358,7 +463,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 75.57679166666667,
       bpm: 156,
       sha256:
-        "c9b79428c5ca09bcc57391180707e7f19efb72d5f6f394a0660846909b864281",
+        "21470ba58398f0bd04d0d8379bb56709e2e5c1f12102a24816677b14650844a5",
       slices: [
         { name: "v1a", begin: 0.0, end: 0.036896 },
         { name: "v1b", begin: 0.036896, end: 0.073791 },
@@ -398,7 +503,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 50.65083333333333,
       bpm: 146,
       sha256:
-        "57a46f728edf42e9acff5e97a45976b9ece6f2d30a28b9cae369bfd7f8447966",
+        "b993809174385b7e4f9ff37c0ebe0f928a8bb6098d5a784a40ed03c7b3279875",
       slices: [
         { name: "v1", begin: 0.0, end: 0.066937 },
         { name: "v2", begin: 0.066937, end: 0.133874 },
@@ -433,7 +538,7 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       seconds: 49.057375,
       bpm: 122,
       sha256:
-        "fb2de3b16e9e5988ab734ceb0825338c3db7b0f3d835d74a74107f094bb3148c",
+        "3747332dee501f95e87afef97a9d67b9c027856b1318e1cfcfd9bae1f9b922e1",
       slices: [
         { name: "v1", begin: 0.0, end: 0.042607 },
         { name: "v2", begin: 0.042607, end: 0.085213 },

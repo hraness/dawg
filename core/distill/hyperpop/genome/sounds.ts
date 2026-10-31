@@ -595,11 +595,17 @@ export function drumTracks(
   bpm: number,
   kits: Readonly<{ kick: string; snare: string; hats: string }>,
   d: Design,
+  conditioning: Readonly<{ snareBody?: boolean; hatAir?: number }> = {},
 ): TrackInput[] {
   return [
     demo.kick(bpm, kits.kick, 0.8 + 0.1 * d.grit, 0.62),
-    demo.snare(0.42, kits.snare, { reverb: space(d, 0.08) }),
-    demo.hats(0.44, kits.hats),
+    demo.snare(
+      0.42,
+      kits.snare,
+      { reverb: space(d, 0.08) },
+      conditioning.snareBody ?? true,
+    ),
+    demo.hats(0.44, kits.hats, {}, conditioning.hatAir ?? 4),
     voice("perc", "Perc & toms", "kit", 0.34, {
       kit: kits.snare,
       pan: -0.16,

@@ -6,7 +6,7 @@ public sample registration. `dawg reference` handles private source recreations
 with stock bf_emma and retained source-vocal comparisons. The scripts below remain
 contributor tools for authored bundled demos.
 
-`songs.py` writes the seven studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`, `night-swim-vox`, `kite-season-vox`, `bubble-wrap-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
+`songs.py` writes the eleven studio vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`, `redline-vox`, `night-swim-vox`, `kite-season-vox`, `candy-fault-vox`, `bubble-wrap-vox`, `glow-stick-vox`, `window-seat-vox`, `light-one-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
 
 1. [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) speaks the original lyric with word timestamps.
 2. The WORLD vocoder (pyworld) analyses it and splits each word into syllables at energy valleys.
